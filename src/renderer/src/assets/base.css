@@ -1,0 +1,69 @@
+:root {
+  --surface-1: rgba(255, 255, 255, 0.94);
+  --surface-2: rgba(248, 245, 240, 0.92);
+  --surface-3: rgba(255, 255, 255, 0.76);
+  --line-soft: rgba(214, 205, 194, 0.56);
+  --line-strong: rgba(199, 188, 173, 0.72);
+  --text-primary: #25262f;
+  --text-secondary: #666876;
+  --text-tertiary: #9597a3;
+  --green: #51c16f;
+  --amber: #f1aa2e;
+  --red: #de7265;
+  --shadow-soft: 0 16px 40px rgba(182, 168, 152, 0.25);
+  --shadow-pill: 0 14px 28px rgba(162, 151, 138, 0.18);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+
+body {
+  min-height: 100%;
+  color: var(--text-primary);
+  background: transparent;
+  line-height: 1.35;
+  font-family:
+    'SF Pro Display',
+    'Segoe UI Variable Text',
+    'Segoe UI',
+    -apple-system,
+    'PingFang SC',
+    'Microsoft YaHei UI',
+    system-ui,
+    sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  user-select: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

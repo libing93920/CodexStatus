@@ -1,0 +1,137 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "发布 tag，留空时使用 package.json version，例如 v1.0.0"
+        required: false
+        default: ""
+      prerelease:
+        description: "标记为预发布版本"
+        type: boolean
+        required: false
+        default: false
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CSC_IDENTITY_AUTO_DISCOVERY: false
+
+jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          INPUT_PRERELEASE: ${{ github.event.inputs.prerelease }}
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          EXPECTED_TAG="v${PACKAGE_VERSION}"
+          REQUESTED_TAG="${GITHUB_REF_NAME}"
+          PRERELEASE="false"
+
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            REQUESTED_TAG="${INPUT_TAG}"
+            if [ -n "${INPUT_PRERELEASE}" ]; then
+              PRERELEASE="${INPUT_PRERELEASE}"
+            fi
+          fi
+
+          if [ -z "${REQUESTED_TAG}" ]; then
+            REQUESTED_TAG="${EXPECTED_TAG}"
+          fi
+
+          if [ "${REQUESTED_TAG}" != "${EXPECTED_TAG}" ]; then
+            echo "::error::Release tag ${REQUESTED_TAG} must match package.json version ${EXPECTED_TAG}."
+            exit 1
+          fi
+
+          echo "tag_name=${REQUESTED_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${PRERELEASE}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            exit 0
+          fi
+
+          PRERELEASE_FLAG=()
+          if [ "${PRERELEASE}" = "true" ]; then
+            PRERELEASE_FLAG=(--prerelease)
+          fi
+
+          gh release create "${TAG_NAME}" --draft --title "${TAG_NAME}" --generate-notes --target "${GITHUB_SHA}" "${PRERELEASE_FLAG[@]}"
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+            target: --win
+          - name: macos
+            os: macos-latest
+            target: --mac
+          - name: linux
+            os: ubuntu-latest
+            target: --linux
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer and main process
+        run: npm run build
+
+      - name: Package installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npx electron-builder ${{ matrix.target }} --publish always
+
+  release:
+    name: Publish GitHub Release
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.prepare.outputs.tag_name }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+        run: |
+          gh release edit "${TAG_NAME}" --repo "${GITHUB_REPOSITORY}" --draft=false --prerelease="${PRERELEASE}"
