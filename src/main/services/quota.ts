@@ -1,9 +1,9 @@
 import { promises as fs } from 'node:fs'
 import type { Dirent } from 'node:fs'
-import https from 'node:https'
 import os from 'node:os'
 import path from 'node:path'
 import type { RateLimitSource, RateLimitWindowSnapshot, UsageSnapshot } from '../../shared/capsule'
+import { fetchRadarBestPick } from './radar'
 
 interface RawRateLimit {
   windowMinutes?: number
@@ -23,12 +23,6 @@ interface JsonlFileEntry {
   mtimeMs: number
 }
 
-interface OfficialRateLimitLookup {
-  rateLimits?: UsageSnapshot['rateLimits']
-  canRefresh: boolean
-  issue?: string
-}
-
 interface CredentialLookup {
   credentials?: {
     accessToken: string
@@ -40,10 +34,37 @@ interface CredentialLookup {
 
 const SESSION_SUBDIR = 'sessions'
 const OFFICIAL_CODEX_USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage'
+const OFFICIAL_RESET_CREDITS_URL =
+  'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits'
 const OFFICIAL_QUOTA_TIMEOUT_MS = 8000
 const OFFICIAL_QUOTA_RECHECK_DELAY_MS = 1000
+const RESET_CREDIT_TIMEOUT_MS = 8000
+// 重置卡到期前多久开始重新拉取下一张(秒)
+const RESET_CREDIT_REFRESH_BEFORE_EXPIRY_SECONDS = 60
+// 无可用重置卡/请求失败时,多久内不再重试(毫秒)
+const RESET_CREDIT_EMPTY_RETRY_MS = 24 * 60 * 60 * 1000
+const RESET_CREDIT_ERROR_RETRY_MS = 30 * 60 * 1000
 const FILE_SCAN_LIMIT = 80
-export async function collectUsageSnapshot(): Promise<UsageSnapshot> {
+
+interface ResetCreditCacheEntry {
+  value: UsageSnapshot['resetCredit']
+  fetchedAtMs: number
+  state: 'ok' | 'empty' | 'error'
+}
+
+let resetCreditCache: ResetCreditCacheEntry | undefined
+
+export function invalidateQuotaCaches(): void {
+  resetCreditCache = undefined
+}
+
+interface CollectOptions {
+  iqThreshold?: number
+}
+
+export async function collectUsageSnapshot(
+  options: CollectOptions = {}
+): Promise<UsageSnapshot> {
   const checkedPaths = resolveSessionPaths()
   const missingPaths: string[] = []
   const files: JsonlFileEntry[] = []
@@ -72,14 +93,25 @@ export async function collectUsageSnapshot(): Promise<UsageSnapshot> {
   let rateLimits = localRateLimits
   let rateLimitSource: RateLimitSource = hasRateLimits(localRateLimits) ? 'local' : 'none'
   let officialIssue: string | undefined
+  let resetCredit: UsageSnapshot['resetCredit']
+  let bestModelPick: UsageSnapshot['bestModelPick']
 
-  const officialLookup = await getOfficialRateLimits(localRateLimits)
-  if (officialLookup.rateLimits !== undefined) {
-    rateLimits = officialLookup.rateLimits
-    rateLimitSource = 'official'
+  const credentialLookup = await readOfficialCodexCredentials()
+  if (credentialLookup.credentials) {
+    const headers = buildOfficialHeaders(credentialLookup.credentials)
+    const lookup = await fetchOfficialRateLimits(headers, localRateLimits)
+    if (lookup.rateLimits !== undefined) {
+      rateLimits = lookup.rateLimits
+      rateLimitSource = 'official'
+    } else {
+      officialIssue = lookup.issue
+    }
+    resetCredit = await getResetCreditWithCache(headers)
   } else {
-    officialIssue = officialLookup.issue
+    officialIssue = credentialLookup.issue ?? '未找到 Codex OAuth 凭据'
   }
+
+  bestModelPick = await fetchRadarBestPick(options.iqThreshold).catch(() => undefined)
 
   const issues: string[] = []
   if (rateLimitSource !== 'official' && officialIssue) {
@@ -95,43 +127,35 @@ export async function collectUsageSnapshot(): Promise<UsageSnapshot> {
   return {
     available: hasRateLimits(rateLimits),
     isRefreshing: false,
-    canRefresh: officialLookup.canRefresh,
+    canRefresh: credentialLookup?.canRefresh ?? true,
     generatedAt: new Date().toISOString(),
     rateLimits,
     rateLimitSource,
     sourceHost: resolveSourceHost(rateLimitSource),
     officialIssue,
+    resetCredit,
+    bestModelPick,
     issues: Array.from(new Set(issues)).slice(0, 6),
     filesScanned: limitedFiles.length,
     sessionsPath: checkedPaths.find((candidate) => !missingPaths.includes(candidate))
   }
 }
 
-async function getOfficialRateLimits(
+async function fetchOfficialRateLimits(
+  headers: Record<string, string>,
   localRateLimits: UsageSnapshot['rateLimits']
-): Promise<OfficialRateLimitLookup> {
-  const credentialLookup = await readOfficialCodexCredentials()
-  if (!credentialLookup.credentials) {
-    return {
-      canRefresh: credentialLookup.canRefresh,
-      issue: credentialLookup.issue ?? '未找到 Codex OAuth 凭据'
-    }
-  }
-
-  const headers = buildOfficialHeaders(credentialLookup.credentials)
-
+): Promise<{ rateLimits?: UsageSnapshot['rateLimits']; issue?: string }> {
   try {
     let rateLimits = await requestOfficialRateLimits(headers)
     if (rateLimits && shouldRecheckOfficialRateLimits(rateLimits, localRateLimits)) {
       await new Promise((resolve) => setTimeout(resolve, OFFICIAL_QUOTA_RECHECK_DELAY_MS))
       rateLimits = await requestOfficialRateLimits(headers)
     }
-
     return rateLimits !== undefined
-      ? { rateLimits, canRefresh: true }
-      : { canRefresh: true, issue: '官方接口未返回额度信息' }
+      ? { rateLimits }
+      : { issue: '官方接口未返回额度信息' }
   } catch (error) {
-    return { canRefresh: true, issue: error instanceof Error ? error.message : String(error) }
+    return { issue: error instanceof Error ? error.message : String(error) }
   }
 }
 
@@ -140,6 +164,112 @@ async function requestOfficialRateLimits(
 ): Promise<UsageSnapshot['rateLimits'] | undefined> {
   const response = await requestJson(OFFICIAL_CODEX_USAGE_URL, headers, OFFICIAL_QUOTA_TIMEOUT_MS)
   return parseOfficialRateLimits(response, new Date())
+}
+
+// 独立端点获取重置卡到期时间:
+// GET /backend-api/wham/rate-limit-reset-credits
+// 响应: { credits: [{ expires_at: "YYYY-MM-DDTHH:mm:ssZ" (RFC3339字符串) }, ...], available_count?: number }
+// 取最近(最早)到期的一张返回;无可用卡或接口失败返回 undefined。
+async function fetchOfficialResetCredit(
+  headers: Record<string, string>
+): Promise<UsageSnapshot['resetCredit'] | undefined> {
+  const resetHeaders = {
+    ...headers,
+    Origin: 'https://chatgpt.com',
+    Referer: 'https://chatgpt.com/'
+  }
+  const response = await requestJson(
+    OFFICIAL_RESET_CREDITS_URL,
+    resetHeaders,
+    RESET_CREDIT_TIMEOUT_MS
+  )
+  return parseResetCredits(response)
+}
+
+function parseResetCredits(response: unknown): UsageSnapshot['resetCredit'] | undefined {
+  const body = getRecord(response)
+  const credits = Array.isArray(body?.credits) ? body.credits : undefined
+  const availableCount = getNonNegativeNumber(body?.available_count ?? body?.availableCount)
+  if (!credits || credits.length === 0) {
+    // 没详情但有可用数量也无法显示到期时间
+    return undefined
+  }
+  let earliestMs: number | undefined
+  for (const entry of credits) {
+    const record = getRecord(entry)
+    if (!record) continue
+    const expiresRaw = record.expires_at ?? record.expiresAt
+    const expiresAt =
+      typeof expiresRaw === 'string'
+        ? parseRfc3339(expiresRaw)
+        : typeof expiresRaw === 'number'
+          ? normalizeEpochMs(expiresRaw)
+          : undefined
+    if (expiresAt === undefined) continue
+    if (earliestMs === undefined || expiresAt < earliestMs) {
+      earliestMs = expiresAt
+    }
+  }
+  if (earliestMs === undefined) {
+    return undefined
+  }
+  return {
+    availableCount: availableCount ?? 1,
+    expiresAt: new Date(earliestMs).toISOString()
+  }
+}
+
+function parseRfc3339(value: string): number | undefined {
+  const t = Date.parse(value)
+  return Number.isFinite(t) ? t : undefined
+}
+
+// 重置卡缓存:
+// - 有卡且未到快到期时间,直接返回缓存,不打接口
+// - 卡已到期或快到期,重新拉取下一张
+// - 上次结果是空(无卡),24h 内不重试
+// - 上次请求失败,30min 内用错误缓存(不显示)
+async function getResetCreditWithCache(
+  headers: Record<string, string>
+): Promise<UsageSnapshot['resetCredit'] | undefined> {
+  const now = Date.now()
+  if (resetCreditCache) {
+    const age = now - resetCreditCache.fetchedAtMs
+    if (resetCreditCache.state === 'ok' && resetCreditCache.value) {
+      const expiresAtMs = resetCreditCache.value.expiresAt
+        ? Date.parse(resetCreditCache.value.expiresAt)
+        : NaN
+      const expired =
+        Number.isFinite(expiresAtMs) &&
+        expiresAtMs - now < RESET_CREDIT_REFRESH_BEFORE_EXPIRY_SECONDS * 1000
+      if (!expired) {
+        // 卡未到刷新窗口,直接用缓存
+        return resetCreditCache.value
+      }
+    } else if (resetCreditCache.state === 'empty') {
+      if (age < RESET_CREDIT_EMPTY_RETRY_MS) {
+        return undefined
+      }
+    } else if (resetCreditCache.state === 'error') {
+      if (age < RESET_CREDIT_ERROR_RETRY_MS) {
+        return undefined
+      }
+    }
+  }
+
+  try {
+    const value = await fetchOfficialResetCredit(headers)
+    if (value) {
+      resetCreditCache = { value, fetchedAtMs: Date.now(), state: 'ok' }
+      return value
+    }
+    resetCreditCache = { value: undefined, fetchedAtMs: Date.now(), state: 'empty' }
+    return undefined
+  } catch (error) {
+    resetCreditCache = { value: undefined, fetchedAtMs: Date.now(), state: 'error' }
+    // 请求失败时,如果之前有缓存值(比如卡还没到期),继续显示旧值比什么都不显示好
+    return undefined
+  }
 }
 
 export function shouldRecheckOfficialRateLimits(
@@ -178,65 +308,6 @@ function buildOfficialHeaders(credentials: {
   return headers
 }
 
-// null 表示官方明确未返回计时窗口;undefined 表示接口不可用或窗口数据无效。
-export function parseOfficialDispatchResetAts(
-  response: unknown
-): Record<string, number> | null | undefined {
-  const body = getRecord(response)
-  const rateLimit = getRecord(body?.rate_limit ?? body?.rateLimit)
-  if (!rateLimit) {
-    return undefined
-  }
-
-  const resetAts: Record<string, number> = {}
-  for (const [id, windowState] of getOfficialWindowEntries(rateLimit)) {
-    const resetAt = getNonNegativeNumber(windowState.reset_at ?? windowState.resetAt)
-    if (resetAt === undefined) {
-      return undefined
-    }
-    resetAts[id] = resetAt
-  }
-
-  return Object.keys(resetAts).length > 0 ? resetAts : null
-}
-
-export function areOfficialDispatchResetAtsStable(
-  left: Record<string, number>,
-  right: Record<string, number>,
-  toleranceSeconds: number
-): boolean {
-  const keys = Object.keys(left)
-  return (
-    keys.length === Object.keys(right).length &&
-    keys.every(
-      (key) =>
-        right[key] !== undefined && Math.abs(left[key] - right[key]) <= toleranceSeconds
-    )
-  )
-}
-
-// 窗口未激活时,官方接口的 reset_at 恒等于"当前时间 + 窗口全长"并随查询时间漂移;
-// 激活后 reset_at 固定不变。调用方据此逐个判断官方实际返回的窗口是否启动计时。
-export async function fetchOfficialDispatchResetAts(): Promise<
-  Record<string, number> | null | undefined
-> {
-  const credentialLookup = await readOfficialCodexCredentials()
-  if (!credentialLookup.credentials) {
-    return undefined
-  }
-
-  try {
-    const response = await requestJson(
-      OFFICIAL_CODEX_USAGE_URL,
-      buildOfficialHeaders(credentialLookup.credentials),
-      OFFICIAL_QUOTA_TIMEOUT_MS
-    )
-    return parseOfficialDispatchResetAts(response)
-  } catch {
-    return undefined
-  }
-}
-
 async function readOfficialCodexCredentials(): Promise<CredentialLookup> {
   const authPath = resolveCodexAuthPath()
 
@@ -269,47 +340,56 @@ async function readOfficialCodexCredentials(): Promise<CredentialLookup> {
   }
 }
 
-function requestJson(
+async function requestJson(
   url: string,
   headers: Record<string, string>,
   timeoutMs: number
 ): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const request = https.request(new URL(url), { method: 'GET', headers }, (response) => {
-      const chunks: Buffer[] = []
-
-      response.on('data', (chunk: Buffer) => {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-      })
-
-      response.on('end', () => {
-        const statusCode = response.statusCode ?? 0
-        const body = Buffer.concat(chunks).toString('utf8')
-
-        if (statusCode === 401 || statusCode === 403) {
-          reject(new Error(`官方额度接口鉴权失败 HTTP ${statusCode}`))
-          return
-        }
-
-        if (statusCode < 200 || statusCode >= 300) {
-          reject(new Error(`官方额度接口返回 HTTP ${statusCode}`))
-          return
-        }
-
-        try {
-          resolve(body.trim().length > 0 ? JSON.parse(body) : {})
-        } catch {
-          reject(new Error('官方额度接口返回内容不是有效 JSON'))
-        }
-      })
+  // 优先用 Electron net 模块(Chromium 网络栈,自动走系统代理、HTTP/2、会话);
+  // 测试环境下 electron 不可用,回落到全局 fetch(不发送真实请求也不会被测试调用到)。
+  const fetchImpl = resolveFetchImplementation()
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), Math.max(1000, timeoutMs))
+  try {
+    const response = await fetchImpl(url, {
+      method: 'GET',
+      headers,
+      signal: controller.signal,
+      redirect: 'follow'
     })
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(`官方额度接口鉴权失败 HTTP ${response.status}`)
+    }
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`官方额度接口返回 HTTP ${response.status}`)
+    }
+    const text = await response.text()
+    return text.trim().length > 0 ? JSON.parse(text) : {}
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('官方额度接口请求超时')
+    }
+    throw error instanceof Error ? error : new Error(String(error))
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
-    request.setTimeout(Math.max(1000, timeoutMs), () => {
-      request.destroy(new Error('官方额度接口请求超时'))
-    })
-    request.on('error', reject)
-    request.end()
-  })
+function resolveFetchImplementation(): typeof fetch {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const electron = require('electron') as typeof import('electron') | undefined
+    const netFetch = electron?.net?.fetch
+    if (electron && typeof netFetch === 'function') {
+      return netFetch.bind(electron.net) as unknown as typeof fetch
+    }
+  } catch {
+    // not in electron environment (e.g. tests)
+  }
+  if (typeof globalThis.fetch === 'function') {
+    return globalThis.fetch.bind(globalThis)
+  }
+  throw new Error('No HTTP client available')
 }
 
 export function parseOfficialRateLimits(
@@ -332,8 +412,7 @@ function createOfficialRateLimitWindow(
   id: string,
   record: Record<string, unknown> | undefined,
   observedAt: Date
-): RateLimitWindowSnapshot | undefined {
-  if (!record) {
+): RateLimitWindowSnapshot | undefined {  if (!record) {
     return undefined
   }
 
@@ -344,8 +423,14 @@ function createOfficialRateLimitWindow(
   const resetsAtMs = normalizeEpochMs(
     record.reset_at ?? record.resetAt ?? record.resets_at ?? record.resetsAt
   )
+  const resetsInSeconds = getNonNegativeNumber(
+    record.resets_in_seconds ??
+      record.reset_in_seconds ??
+      record.resetsInSeconds ??
+      record.resetInSeconds
+  )
 
-  if (usedPercent === undefined && resetsAtMs === undefined) {
+  if (usedPercent === undefined && resetsAtMs === undefined && resetsInSeconds === undefined) {
     return undefined
   }
 
@@ -354,7 +439,8 @@ function createOfficialRateLimitWindow(
     {
       windowMinutes: limitWindowSeconds !== undefined ? limitWindowSeconds / 60 : undefined,
       usedPercent,
-      resetsAtMs
+      resetsAtMs,
+      resetsInSeconds
     },
     observedAt
   )

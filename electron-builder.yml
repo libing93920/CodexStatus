@@ -3,18 +3,24 @@ productName: codex-status
 directories:
   buildResources: build
 files:
+  - 'out/**/*'
+  - 'package.json'
+  - 'build/icon-*.png'
   - '!**/.vscode/*'
-  - '!src/*'
-  - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
-  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!**/*.map'
+  - '!**/*.{md,markdown,txt}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,.editorconfig}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{.codegraph,.tmp-icons,.qoder,.git,.github}/**'
+  - '!{design_refs,scripts,resources}/**'
+  - '!node_modules/**/*.d.ts'
+  - '!node_modules/**/{test,tests,__tests__,example,examples,doc,docs,license,LICENSE,CHANGELOG.md,README.md,readme.md}'
 asarUnpack:
-  - resources/**
+  - build/icon-*.png
 win:
   executableName: codex-status
-  icon: build/icon-1.png
-  compression: normal
+  icon: build/icon.ico
+  compression: maximum
   electronLanguages:
     - zh-CN
     - en-US
@@ -26,24 +32,13 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   runAfterFinish: false
-mac:
-  target:
-    - dmg
-    - zip
-  compression: maximum
-  entitlementsInherit: build/entitlements.mac.plist
-  extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
-  notarize: false
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:
   target:
     - AppImage
     - deb
+  icon: build/icon-1.png
   maintainer: electronjs.org
   category: Utility
 appImage:

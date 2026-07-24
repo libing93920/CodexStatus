@@ -2,24 +2,20 @@ import {
   app,
   shell,
   BrowserWindow,
-  dialog,
   ipcMain,
   Menu,
-  Notification,
   Tray,
   nativeImage,
   screen,
   type MenuItemConstructorOptions,
   type Rectangle
 } from 'electron'
-import { spawn, type ChildProcess } from 'node:child_process'
 import { watchFile, unwatchFile } from 'node:fs'
-import { homedir } from 'node:os'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import electronUpdater, { type AppUpdater } from 'electron-updater'
-import appIcon from '../../build/icon-1.png?asset'
-import trayIcon from '../../build/icon-2.png?asset'
+
+const APP_ICON_PATH = join(__dirname, '../../build/icon-1.png')
+const TRAY_ICON_PATH = join(__dirname, '../../build/icon-2.png')
 import {
   CAPSULE_DOCK_THRESHOLD,
   CAPSULE_DOCK_EDGE_GAP,
@@ -44,19 +40,12 @@ import {
   type WindowPreferences
 } from '../shared/capsule'
 import {
-  areOfficialDispatchResetAtsStable,
   collectUsageSnapshot,
-  fetchOfficialDispatchResetAts,
+  invalidateQuotaCaches,
   resolveCodexAuthPath
 } from './services/quota'
+import { invalidateRadarCache } from './services/radar'
 import { loadPersistedState, savePersistedState } from './services/state'
-
-function getAutoUpdater(): AppUpdater {
-  const { autoUpdater } = electronUpdater
-  return autoUpdater
-}
-
-const autoUpdater = getAutoUpdater()
 
 const CHANNELS = {
   bootstrap: 'codex-status:bootstrap',
@@ -70,27 +59,16 @@ const CHANNELS = {
   command: 'codex-status:command'
 } as const
 
-// --ignore-user-config 隔离 ~/.codex/config.toml,模型固定为 gpt-5.4-mini,不随用户配置变化
-const CODEX_DISPATCH_COMMAND =
-  'codex exec --skip-git-repo-check --ephemeral --ignore-user-config --color never -m gpt-5.4-mini hi'
-const CODEX_DISPATCH_TIMEOUT_MS = 180_000
-const CODEX_DISPATCH_OUTPUT_LIMIT = 2000
-const CODEX_DISPATCH_VERIFY_DELAY_MS = 8000
 const SINGLE_CAPSULE_WINDOW_WIDTH = 160
 const SINGLE_ORB_WINDOW_HEIGHT = 96
-// 激活态下官方接口的 reset_at 实测存在 ±1s 抖动;漂移态两次查询差值约等于查询间隔(8s+),
-// 容差取 3s 可同时避开抖动误判和漂移漏判
-const CODEX_DISPATCH_RESET_AT_TOLERANCE_SECONDS = 3
 
 let mainWindow: BrowserWindow | null = null
 let panelWindow: BrowserWindow | null = null
 let tray: Tray | null = null
-let dispatchChild: ChildProcess | undefined
 let refreshTimer: NodeJS.Timeout | undefined
 let persistTimer: NodeJS.Timeout | undefined
 let refreshPromise: Promise<void> | undefined
 let watchedCodexAuthPath: string | undefined
-let isCheckingForUpdates = false
 let isQuitting = false
 let currentPanelView: PanelView = 'details'
 let persistedState: PersistedState = {
@@ -136,7 +114,7 @@ function createCapsuleWindow(): BrowserWindow {
     alwaysOnTop: true,
     skipTaskbar: true,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon: appIcon } : {}),
+    ...(process.platform === 'linux' ? { icon: APP_ICON_PATH } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -182,6 +160,12 @@ function createCapsuleWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
+  // 胶囊右键:弹原生菜单(刷新/显示隐藏/详情/设置/退出),不含投送和检查更新
+  window.webContents.on('context-menu', (_event, params) => {
+    const menu = Menu.buildFromTemplate(buildCapsuleContextMenuTemplate())
+    menu.popup({ window, x: params.x, y: params.y })
+  })
+
   loadRenderer(window, 'capsule')
 
   return window
@@ -203,7 +187,7 @@ function createPanelWindow(): BrowserWindow {
     alwaysOnTop: true,
     skipTaskbar: true,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon: appIcon } : {}),
+    ...(process.platform === 'linux' ? { icon: APP_ICON_PATH } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -337,6 +321,7 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(CHANNELS.updateSettings, async (_, patch: Partial<AppSettings>) => {
+    const previousIqThreshold = persistedState.settings.iqThreshold
     const nextSettings = syncLaunchAtLoginPreference({
       ...persistedState.settings,
       ...patch
@@ -352,7 +337,15 @@ function registerIpcHandlers(): void {
     refreshTrayMenu()
     broadcastPreferences()
 
-    if (persistedState.settings.refreshMode === 'auto' && canRefreshStatus()) {
+    const iqThresholdChanged =
+      typeof patch.iqThreshold === 'number' && patch.iqThreshold !== previousIqThreshold
+
+    if (iqThresholdChanged) {
+      // IQ 阈值变更,重置 radar/重置卡缓存,强制重新拉取推荐模型数据
+      invalidateQuotaCaches()
+      invalidateRadarCache()
+      void refreshStatus({ forceCredentialCheck: true })
+    } else if (persistedState.settings.refreshMode === 'auto' && canRefreshStatus()) {
       void refreshStatus()
     }
 
@@ -373,8 +366,8 @@ function registerIpcHandlers(): void {
 }
 
 function createTray(): void {
-  const image = nativeImage.createFromPath(trayIcon)
-  tray = new Tray(image.isEmpty() ? trayIcon : image.resize({ width: 16, height: 16 }))
+  const image = nativeImage.createFromPath(TRAY_ICON_PATH)
+  tray = new Tray(image.isEmpty() ? TRAY_ICON_PATH : image.resize({ width: 16, height: 16 }))
   tray.on('click', () => {
     toggleWindowVisibility()
   })
@@ -386,20 +379,38 @@ function refreshTrayMenu(): void {
     return
   }
 
+  // 托盘菜单与胶囊右键菜单共用同一模板(刷新/显示隐藏/详情/设置/退出),不含投送和检查更新
+  tray.setContextMenu(Menu.buildFromTemplate(buildCapsuleContextMenuTemplate()))
+  tray.setToolTip(buildTrayTooltip())
+}
+
+function getTrayLabels(): Record<
+  'refresh' | 'toggle' | 'details' | 'settings' | 'quit',
+  string
+> {
+  if (persistedState.settings.locale === 'en-US') {
+    return {
+      refresh: 'Refresh',
+      toggle: 'Show/Hide',
+      details: 'Details',
+      settings: 'Settings',
+      quit: 'Quit'
+    }
+  }
+
+  return {
+    refresh: '刷新',
+    toggle: '显示/隐藏',
+    details: '详情',
+    settings: '设置',
+    quit: '退出'
+  }
+}
+
+// 胶囊右键菜单:托盘子集,去掉投送和检查更新
+function buildCapsuleContextMenuTemplate(): MenuItemConstructorOptions[] {
   const labels = getTrayLabels()
-  const dispatchMenuItems: MenuItemConstructorOptions[] =
-    process.platform === 'win32'
-      ? [
-          {
-            label: labels.dispatch,
-            enabled: !dispatchChild,
-            click: () => {
-              launchCodexDispatch()
-            }
-          }
-        ]
-      : []
-  const menuTemplate: MenuItemConstructorOptions[] = [
+  return [
     {
       label: labels.refresh,
       enabled: canRefreshStatus(),
@@ -407,7 +418,6 @@ function refreshTrayMenu(): void {
         void refreshStatus()
       }
     },
-    ...dispatchMenuItems,
     {
       label: labels.toggle,
       click: () => {
@@ -426,13 +436,6 @@ function refreshTrayMenu(): void {
         openSettingsFromTray()
       }
     },
-    {
-      label: labels.checkForUpdates,
-      enabled: !isCheckingForUpdates,
-      click: () => {
-        void checkForUpdates()
-      }
-    },
     { type: 'separator' },
     {
       label: labels.quit,
@@ -441,42 +444,6 @@ function refreshTrayMenu(): void {
       }
     }
   ]
-
-  tray.setContextMenu(Menu.buildFromTemplate(menuTemplate))
-  tray.setToolTip(buildTrayTooltip())
-}
-
-function getTrayLabels(): Record<
-  | 'refresh'
-  | 'dispatch'
-  | 'toggle'
-  | 'details'
-  | 'settings'
-  | 'checkForUpdates'
-  | 'quit',
-  string
-> {
-  if (persistedState.settings.locale === 'en-US') {
-    return {
-      refresh: 'Refresh',
-      dispatch: 'Dispatch',
-      toggle: 'Show/Hide',
-      details: 'Details',
-      settings: 'Settings',
-      checkForUpdates: 'Check for Updates',
-      quit: 'Quit'
-    }
-  }
-
-  return {
-    refresh: '刷新',
-    dispatch: '投送',
-    toggle: '显示/隐藏',
-    details: '详情',
-    settings: '设置',
-    checkForUpdates: '检查更新',
-    quit: '退出'
-  }
 }
 
 function buildTrayTooltip(): string {
@@ -536,264 +503,6 @@ function openSettingsFromTray(): void {
 
 function openDetailsFromTray(): void {
   openPanelWindow('details')
-}
-
-function launchCodexDispatch(): void {
-  if (process.platform !== 'win32' || dispatchChild) {
-    return
-  }
-
-  const isEnglish = persistedState.settings.locale === 'en-US'
-  let output = ''
-  let timedOut = false
-
-  // 静默执行不弹终端窗口;codex 的 npm shim 是 .cmd,必须经 cmd.exe 启动
-  const child = spawn('cmd.exe', ['/c', CODEX_DISPATCH_COMMAND], {
-    cwd: homedir(),
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
-    windowsVerbatimArguments: true
-  })
-  dispatchChild = child
-  refreshTrayMenu()
-
-  const appendOutput = (chunk: Buffer): void => {
-    output = `${output}${chunk.toString()}`.slice(-CODEX_DISPATCH_OUTPUT_LIMIT)
-  }
-  child.stdout?.on('data', appendOutput)
-  child.stderr?.on('data', appendOutput)
-
-  // codex 卡死时终止整个进程树,避免静默进程无限挂起、菜单一直禁用
-  const timeoutTimer = setTimeout(() => {
-    timedOut = true
-    if (child.pid !== undefined) {
-      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true })
-    }
-  }, CODEX_DISPATCH_TIMEOUT_MS)
-
-  const release = (): boolean => {
-    if (dispatchChild !== child) {
-      return false
-    }
-
-    clearTimeout(timeoutTimer)
-    dispatchChild = undefined
-    refreshTrayMenu()
-    return true
-  }
-
-  const settleFailure = (detail: string): void => {
-    if (!release()) {
-      return
-    }
-
-    dialog.showErrorBox(
-      isEnglish ? 'Codex dispatch failed' : 'Codex 投送失败',
-      detail.trim() || (isEnglish ? 'Unknown error.' : '未知错误')
-    )
-  }
-
-  // exit 0 只说明进程正常退出;是否真正启动计时窗口需向官方额度接口二次确认。
-  // 验证期间保持 dispatchChild 占用,避免并发投送干扰 reset_at 对比
-  const settleSuccess = async (): Promise<void> => {
-    const verdict = await verifyDispatchActivation()
-    if (!release()) {
-      return
-    }
-
-    void refreshStatus()
-
-    if (verdict === 'inactive') {
-      dialog.showErrorBox(
-        isEnglish ? 'Codex dispatch failed' : 'Codex 投送失败',
-        isEnglish
-          ? 'Command finished, but the rate limit window was not activated. This dispatch did not take effect.'
-          : '命令已执行完成,但 Codex 计时窗口未被激活,本次投送未生效。'
-      )
-      return
-    }
-
-    new Notification({
-      title: isEnglish ? 'Codex Dispatch' : 'Codex 投送',
-      body:
-        verdict === 'activated'
-          ? isEnglish
-            ? 'Dispatch completed. Rate limit window is counting down.'
-            : '投送完成,计时窗口已激活'
-          : verdict === 'unlimited'
-            ? isEnglish
-              ? 'Dispatch completed. The official API currently reports no rate limit window.'
-              : '投送完成,官方当前未返回计时限额'
-            : isEnglish
-              ? 'Dispatch completed, but window activation could not be verified.'
-              : '投送完成,但官方接口不可用,未能确认计时窗口',
-      silent: true
-    }).show()
-  }
-
-  child.on('error', (error) => {
-    settleFailure(error.message)
-  })
-
-  child.on('exit', (code) => {
-    if (code === 0) {
-      // codex exec 正常完成一次对话必然输出 tokens used;缺失说明没有真实消费
-      if (/tokens used/i.test(output)) {
-        void settleSuccess()
-        return
-      }
-
-      settleFailure(
-        [
-          isEnglish
-            ? 'Process exited normally but reported no token usage; the request likely never reached Codex.'
-            : '进程正常退出,但输出中没有 tokens used,请求可能没有真正发送给 Codex。',
-          output
-        ]
-          .filter(Boolean)
-          .join('\n')
-      )
-      return
-    }
-
-    const timeoutSeconds = Math.round(CODEX_DISPATCH_TIMEOUT_MS / 1000)
-    const reason = timedOut
-      ? isEnglish
-        ? `Timed out after ${timeoutSeconds}s and was terminated.`
-        : `等待超过 ${timeoutSeconds} 秒,已强制终止。`
-      : ''
-    settleFailure([reason, output].filter(Boolean).join('\n'))
-  })
-}
-
-// 官方当前窗口未激活时 reset_at 恒为"当前时间+窗口全长",随查询时间漂移;激活后固定(仅 ±1s 抖动)。
-// 两次间隔查询差值在容差内即已激活;首轮超差可能是激活恰好落在两次查询之间,再补一轮对比
-async function verifyDispatchActivation(): Promise<
-  'activated' | 'inactive' | 'unlimited' | 'unknown'
-> {
-  const first = await fetchOfficialDispatchResetAts()
-  if (first === null) {
-    return 'unlimited'
-  }
-  if (first === undefined) {
-    return 'unknown'
-  }
-
-  await delay(CODEX_DISPATCH_VERIFY_DELAY_MS)
-  const second = await fetchOfficialDispatchResetAts()
-  if (second === null) {
-    return 'unlimited'
-  }
-  if (second === undefined) {
-    return 'unknown'
-  }
-  if (
-    areOfficialDispatchResetAtsStable(
-      first,
-      second,
-      CODEX_DISPATCH_RESET_AT_TOLERANCE_SECONDS
-    )
-  ) {
-    return 'activated'
-  }
-
-  await delay(CODEX_DISPATCH_VERIFY_DELAY_MS)
-  const third = await fetchOfficialDispatchResetAts()
-  if (third === null) {
-    return 'unlimited'
-  }
-  if (third === undefined) {
-    return 'unknown'
-  }
-  return areOfficialDispatchResetAtsStable(
-    second,
-    third,
-    CODEX_DISPATCH_RESET_AT_TOLERANCE_SECONDS
-  )
-    ? 'activated'
-    : 'inactive'
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-async function checkForUpdates(): Promise<void> {
-  if (isCheckingForUpdates) {
-    return
-  }
-
-  const isEnglish = persistedState.settings.locale === 'en-US'
-  if (!app.isPackaged) {
-    await dialog.showMessageBox({
-      type: 'info',
-      title: isEnglish ? 'Check for Updates' : '检查更新',
-      message: isEnglish
-        ? 'Update checks are available in the installed app.'
-        : '检查更新仅适用于已安装的正式版本。'
-    })
-    return
-  }
-
-  isCheckingForUpdates = true
-  refreshTrayMenu()
-
-  try {
-    autoUpdater.autoDownload = false
-    autoUpdater.autoInstallOnAppQuit = false
-    const update = await autoUpdater.checkForUpdates()
-    if (!update) {
-      throw new Error(isEnglish ? 'The updater is unavailable.' : '更新服务不可用。')
-    }
-
-    const currentVersion = app.getVersion()
-    if (!update.isUpdateAvailable) {
-      await dialog.showMessageBox({
-        type: 'info',
-        title: isEnglish ? 'Check for Updates' : '检查更新',
-        message: isEnglish ? 'You are using the latest version.' : '当前已是最新版本。',
-        detail: isEnglish ? `Current version: v${currentVersion}` : `当前版本：v${currentVersion}`
-      })
-      return
-    }
-
-    const latestVersion = update.updateInfo.version
-    const result = await dialog.showMessageBox({
-      type: 'info',
-      title: isEnglish ? 'Update Available' : '发现新版本',
-      message: isEnglish
-        ? `Version v${latestVersion} is available.`
-        : `发现新版本 v${latestVersion}。`,
-      detail: isEnglish ? `Current version: v${currentVersion}` : `当前版本：v${currentVersion}`,
-      buttons: isEnglish ? ['Update and Restart', 'Later'] : ['更新并重启', '稍后'],
-      defaultId: 0,
-      cancelId: 1
-    })
-    if (result.response !== 0) {
-      return
-    }
-
-    new Notification({
-      title: isEnglish ? 'Updating Codex Status' : '正在更新 Codex Status',
-      body: isEnglish ? 'Downloading the update…' : '正在下载更新…',
-      silent: true
-    }).show()
-    await autoUpdater.downloadUpdate()
-    prepareToQuit()
-    autoUpdater.quitAndInstall(true, true)
-  } catch (error) {
-    if (!isQuitting) {
-      dialog.showErrorBox(
-        isEnglish ? 'Update Check Failed' : '检查更新失败',
-        error instanceof Error ? error.message : String(error)
-      )
-    }
-  } finally {
-    isCheckingForUpdates = false
-    if (!isQuitting) {
-      refreshTrayMenu()
-    }
-  }
 }
 
 function prepareToQuit(): void {
@@ -866,7 +575,9 @@ async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): 
 
   refreshPromise = (async () => {
     try {
-      currentSnapshot = await collectUsageSnapshot()
+      currentSnapshot = await collectUsageSnapshot({
+        iqThreshold: persistedState.settings.iqThreshold
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       currentSnapshot = {
@@ -1170,7 +881,9 @@ function resolveCapsuleWindowSize(viewMode: 'capsule' | 'orb'): {
   height: number
 } {
   const size = viewMode === 'orb' ? ORB_WINDOW_SIZE : CAPSULE_WINDOW_SIZE
-  const rateLimitCount = currentSnapshot.rateLimits.length
+  // 短窗口(百分比段)和长窗口(周重置倒计时段)都参与胶囊展示,尺寸按总窗口数增长
+  const visibleCount = currentSnapshot.rateLimits.length
+  const rateLimitCount = visibleCount > 0 ? visibleCount : currentSnapshot.rateLimits.length
 
   if (rateLimitCount === 0) {
     return size

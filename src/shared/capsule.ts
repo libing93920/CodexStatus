@@ -31,7 +31,33 @@ export interface UsageSnapshot {
   officialIssue?: string
   filesScanned: number
   sessionsPath?: string
+  /** 最近一张即将到期的重置卡;没有则不返回 */
+  resetCredit?: {
+    /** 最近一张重置卡的到期时间(ISO);null 表示永不过期 */
+    expiresAt?: string
+    /** 可用重置卡总数 */
+    availableCount: number
+  }
+  /** Codex 雷达:IQ>=90 里性价比最高的模型 */
+  bestModelPick?: {
+    /** 短标签,例如 "Terra xhigh" */
+    shortLabel: string
+    /** 完整标签 */
+    label: string
+    /** IQ 分数 */
+    score: number
+    /** 每题平均美元成本 */
+    averageCostUsd: number
+    /** 每题平均耗时分钟 */
+    averageTaskMinutes: number
+    /** 状态色 */
+    status: 'green' | 'yellow' | 'red'
+  }
 }
+
+export const DEFAULT_IQ_THRESHOLD = 90
+export const MIN_IQ_THRESHOLD = 60
+export const MAX_IQ_THRESHOLD = 115
 
 export interface AppSettings {
   refreshMode: RefreshMode
@@ -39,6 +65,7 @@ export interface AppSettings {
   percentageMode: PercentageMode
   locale: LocaleCode
   launchAtLogin: boolean
+  iqThreshold: number
 }
 
 export interface WindowPreferences {
@@ -108,7 +135,7 @@ export const CAPSULE_WINDOW_SIZE = {
 } as const
 
 export const ORB_WINDOW_SIZE = {
-  width: 60,
+  width: 50,
   height: 165
 } as const
 
@@ -127,7 +154,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   refreshIntervalSeconds: DEFAULT_REFRESH_INTERVAL_SECONDS,
   percentageMode: 'remaining',
   locale: 'zh-CN',
-  launchAtLogin: false
+  launchAtLogin: false,
+  iqThreshold: DEFAULT_IQ_THRESHOLD
 }
 
 export const DEFAULT_WINDOW_PREFERENCES: WindowPreferences = {
@@ -162,7 +190,8 @@ export function normalizeSettings(input: Partial<AppSettings> | undefined): AppS
     launchAtLogin:
       typeof input?.launchAtLogin === 'boolean'
         ? input.launchAtLogin
-        : DEFAULT_SETTINGS.launchAtLogin
+        : DEFAULT_SETTINGS.launchAtLogin,
+    iqThreshold: normalizeIqThreshold(input?.iqThreshold)
   }
 }
 
@@ -198,6 +227,14 @@ function normalizeRefreshInterval(value: number | undefined): number {
 
   const normalized = Math.round(value as number)
   return Math.min(MAX_REFRESH_INTERVAL_SECONDS, Math.max(MIN_REFRESH_INTERVAL_SECONDS, normalized))
+}
+
+function normalizeIqThreshold(value: number | undefined): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_IQ_THRESHOLD
+  }
+  const n = Math.round(value as number)
+  return Math.min(MAX_IQ_THRESHOLD, Math.max(MIN_IQ_THRESHOLD, n))
 }
 
 function isRefreshMode(value: unknown): value is RefreshMode {

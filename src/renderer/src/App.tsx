@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import {
+  DEFAULT_IQ_THRESHOLD,
   DEFAULT_SETTINGS,
   DEFAULT_WINDOW_PREFERENCES,
+  MAX_IQ_THRESHOLD,
+  MIN_IQ_THRESHOLD,
   REFRESH_INTERVAL_OPTIONS,
   MAX_REFRESH_INTERVAL_SECONDS,
   MIN_REFRESH_INTERVAL_SECONDS,
@@ -60,15 +63,14 @@ const COPY = {
     officialSource: '官方接口',
     localSource: '本地 JSONL',
     emptySource: '无数据',
-    fallbackTitle: '当前使用回退数据',
-    fallbackBody: '官方额度接口暂不可用，当前展示最近一次本地会话中的额度状态。',
-    unavailableTitle: '暂无可用额度数据',
-    unavailableBody: '官方接口和本地 sessions 都没有提供可用窗口。',
-    scannedFiles: '已扫描',
-    filesUnit: '个 jsonl',
-    path: 'sessions 路径',
+    officialUnavailable: '官方接口不可用',
+    lastRefreshHint: '最近刷新',
+    resetExpiry: '到期时间',
+    resetCredit: '重置卡',
     today: '今天',
-    yesterday: '昨天'
+    yesterday: '昨天',
+    iqThreshold: '推荐模型 IQ 阈值',
+    iqThresholdHint: '低于此分数的模型不进入推荐'
   },
   'en-US': {
     noData: 'No data',
@@ -100,15 +102,14 @@ const COPY = {
     officialSource: 'Official API',
     localSource: 'Local JSONL',
     emptySource: 'No data',
-    fallbackTitle: 'Using fallback data',
-    fallbackBody: 'Live quota lookup is unavailable. Showing the latest usable local status.',
-    unavailableTitle: 'Quota data unavailable',
-    unavailableBody: 'Neither the official endpoint nor local sessions returned a usable window.',
-    scannedFiles: 'Scanned',
-    filesUnit: 'jsonl files',
-    path: 'Sessions path',
+    officialUnavailable: 'Official API unavailable',
+    lastRefreshHint: 'Last refresh',
+    resetExpiry: 'Expires at',
+    resetCredit: 'Reset card',
     today: 'Today',
-    yesterday: 'Yesterday'
+    yesterday: 'Yesterday',
+    iqThreshold: 'Model IQ threshold',
+    iqThresholdHint: 'Models below this score are excluded from picks'
   }
 } as const
 
@@ -123,9 +124,14 @@ function App(): React.JSX.Element {
   const [customRefreshInput, setCustomRefreshInput] = useState(
     String(DEFAULT_SETTINGS.refreshIntervalSeconds)
   )
+  const [iqThresholdInput, setIqThresholdInput] = useState(
+    String(DEFAULT_SETTINGS.iqThreshold ?? DEFAULT_IQ_THRESHOLD)
+  )
   const [capsulePointerActive, setCapsulePointerActive] = useState(false)
   const [manualRefreshActive, setManualRefreshActive] = useState(false)
   const [ready, setReady] = useState(false)
+  // 详情面板里长窗口(周重置)倒计时需要秒级刷新;只在面板可见且有长窗口时 tick
+  const [nowTick, setNowTick] = useState(() => Date.now())
   const capsulePointerRef = useRef<CapsulePointerState | null>(null)
   const manualRefreshTimerRef = useRef<number | undefined>(undefined)
 
@@ -145,6 +151,7 @@ function App(): React.JSX.Element {
         setWindowRole(payload.role)
         setPanelView(payload.panelView)
         setCustomRefreshInput(String(payload.settings.refreshIntervalSeconds))
+        setIqThresholdInput(String(payload.settings.iqThreshold))
         setReady(true)
       })
       .catch((error) => {
@@ -167,6 +174,7 @@ function App(): React.JSX.Element {
       setSettings(payload.settings)
       setWindowPreferences(payload.window)
       setCustomRefreshInput(String(payload.settings.refreshIntervalSeconds))
+      setIqThresholdInput(String(payload.settings.iqThreshold))
     })
 
     const disposeCommand = window.codexStatus.onCommand((payload) => {
@@ -205,31 +213,51 @@ function App(): React.JSX.Element {
         ? copy.localSource
         : copy.emptySource
   const sourceValue = snapshot.rateLimitSource === 'none' ? copy.noData : snapshot.sourceHost
-  const fallbackBanner =
-    snapshot.rateLimitSource === 'local' && snapshot.officialIssue
-      ? {
-          title: copy.fallbackTitle,
-          body: copy.fallbackBody
-        }
-      : snapshot.rateLimitSource === 'none' && snapshot.issues.length > 0
-        ? {
-            title: copy.unavailableTitle,
-            body: copy.unavailableBody
-          }
-        : undefined
+  // 官方不可用(退回本地)时,来源处直接以红色"不可用"badge 提示,不再单独渲染横幅
+  const officialDown = snapshot.rateLimitSource === 'local' && Boolean(snapshot.officialIssue)
+  const sourceBadgeText = officialDown ? copy.officialUnavailable : sourceLabel
+  const sourceBadgeClassName = officialDown
+    ? 'panel__meta-badge panel__meta-badge--danger'
+    : 'panel__meta-badge'
+  const eyebrowText = officialDown ? copy.officialUnavailable : sourceLabel
+  const eyebrowClassName = officialDown ? 'panel__eyebrow panel__eyebrow--danger' : 'panel__eyebrow'
   const rateLimitWindows = snapshot.rateLimits
-  const rateLimitCount = rateLimitWindows.length
-  const displayedRateLimit = rateLimitWindows[0]
+  // 短窗口(<1天)用于胶囊/大卡片展示;长窗口(≥1天,如 7d)只在明细行显示重置倒计时,不显示百分比
+  const cardWindows = rateLimitWindows.filter(
+    (windowState) => windowState.windowMinutes === undefined || windowState.windowMinutes < 1440
+  )
+  const longWindows = rateLimitWindows.filter(
+    (windowState) => windowState.windowMinutes !== undefined && windowState.windowMinutes >= 1440
+  )
+  const cardWindowCount = cardWindows.length
+  // 胶囊固定分区布局:百分比+进度条取第一个短窗口;周重置倒计时取第一个长窗口
+  const displayedRateLimit = cardWindows[0] ?? rateLimitWindows[0]
   const capsuleDisplayPercent =
     settings.percentageMode === 'used'
       ? displayedRateLimit?.usedPercent
       : displayedRateLimit?.remainingPercent
-  const capsuleTone = resolveMetricTone(capsuleDisplayPercent, settings.percentageMode)
+  const capsulePercentText =
+    capsuleDisplayPercent === undefined ? '--' : `${Math.round(capsuleDisplayPercent)}%`
+  const capsuleProgressStyle = createMetricProgressStyle(
+    capsuleDisplayPercent,
+    settings.percentageMode
+  )
+  const capsuleWeeklyResetsAt = longWindows[0]?.resetsAt
+  const capsuleWeeklyText = formatCountdownCapsule(capsuleWeeklyResetsAt, nowTick)
+  const capsuleCreditText = snapshot.resetCredit?.expiresAt
+    ? formatCountdownShort(snapshot.resetCredit.expiresAt, settings.locale)
+    : ''
+  const capsulePickText = snapshot.bestModelPick
+    ? formatModelPick(snapshot.bestModelPick.shortLabel)
+    : ''
+  const capsulePickColor = resolveModelColor(snapshot.bestModelPick?.label)
+  const capsulePickTitle = snapshot.bestModelPick
+    ? `${snapshot.bestModelPick.label} · IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/题 · ${snapshot.bestModelPick.averageTaskMinutes}分/题`
+    : ''
   const capsuleViewMode = windowPreferences.viewMode
   const capsuleClassName = [
     'capsule',
     `capsule--${capsuleViewMode}`,
-    `capsule--${capsuleTone}`,
     snapshot.isRefreshing ? 'is-refreshing' : '',
     manualRefreshActive ? 'is-manual-refreshing' : '',
     canRefresh ? '' : 'is-static',
@@ -239,29 +267,55 @@ function App(): React.JSX.Element {
     .join(' ')
 
   const detailRows: Array<React.ComponentProps<typeof DetailRow>> = [
-    {
-      icon: <ServerIcon />,
-      label: copy.source,
-      value: sourceValue,
-      badge: snapshot.rateLimitSource === 'none' ? undefined : sourceLabel
-    },
-    ...rateLimitWindows.map((windowState) => ({
-      icon:
-        windowState.windowMinutes !== undefined && windowState.windowMinutes < 1440 ? (
-          <ClockIcon />
-        ) : (
-          <CalendarIcon />
-        ),
-      label: `${windowState.label} ${copy.reset}`,
-      value: formatAbsoluteDate(windowState.resetsAt, settings.locale)
+    ...longWindows.map((windowState) => ({
+      icon: <HourglassIcon />,
+      label: settings.locale === 'zh-CN' ? '周重置' : 'Weekly reset',
+      value: formatCountdownSingleUnit(windowState.resetsAt, settings.locale, nowTick),
+      hint: formatAbsoluteDate(windowState.resetsAt, settings.locale)
     })),
-    {
-      icon: <HistoryIcon />,
-      label: copy.lastRefresh,
-      value: formatAbsoluteDate(snapshot.generatedAt, settings.locale),
-      hint: formatRelativeDate(snapshot.generatedAt, settings.locale)
-    }
+    ...(snapshot.resetCredit?.expiresAt
+      ? [
+          {
+            icon: <TicketIcon />,
+            label: copy.resetCredit,
+            value: formatCountdownShort(snapshot.resetCredit.expiresAt, settings.locale),
+            hint: formatAbsoluteDate(snapshot.resetCredit.expiresAt, settings.locale)
+          }
+        ]
+      : []),
+    ...(snapshot.bestModelPick
+      ? [
+          {
+            icon: <SparkleIcon />,
+            label: settings.locale === 'zh-CN' ? '雷达推荐模型' : 'Top model',
+            value: formatModelPick(snapshot.bestModelPick.shortLabel),
+            valueColor: resolveModelColor(snapshot.bestModelPick.label),
+            hint:
+              settings.locale === 'zh-CN'
+                ? `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/题 · ${snapshot.bestModelPick.averageTaskMinutes}分/题`
+                : `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/task · ${snapshot.bestModelPick.averageTaskMinutes}m/task`
+          }
+        ]
+      : [])
   ]
+
+  // 周重置倒计时显示到秒级:详情面板有长窗口时每秒 tick 一次驱动重渲染
+  const hasLongWindow = longWindows.length > 0
+  // 周重置倒计时显示到秒级:详情面板有长窗口时每秒 tick;胶囊常驻有长窗口时也 tick 驱动倒计时
+  useEffect(() => {
+    const isPanelWithLongWindow = windowRole === 'panel' && panelView === 'details' && hasLongWindow
+    const isCapsuleWithLongWindow = windowRole === 'capsule' && hasLongWindow
+    if (!isPanelWithLongWindow && !isCapsuleWithLongWindow) {
+      return
+    }
+
+    const timer = window.setInterval(() => {
+      setNowTick(Date.now())
+    }, 1000)
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [windowRole, panelView, hasLongWindow])
 
   function openDetails(): void {
     setPanelView('details')
@@ -446,6 +500,20 @@ function App(): React.JSX.Element {
     }
   }
 
+  function commitIqThreshold(): void {
+    const parsed = Number.parseInt(iqThresholdInput, 10)
+    if (!Number.isFinite(parsed)) {
+      setIqThresholdInput(String(settings.iqThreshold))
+      return
+    }
+
+    const normalized = Math.min(MAX_IQ_THRESHOLD, Math.max(MIN_IQ_THRESHOLD, Math.round(parsed)))
+    setIqThresholdInput(String(normalized))
+    if (normalized !== settings.iqThreshold) {
+      void handleSettingsPatch({ iqThreshold: normalized })
+    }
+  }
+
   function selectRefreshInterval(value: string): void {
     if (value === 'custom') {
       const parsed = Number.parseInt(customRefreshInput, 10)
@@ -479,6 +547,7 @@ function App(): React.JSX.Element {
           <section
             aria-label={canRefresh ? copy.refresh : sourceValue}
             className={capsuleClassName}
+            style={capsuleProgressStyle}
             onKeyDown={handleCapsuleKeyDown}
             onPointerCancel={handleCapsulePointerCancel}
             onPointerDown={handleCapsulePointerDown}
@@ -488,42 +557,65 @@ function App(): React.JSX.Element {
             tabIndex={canRefresh ? 0 : -1}
           >
             {capsuleViewMode === 'orb' ? (
-              <div
-                className={`capsule__edge-metrics${rateLimitCount === 1 ? ' capsule__edge-metrics--single' : ''}`}
-                style={
-                  rateLimitCount > 2
-                    ? { gridTemplateRows: `repeat(${rateLimitCount}, minmax(0, 1fr))` }
-                    : undefined
-                }
-                aria-hidden="true"
-              >
-                {rateLimitWindows.map((windowState) => (
-                  <EdgeMetricSegment
-                    key={windowState.id}
-                    locale={settings.locale}
-                    percentageMode={settings.percentageMode}
-                    windowState={windowState}
-                  />
-                ))}
+              <div className="capsule__layout capsule__layout--v" aria-hidden="true">
+                {capsuleCreditText ? (
+                  <div className="capsule__credit">
+                    <TicketIcon />
+                    <span>{capsuleCreditText}</span>
+                  </div>
+                ) : null}
+                {capsulePickText ? (
+                  <div
+                    className="capsule__pick"
+                    style={{ color: capsulePickColor }}
+                    title={capsulePickTitle}
+                  >
+                    <span>{capsulePickText}</span>
+                  </div>
+                ) : null}
+                <div className="capsule__weekly">
+                  <HourglassIcon />
+                  <span>{capsuleWeeklyText}</span>
+                </div>
+                <div className="capsule__metric-box">
+                  <div className="capsule__percent">{capsulePercentText}</div>
+                  <span className="capsule__progress" aria-hidden="true">
+                    <span />
+                  </span>
+                </div>
               </div>
             ) : (
-              <div className="capsule__summary" aria-hidden="true">
-                <div
-                  className={`capsule__metrics${rateLimitCount === 1 ? ' capsule__metrics--single' : ''}`}
-                  style={
-                    rateLimitCount > 2
-                      ? { gridTemplateColumns: `repeat(${rateLimitCount}, minmax(0, 1fr))` }
-                      : undefined
-                  }
-                >
-                  {rateLimitWindows.map((windowState) => (
-                    <MetricSegment
-                      key={windowState.id}
-                      locale={settings.locale}
-                      percentageMode={settings.percentageMode}
-                      windowState={windowState}
-                    />
-                  ))}
+              <div className="capsule__layout capsule__layout--h" aria-hidden="true">
+                <div className="capsule__col capsule__col--weekly">
+                  <span className="capsule__weekly">
+                    <HourglassIcon />
+                    {capsuleWeeklyText}
+                  </span>
+                </div>
+                <div className="capsule__col capsule__col--metric">
+                  <div className="capsule__metric-box">
+                    <div className="capsule__percent">{capsulePercentText}</div>
+                    <span className="capsule__progress" aria-hidden="true">
+                      <span />
+                    </span>
+                  </div>
+                </div>
+                <div className="capsule__col capsule__col--right">
+                  {capsuleCreditText ? (
+                    <div className="capsule__credit">
+                      <TicketIcon />
+                      <span>{capsuleCreditText}</span>
+                    </div>
+                  ) : null}
+                  {capsulePickText ? (
+                    <div
+                      className="capsule__pick"
+                      style={{ color: capsulePickColor }}
+                      title={capsulePickTitle}
+                    >
+                      <span>{capsulePickText}</span>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             )}
@@ -544,22 +636,25 @@ function App(): React.JSX.Element {
             <div className="panel__content">
               <div className="panel__header panel__header--details">
                 <div>
-                  <p className="panel__eyebrow">{sourceLabel}</p>
+                  <p className={eyebrowClassName}>{eyebrowText}</p>
                   <h2 className="panel__title">{copy.details}</h2>
                 </div>
               </div>
 
-              <div className={`quota-grid${rateLimitCount === 1 ? ' quota-grid--single' : ''}`}>
-                {rateLimitWindows.map((windowState) => (
-                  <QuotaCard
-                    key={windowState.id}
-                    locale={settings.locale}
-                    modeLabel={settings.percentageMode === 'used' ? copy.used : copy.remaining}
-                    percentageMode={settings.percentageMode}
-                    windowState={windowState}
-                  />
-                ))}
-              </div>
+              {cardWindows.length > 0 ? (
+                <div className={`quota-grid${cardWindowCount === 1 ? ' quota-grid--single' : ''}`}>
+                  {cardWindows.map((windowState) => (
+                    <QuotaCard
+                      key={windowState.id}
+                      locale={settings.locale}
+                      modeLabel={settings.percentageMode === 'used' ? copy.used : copy.remaining}
+                      percentageMode={settings.percentageMode}
+                      resetExpiryLabel={copy.resetExpiry}
+                      windowState={windowState}
+                    />
+                  ))}
+                </div>
+              ) : null}
 
               <div className="panel__rows">
                 {detailRows.map((row) => (
@@ -570,37 +665,31 @@ function App(): React.JSX.Element {
                     icon={row.icon}
                     label={row.label}
                     value={row.value}
+                    valueColor={row.valueColor}
                   />
                 ))}
               </div>
 
-              {fallbackBanner ? (
-                <div className="fallback-card">
-                  <div className="fallback-card__icon">
-                    <AlertIcon />
-                  </div>
-                  <div className="fallback-card__content">
-                    <p className="fallback-card__title">{fallbackBanner.title}</p>
-                    <p className="fallback-card__body">{fallbackBanner.body}</p>
-                  </div>
-                </div>
-              ) : null}
-
               <div className="panel__meta">
                 <span className="panel__meta-row">
-                  <FileIcon />
-                  <span>
-                    {copy.scannedFiles} {snapshot.filesScanned} {copy.filesUnit}
+                  <ServerIcon />
+                  <span className="panel__meta-value-group">
+                    <span className="panel__meta-main">{sourceValue}</span>
+                    <span className={sourceBadgeClassName}>{sourceBadgeText}</span>
                   </span>
                 </span>
-                {snapshot.sessionsPath ? (
-                  <span className="panel__meta-row panel__meta-row--path">
-                    <FolderIcon />
-                    <span>
-                      {copy.path}: {snapshot.sessionsPath}
+                <span className="panel__meta-row">
+                  <HistoryIcon />
+                  <span className="panel__meta-value-group">
+                    <span className="panel__meta-main">
+                      {formatAbsoluteDate(snapshot.generatedAt, settings.locale)}
+                    </span>
+                    <span className="panel__meta-hint">
+                      {copy.lastRefreshHint} ·{' '}
+                      {formatRelativeDate(snapshot.generatedAt, settings.locale)}
                     </span>
                   </span>
-                ) : null}
+                </span>
               </div>
             </div>
 
@@ -703,6 +792,29 @@ function App(): React.JSX.Element {
                     />
                   </SettingField>
 
+                  <SettingField label={copy.iqThreshold} hint={copy.iqThresholdHint}>
+                    <label className="inline-input is-active">
+                      <span>{copy.iqThreshold}</span>
+                      <input
+                        max={MAX_IQ_THRESHOLD}
+                        min={MIN_IQ_THRESHOLD}
+                        onBlur={commitIqThreshold}
+                        onChange={(event) => {
+                          setIqThresholdInput(event.target.value)
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.currentTarget.blur()
+                          }
+                        }}
+                        step={1}
+                        type="number"
+                        value={iqThresholdInput}
+                      />
+                      <em>IQ</em>
+                    </label>
+                  </SettingField>
+
                   <SettingField label={copy.language}>
                     <SegmentedControl
                       onChange={(value) => {
@@ -757,84 +869,26 @@ function App(): React.JSX.Element {
   )
 }
 
-function MetricSegment({
-  locale,
-  percentageMode,
-  windowState
-}: {
-  locale: LocaleCode
-  percentageMode: PercentageMode
-  windowState: RateLimitWindowSnapshot
-}): React.JSX.Element {
-  const displayPercent =
-    percentageMode === 'used' ? windowState?.usedPercent : windowState?.remainingPercent
-  const tone = resolveMetricTone(displayPercent, percentageMode)
-  const resetText = formatCapsuleResetTime(windowState?.resetsAt, locale)
-  const progressStyle = createMetricProgressStyle(displayPercent)
-
-  return (
-    <div className={`metric-segment metric-segment--${tone}`} style={progressStyle}>
-      <span className="metric-segment__label">
-        <span className="metric-segment__name">{windowState.label}</span>
-        <span className="metric-segment__reset">{resetText}</span>
-      </span>
-      <div className="metric-segment__value">
-        <span>{displayPercent === undefined ? '--' : `${Math.round(displayPercent)}%`}</span>
-      </div>
-      <span className="metric-segment__progress" aria-hidden="true">
-        <span />
-      </span>
-    </div>
-  )
-}
-
-function EdgeMetricSegment({
-  locale,
-  percentageMode,
-  windowState
-}: {
-  locale: LocaleCode
-  percentageMode: PercentageMode
-  windowState: RateLimitWindowSnapshot
-}): React.JSX.Element {
-  const displayPercent =
-    percentageMode === 'used' ? windowState?.usedPercent : windowState?.remainingPercent
-  const tone = resolveMetricTone(displayPercent, percentageMode)
-  const resetText = formatCapsuleResetTime(windowState?.resetsAt, locale)
-  const progressStyle = createMetricProgressStyle(displayPercent)
-
-  return (
-    <div className={`edge-metric edge-metric--${tone}`} style={progressStyle}>
-      <span className="edge-metric__label">{windowState.label}</span>
-      <span className="edge-metric__reset">{resetText}</span>
-      <span className="edge-metric__value">
-        {displayPercent === undefined ? '--' : `${Math.round(displayPercent)}%`}
-      </span>
-      <span className="edge-metric__progress" aria-hidden="true">
-        <span />
-      </span>
-    </div>
-  )
-}
-
 function QuotaCard({
   locale,
   modeLabel,
   percentageMode,
-  windowState
+  windowState,
+  resetExpiryLabel
 }: {
   locale: LocaleCode
   modeLabel: string
   percentageMode: PercentageMode
   windowState: RateLimitWindowSnapshot
+  resetExpiryLabel: string
 }): React.JSX.Element {
   const displayPercent =
     percentageMode === 'used' ? windowState?.usedPercent : windowState?.remainingPercent
-  const tone = resolveMetricTone(displayPercent, percentageMode)
-  const progressStyle = createMetricProgressStyle(displayPercent)
+  const progressStyle = createMetricProgressStyle(displayPercent, percentageMode)
+  const resetTimeText = formatCapsuleResetTime(windowState?.resetsAt, locale)
 
   return (
-    <div className={`quota-card quota-card--${tone}`} style={progressStyle}>
+    <div className="quota-card" style={progressStyle}>
       <div className="quota-card__head">
         <span className="quota-card__label">{windowState.label}</span>
         <span className="quota-card__mode">{modeLabel}</span>
@@ -848,6 +902,11 @@ function QuotaCard({
       <p className="quota-card__reset">
         {formatQuotaResetHint(windowState?.resetsInSeconds, locale)}
       </p>
+      {windowState.resetsAt ? (
+        <p className="quota-card__expiry">
+          {resetExpiryLabel}: {resetTimeText}
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -866,13 +925,15 @@ function DetailRow({
   icon,
   label,
   value,
-  hint
+  hint,
+  valueColor
 }: {
   badge?: string
   icon: React.JSX.Element
   label: string
   value: string
   hint?: string
+  valueColor?: string
 }): React.JSX.Element {
   return (
     <div className="detail-row">
@@ -881,7 +942,9 @@ function DetailRow({
         <span className="detail-row__label">{label}</span>
       </div>
       <div className="detail-row__value-group">
-        <span className="detail-row__value">{value}</span>
+        <span className="detail-row__value" style={valueColor ? { color: valueColor } : undefined}>
+          {value}
+        </span>
         {badge ? <span className="detail-row__badge">{badge}</span> : null}
         {hint ? <span className="detail-row__hint">{hint}</span> : null}
       </div>
@@ -891,15 +954,18 @@ function DetailRow({
 
 function SettingField({
   label,
+  hint,
   children
 }: {
   label: string
+  hint?: string
   children: React.ReactNode
 }): React.JSX.Element {
   return (
     <div className="setting-field">
       <span className="setting-field__label">{label}</span>
       {children}
+      {hint ? <span className="setting-field__hint">{hint}</span> : null}
     </div>
   )
 }
@@ -959,31 +1025,50 @@ function ToggleSwitch({
   )
 }
 
-function createMetricProgressStyle(displayPercent: number | undefined): CSSProperties {
+// 额度色:按 goodScore(remaining=显示值,used=100-显示值)从红(0%)到绿(100%)线性插值
+// 100% 剩余→纯绿,0% 剩余→纯红,中间渐变;无数据返回灰色
+function resolveMetricColor(
+  displayPercent: number | undefined,
+  percentageMode: PercentageMode
+): string {
+  if (displayPercent === undefined || !Number.isFinite(displayPercent)) {
+    return 'rgba(158, 168, 179, 0.74)'
+  }
+  const goodScore = percentageMode === 'remaining' ? displayPercent : 100 - displayPercent
+  const t = Math.min(100, Math.max(0, goodScore)) / 100
+  // 红 (239,87,82) -> 绿 (80,214,124)
+  const r = Math.round(239 + (80 - 239) * t)
+  const g = Math.round(87 + (214 - 87) * t)
+  const b = Math.round(82 + (124 - 82) * t)
+  return `rgb(${r}, ${g}, ${b})`
+}
+
+// 推荐模型品牌色:按模型名关键词上色
+// Sol=#eab308, Terra=#3b82f6, Luna=#c7d2e0, GPT-5.5=#00e5ff, 兜底灰蓝
+function resolveModelColor(label: string | undefined): string {
+  if (!label) {
+    return 'rgba(197, 210, 224, 0.85)'
+  }
+  if (label.includes('Sol')) return '#eab308'
+  if (label.includes('Terra')) return '#3b82f6'
+  if (label.includes('Luna')) return '#c7d2e0'
+  if (label.includes('GPT-5.5')) return '#00e5ff'
+  return 'rgba(197, 210, 224, 0.85)'
+}
+
+function createMetricProgressStyle(
+  displayPercent: number | undefined,
+  percentageMode: PercentageMode
+): CSSProperties {
   const progress =
     displayPercent === undefined || !Number.isFinite(displayPercent)
       ? 0
       : Math.min(100, Math.max(0, displayPercent))
 
-  return { '--metric-progress': `${progress}%` } as CSSProperties
-}
-
-function resolveMetricTone(
-  displayPercent: number | undefined,
-  percentageMode: PercentageMode
-): 'positive' | 'warning' | 'danger' | 'muted' {
-  if (displayPercent === undefined) {
-    return 'muted'
-  }
-
-  const goodScore = percentageMode === 'remaining' ? displayPercent : 100 - displayPercent
-  if (goodScore >= 65) {
-    return 'positive'
-  }
-  if (goodScore >= 35) {
-    return 'warning'
-  }
-  return 'danger'
+  return {
+    '--metric-progress': `${progress}%`,
+    '--metric-accent': resolveMetricColor(displayPercent, percentageMode)
+  } as CSSProperties
 }
 
 function formatAbsoluteDate(value: string | undefined, locale: LocaleCode): string {
@@ -1126,6 +1211,112 @@ function formatCapsuleResetTime(value: string | undefined, locale: LocaleCode): 
   return `${monthDay} ${time}`
 }
 
+function formatCountdownShort(value: string, locale: LocaleCode): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return '--'
+  }
+  const diffMs = date.getTime() - Date.now()
+  if (diffMs <= 0) {
+    return '0m'
+  }
+  const totalMinutes = Math.max(1, Math.ceil(diffMs / 60000))
+  const days = Math.floor(totalMinutes / 1440)
+  if (days >= 1) {
+    return locale === 'zh-CN' ? `${days}天` : `${days}d`
+  }
+  const hours = Math.floor(totalMinutes / 60)
+  if (hours >= 1) {
+    return locale === 'zh-CN' ? `${hours}时` : `${hours}h`
+  }
+  return locale === 'zh-CN' ? `${totalMinutes}分` : `${totalMinutes}m`
+}
+
+// 胶囊周重置倒计时:单单位大写 D/H/M/S,秒级(有天显天,0天显时,0时显分,0分显秒)
+// 与重置卡(formatCountdownShort,中文)区分;胶囊里统一用英文单位更紧凑
+function formatCountdownCapsule(value: string | undefined, nowMs: number): string {
+  if (!value) {
+    return '--'
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return '--'
+  }
+  const diffMs = date.getTime() - nowMs
+  if (diffMs <= 0) {
+    return '0S'
+  }
+  const totalSeconds = Math.floor(diffMs / 1000)
+  const days = Math.floor(totalSeconds / 86400)
+  if (days >= 1) {
+    return `${days}D`
+  }
+  const hours = Math.floor(totalSeconds / 3600)
+  if (hours >= 1) {
+    return `${hours}H`
+  }
+  const minutes = Math.floor(totalSeconds / 60)
+  if (minutes >= 1) {
+    return `${minutes}M`
+  }
+  return `${totalSeconds}S`
+}
+
+// 周重置倒计时:只取最高非零单位(d/h/m/s),秒级实时刷新
+// 有天显天,0天显时,0时显分,0分显秒,始终只显示一个单位
+function formatCountdownSingleUnit(
+  value: string | undefined,
+  locale: LocaleCode,
+  nowMs: number
+): string {
+  if (!value) {
+    return '--'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return '--'
+  }
+
+  const diffMs = date.getTime() - nowMs
+  if (diffMs <= 0) {
+    return locale === 'zh-CN' ? '0秒' : '0s'
+  }
+
+  const totalSeconds = Math.floor(diffMs / 1000)
+  const days = Math.floor(totalSeconds / 86400)
+  if (days >= 1) {
+    return locale === 'zh-CN' ? `${days}天` : `${days}d`
+  }
+  const hours = Math.floor(totalSeconds / 3600)
+  if (hours >= 1) {
+    return locale === 'zh-CN' ? `${hours}时` : `${hours}h`
+  }
+  const minutes = Math.floor(totalSeconds / 60)
+  if (minutes >= 1) {
+    return locale === 'zh-CN' ? `${minutes}分` : `${minutes}m`
+  }
+  return locale === 'zh-CN' ? `${totalSeconds}秒` : `${totalSeconds}s`
+}
+
+function formatModelPick(shortLabel: string): string {
+  // shortLabel 形如 "Terra xhigh" -> "Terra Xh", "Sol medium" -> "Sol M", "Luna max" -> "Luna U"
+  const parts = shortLabel.split(/\s+/)
+  if (parts.length < 2) return shortLabel
+  const name = parts[0]
+  const effort = parts.slice(1).join(' ').toLowerCase()
+  const effortAbbr: Record<string, string> = {
+    ultra: 'U',
+    max: 'Mx',
+    xhigh: 'Xh',
+    high: 'H',
+    medium: 'M',
+    low: 'L'
+  }
+  const abbr = effortAbbr[effort] ?? effort.charAt(0).toUpperCase()
+  return `${name} ${abbr}`
+}
+
 function normalizeCustomRefreshInterval(value: number): number {
   return Math.min(
     MAX_REFRESH_INTERVAL_SECONDS,
@@ -1173,60 +1364,13 @@ function ServerIcon(): React.JSX.Element {
   )
 }
 
-function ClockIcon(): React.JSX.Element {
+function HourglassIcon(): React.JSX.Element {
   return (
     <svg fill="none" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="1.75" />
       <path
-        d="M12 7.5v5l3 2"
+        d="M7 3.75h10M7 20.25h10M7.5 3.75v3.2c0 1.5.9 2.8 2.3 3.3l3.9 1.4c1.4.5 2.3 1.8 2.3 3.3v3.2M16.5 3.75v3.2c0 1.5-.9 2.8-2.3 3.3l-3.9 1.4c-1.4.5-2.3 1.8-2.3 3.3v3.2"
         stroke="currentColor"
         strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.75"
-      />
-    </svg>
-  )
-}
-
-function CalendarIcon(): React.JSX.Element {
-  return (
-    <svg fill="none" viewBox="0 0 24 24">
-      <rect height="14" rx="2" stroke="currentColor" strokeWidth="1.75" width="16" x="4" y="6" />
-      <path
-        d="M8 3.75v4.5M16 3.75v4.5M4 10.5h16"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="1.75"
-      />
-    </svg>
-  )
-}
-
-function FileIcon(): React.JSX.Element {
-  return (
-    <svg fill="none" viewBox="0 0 24 24">
-      <path
-        d="M7 3.75h6.2L17 7.55V20.25H7z"
-        stroke="currentColor"
-        strokeLinejoin="round"
-        strokeWidth="1.75"
-      />
-      <path
-        d="M13 3.75V8h4M9.25 12.25h5.5M9.25 15.75h5.5"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="1.75"
-      />
-    </svg>
-  )
-}
-
-function FolderIcon(): React.JSX.Element {
-  return (
-    <svg fill="none" viewBox="0 0 24 24">
-      <path
-        d="M3.75 8.25a2 2 0 0 1 2-2h4.05l2 2h6.45a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2H5.75a2 2 0 0 1-2-2z"
-        stroke="currentColor"
         strokeLinejoin="round"
         strokeWidth="1.75"
       />
@@ -1246,25 +1390,6 @@ function HistoryIcon(): React.JSX.Element {
       />
       <path
         d="M12 8.25V12l2.75 1.5"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.75"
-      />
-    </svg>
-  )
-}
-
-function AlertIcon(): React.JSX.Element {
-  return (
-    <svg fill="none" viewBox="0 0 24 24">
-      <path
-        d="M11.13 4.64 4.37 17.5A1 1 0 0 0 5.25 19h13.5a1 1 0 0 0 .88-1.5L12.87 4.64a1 1 0 0 0-1.74 0Z"
-        fill="currentColor"
-        opacity="0.12"
-      />
-      <path
-        d="M12 9v4.5M12 16.75h.01M11.13 4.64 4.37 17.5A1 1 0 0 0 5.25 19h13.5a1 1 0 0 0 .88-1.5L12.87 4.64a1 1 0 0 0-1.74 0Z"
         stroke="currentColor"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -1311,6 +1436,43 @@ function ChevronRightIcon(): React.JSX.Element {
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth="1.85"
+      />
+    </svg>
+  )
+}
+
+function TicketIcon(): React.JSX.Element {
+  return (
+    <svg fill="none" viewBox="0 0 24 24">
+      <path
+        d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1.5a1.5 1.5 0 0 0 0 3V16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3.5a1.5 1.5 0 0 0 0-3z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+      <path
+        d="M9 8v8"
+        stroke="currentColor"
+        strokeDasharray="1.5 2"
+        strokeLinecap="round"
+        strokeWidth="1.4"
+      />
+    </svg>
+  )
+}
+
+function SparkleIcon(): React.JSX.Element {
+  return (
+    <svg fill="none" viewBox="0 0 24 24">
+      <path
+        d="M12 3l1.8 4.8L18.6 9.6l-4.8 1.8L12 16.2l-1.8-4.8L5.4 9.6l4.8-1.8z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+      <path
+        d="M19 15l.7 1.8L21.5 17.5l-1.8.7L19 20l-.7-1.8L16.5 17.5l1.8-.7z"
+        fill="currentColor"
       />
     </svg>
   )
