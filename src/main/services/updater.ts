@@ -38,6 +38,7 @@ export function initAutoUpdater(): void {
     emit({ stage: 'checking' })
   })
   autoUpdater.on('update-available', (info) => {
+    if (info.version === app.getVersion()) return
     emit({ stage: 'available', version: info.version })
   })
   autoUpdater.on('update-not-available', () => {
@@ -64,9 +65,14 @@ export async function checkForUpdates(): Promise<ApiCheckResult> {
     if (!result || !result.updateInfo) {
       return { available: false }
     }
+    const remoteVersion = result.updateInfo.version
+    // 远程版本与本地一致时不视为可用更新，避免 UI 显示"有新版本"但下载失败
+    if (remoteVersion === app.getVersion()) {
+      return { available: false }
+    }
     return {
       available: true,
-      version: result.updateInfo.version,
+      version: remoteVersion,
       releaseNotes: extractReleaseNotes(result.updateInfo)
     }
   } catch (error) {
