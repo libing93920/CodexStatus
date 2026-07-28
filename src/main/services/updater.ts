@@ -103,7 +103,7 @@ export async function downloadUpdate(): Promise<void> {
   await autoUpdater.downloadUpdate()
 }
 
-/** 退出并运行安装程序,覆盖升级;isForceRunAfter=true 确保安装后重启应用 */
+/** 退出并静默安装,装完自动重启应用 */
 export function installUpdate(): void {
-  autoUpdater.quitAndInstall(false, true)
+  autoUpdater.quitAndInstall(true, true)
 }
