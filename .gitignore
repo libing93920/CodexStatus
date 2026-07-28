@@ -7,3 +7,16 @@ out
 .vscode/
 /.vscode/
 /.vscode/settings.json
+
+# Claude Code 本地工作目录
+.claude/
+
+# 临时截图/产物
+.tmp-*.png
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# TypeScript 增量编译缓存
+*.tsbuildinfo
