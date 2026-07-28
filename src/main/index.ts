@@ -7,6 +7,7 @@ import {
   Tray,
   nativeImage,
   screen,
+  powerMonitor,
   type MenuItemConstructorOptions,
   type Rectangle
 } from 'electron'
@@ -83,6 +84,7 @@ let persistTimer: NodeJS.Timeout | undefined
 let refreshPromise: Promise<void> | undefined
 let watchedCodexAuthPath: string | undefined
 let isQuitting = false
+let userHidCapsule = false
 let currentPanelView: PanelView = 'details'
 const lanService = new LanService()
 let persistedState: PersistedState = {
@@ -313,6 +315,26 @@ if (hasSingleInstanceLock) {
       }
 
       showWindow()
+    })
+
+    // 系统从睡眠/锁屏恢复时，重新显示胶囊窗口（除非用户主动隐藏）
+    powerMonitor.on('resume', () => {
+      if (!userHidCapsule) showWindow()
+    })
+    powerMonitor.on('unlock-screen', () => {
+      if (!userHidCapsule) showWindow()
+    })
+
+    // 显示器配置变更（拔插显示器/RDP/分辨率变化）时，修正窗口位置防止掉出屏幕
+    screen.on('display-metrics-changed', () => {
+      if (mainWindow && mainWindow.isVisible()) {
+        showWindow()
+      }
+    })
+    screen.on('display-removed', () => {
+      if (mainWindow && mainWindow.isVisible()) {
+        showWindow()
+      }
     })
   })
 }
@@ -574,8 +596,10 @@ function toggleWindowVisibility(): void {
   }
 
   if (mainWindow.isVisible()) {
+    userHidCapsule = true
     mainWindow.hide()
   } else {
+    userHidCapsule = false
     showWindow()
   }
 }
