@@ -5,7 +5,9 @@ import type {
   BootstrapPayload,
   CapsuleDragMovePayload,
   CodexStatusApi,
+  PanelView,
   PreferencesPayload,
+  UpdateCheckResult,
   UsageSnapshot,
   WindowPreferences
 } from '../shared/capsule'
@@ -17,9 +19,16 @@ const CHANNELS = {
   closePanel: 'codex-status:close-panel',
   moveCapsuleWindow: 'codex-status:move-capsule-window',
   finishCapsuleWindowDrag: 'codex-status:finish-capsule-window-drag',
+  openExternal: 'codex-status:open-external',
+  panelReady: 'codex-status:panel-ready',
+  showPanel: 'codex-status:show-panel',
   snapshotUpdated: 'codex-status:snapshot-updated',
   preferencesUpdated: 'codex-status:preferences-updated',
-  command: 'codex-status:command'
+  command: 'codex-status:command',
+  checkUpdate: 'codex-status:check-update',
+  downloadUpdate: 'codex-status:download-update',
+  installUpdate: 'codex-status:install-update',
+  updateProgress: 'codex-status:update-progress'
 } as const
 
 const api: CodexStatusApi = {
@@ -32,9 +41,16 @@ const api: CodexStatusApi = {
     ipcRenderer.invoke(CHANNELS.moveCapsuleWindow, payload) as Promise<WindowPreferences>,
   finishCapsuleWindowDrag: () =>
     ipcRenderer.invoke(CHANNELS.finishCapsuleWindowDrag) as Promise<WindowPreferences>,
+  openExternal: (url) => ipcRenderer.invoke(CHANNELS.openExternal, url) as Promise<void>,
+  notifyPanelReady: () => ipcRenderer.invoke(CHANNELS.panelReady) as Promise<void>,
+  showPanel: (view: PanelView) => ipcRenderer.invoke(CHANNELS.showPanel, view) as Promise<void>,
+  checkForUpdate: () => ipcRenderer.invoke(CHANNELS.checkUpdate) as Promise<UpdateCheckResult>,
+  downloadUpdate: () => ipcRenderer.invoke(CHANNELS.downloadUpdate) as Promise<void>,
+  installUpdate: () => ipcRenderer.invoke(CHANNELS.installUpdate) as Promise<void>,
   onSnapshotUpdated: listener => subscribe(CHANNELS.snapshotUpdated, listener),
   onPreferencesUpdated: listener => subscribe(CHANNELS.preferencesUpdated, listener),
-  onCommand: listener => subscribe(CHANNELS.command, listener)
+  onCommand: listener => subscribe(CHANNELS.command, listener),
+  onUpdateProgress: listener => subscribe(CHANNELS.updateProgress, listener)
 }
 
 if (process.contextIsolated) {

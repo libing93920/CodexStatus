@@ -15,6 +15,7 @@ import {
   type PercentageMode,
   type RateLimitWindowSnapshot,
   type RendererWindowRole,
+  type TeamPeer,
   type UsageSnapshot,
   type WindowPreferences
 } from '../../shared/capsule'
@@ -36,6 +37,7 @@ const COPY = {
   'zh-CN': {
     noData: '无数据',
     refresh: '刷新',
+    refreshing: '刷新中',
     source: '来源',
     lastRefresh: '最近刷新',
     settings: '设置',
@@ -54,6 +56,8 @@ const COPY = {
     groupRefresh: '刷新',
     groupDisplay: '显示',
     groupGeneral: '通用',
+    groupRecommend: '推荐策略',
+    groupRegion: '语言与区域',
     auto: '自动',
     manual: '手动',
     enabled: '开启',
@@ -70,11 +74,36 @@ const COPY = {
     today: '今天',
     yesterday: '昨天',
     iqThreshold: '推荐模型 IQ 阈值',
-    iqThresholdHint: '低于此分数的模型不进入推荐'
+    iqThresholdHint: '低于此分数的模型不进入推荐',
+    team: '团队',
+    teamBoard: '额度排行榜',
+    teamBoardHint: '同组成员按剩余额度降序排名',
+    teamEmpty: '暂无在线同事,加入团队后会显示同组成员',
+    teamSummaryOnline: '在线',
+    teamSummaryOnlineUnit: '人',
+    teamSummaryAvg: '平均剩余',
+    teamSummaryCredits: '重置卡共',
+    teamSummaryCreditsUnit: '张',
+    teamNickname: '团队昵称',
+    teamNicknameHint: '仅作展示,不涉及凭据',
+    teamGroup: '团队口令',
+    teamGroupHint: '同口令的成员才互见',
+    author: '作者',
+    version: '版本',
+    checkUpdate: '检查更新',
+    checking: '检查中…',
+    upToDate: '已是最新版本',
+    newVersionAvailable: '发现新版本',
+    downloading: '下载中',
+    downloaded: '下载完成',
+    installNow: '安装并重启',
+    updateError: '更新失败',
+    retryUpdate: '重试'
   },
   'en-US': {
     noData: 'No data',
     refresh: 'Refresh',
+    refreshing: 'Refreshing',
     source: 'Source',
     lastRefresh: 'Last refresh',
     settings: 'Settings',
@@ -93,6 +122,8 @@ const COPY = {
     groupRefresh: 'Refresh',
     groupDisplay: 'Display',
     groupGeneral: 'General',
+    groupRecommend: 'Recommendation',
+    groupRegion: 'Language & region',
     auto: 'Auto',
     manual: 'Manual',
     enabled: 'Enabled',
@@ -109,7 +140,31 @@ const COPY = {
     today: 'Today',
     yesterday: 'Yesterday',
     iqThreshold: 'Model IQ threshold',
-    iqThresholdHint: 'Models below this score are excluded from picks'
+    iqThresholdHint: 'Models below this score are excluded from picks',
+    team: 'Team',
+    teamBoard: 'Quota leaderboard',
+    teamBoardHint: 'Sorted by remaining quota, descending',
+    teamEmpty: 'No peers online. Join a team to see members.',
+    teamSummaryOnline: 'Online',
+    teamSummaryOnlineUnit: '',
+    teamSummaryAvg: 'Avg remaining',
+    teamSummaryCredits: 'Reset cards',
+    teamSummaryCreditsUnit: '',
+    teamNickname: 'Team nickname',
+    teamNicknameHint: 'Display only, no credentials shared',
+    teamGroup: 'Team passphrase',
+    teamGroupHint: 'Only peers with the same passphrase can see each other',
+    author: 'Author',
+    version: 'Version',
+    checkUpdate: 'Check for updates',
+    checking: 'Checking…',
+    upToDate: 'Up to date',
+    newVersionAvailable: 'New version available',
+    downloading: 'Downloading',
+    downloaded: 'Downloaded',
+    installNow: 'Install & restart',
+    updateError: 'Update failed',
+    retryUpdate: 'Retry'
   }
 } as const
 
@@ -127,13 +182,26 @@ function App(): React.JSX.Element {
   const [iqThresholdInput, setIqThresholdInput] = useState(
     String(DEFAULT_SETTINGS.iqThreshold ?? DEFAULT_IQ_THRESHOLD)
   )
+  const [teamNicknameInput, setTeamNicknameInput] = useState(DEFAULT_SETTINGS.teamNickname ?? '')
+  const [teamGroupInput, setTeamGroupInput] = useState(DEFAULT_SETTINGS.teamGroup ?? '')
   const [capsulePointerActive, setCapsulePointerActive] = useState(false)
   const [manualRefreshActive, setManualRefreshActive] = useState(false)
+  const [appVersion, setAppVersion] = useState('')
+  // 在线更新状态机:idle/checking/available/downloading/downloaded/error
+  const [updateState, setUpdateState] = useState<
+    'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error'
+  >('idle')
+  const [updateVersion, setUpdateVersion] = useState('')
+  const [updateProgress, setUpdateProgress] = useState(0)
+  const [updateError, setUpdateError] = useState('')
+  // 刷新完成后短暂触发百分比"弹跳"反馈,让用户感知新数据到达
+  const [justRefreshed, setJustRefreshed] = useState(false)
   const [ready, setReady] = useState(false)
   // 详情面板里长窗口(周重置)倒计时需要秒级刷新;只在面板可见且有长窗口时 tick
   const [nowTick, setNowTick] = useState(() => Date.now())
   const capsulePointerRef = useRef<CapsulePointerState | null>(null)
   const manualRefreshTimerRef = useRef<number | undefined>(undefined)
+  const justRefreshedTimerRef = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     let active = true
@@ -152,6 +220,9 @@ function App(): React.JSX.Element {
         setPanelView(payload.panelView)
         setCustomRefreshInput(String(payload.settings.refreshIntervalSeconds))
         setIqThresholdInput(String(payload.settings.iqThreshold))
+        setTeamNicknameInput(payload.settings.teamNickname ?? '')
+        setTeamGroupInput(payload.settings.teamGroup ?? '')
+        setAppVersion(payload.version)
         setReady(true)
       })
       .catch((error) => {
@@ -175,6 +246,8 @@ function App(): React.JSX.Element {
       setWindowPreferences(payload.window)
       setCustomRefreshInput(String(payload.settings.refreshIntervalSeconds))
       setIqThresholdInput(String(payload.settings.iqThreshold))
+      setTeamNicknameInput(payload.settings.teamNickname ?? '')
+      setTeamGroupInput(payload.settings.teamGroup ?? '')
     })
 
     const disposeCommand = window.codexStatus.onCommand((payload) => {
@@ -185,14 +258,46 @@ function App(): React.JSX.Element {
       setPanelView(payload.panelView)
     })
 
+    // 订阅更新进度:主进程转发 autoUpdater 事件,据此驱动 UI 状态机
+    const disposeUpdateProgress = window.codexStatus.onUpdateProgress((payload) => {
+      switch (payload.stage) {
+        case 'checking':
+          setUpdateState('checking')
+          break
+        case 'available':
+          setUpdateState('available')
+          setUpdateVersion(payload.version ?? '')
+          break
+        case 'not-available':
+          setUpdateState('idle')
+          setUpdateError('')
+          break
+        case 'downloading':
+          setUpdateState('downloading')
+          setUpdateProgress(Math.round(payload.percent ?? 0))
+          break
+        case 'downloaded':
+          setUpdateState('downloaded')
+          break
+        case 'error':
+          setUpdateState('error')
+          setUpdateError(payload.message ?? 'error')
+          break
+      }
+    })
+
     return () => {
       active = false
       if (manualRefreshTimerRef.current !== undefined) {
         window.clearTimeout(manualRefreshTimerRef.current)
       }
+      if (justRefreshedTimerRef.current !== undefined) {
+        window.clearTimeout(justRefreshedTimerRef.current)
+      }
       disposeSnapshot()
       disposePreferences()
       disposeCommand()
+      disposeUpdateProgress()
     }
   }, [])
 
@@ -252,9 +357,23 @@ function App(): React.JSX.Element {
     : ''
   const capsulePickColor = resolveModelColor(snapshot.bestModelPick?.label)
   const capsulePickTitle = snapshot.bestModelPick
-    ? `${snapshot.bestModelPick.label} · IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/题 · ${snapshot.bestModelPick.averageTaskMinutes}分/题`
+    ? `${snapshot.bestModelPick.label} · IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/题`
     : ''
   const capsuleViewMode = windowPreferences.viewMode
+  // 告急:remaining 模式剩余<20%,used 模式已用>80%,触发进度条呼吸提醒
+  const goodScore =
+    capsuleDisplayPercent === undefined
+      ? undefined
+      : settings.percentageMode === 'remaining'
+        ? capsuleDisplayPercent
+        : 100 - capsuleDisplayPercent
+  const isCritical = goodScore !== undefined && goodScore < 20
+  // 团队排行榜:按剩余额度降序(undefined 视为 0,排末尾)
+  const teamPeers = [...(snapshot.teamPeers ?? [])].sort((a, b) => {
+    const ar = a.remainingPercent ?? -1
+    const br = b.remainingPercent ?? -1
+    return br - ar
+  })
   const capsuleClassName = [
     'capsule',
     `capsule--${capsuleViewMode}`,
@@ -269,6 +388,7 @@ function App(): React.JSX.Element {
   const detailRows: Array<React.ComponentProps<typeof DetailRow>> = [
     ...longWindows.map((windowState) => ({
       icon: <HourglassIcon />,
+      iconTone: 'var(--panel-icon-amber)',
       label: settings.locale === 'zh-CN' ? '周重置' : 'Weekly reset',
       value: formatCountdownSingleUnit(windowState.resetsAt, settings.locale, nowTick),
       hint: formatAbsoluteDate(windowState.resetsAt, settings.locale)
@@ -277,6 +397,7 @@ function App(): React.JSX.Element {
       ? [
           {
             icon: <TicketIcon />,
+            iconTone: 'var(--panel-icon-pink)',
             label: copy.resetCredit,
             value: formatCountdownShort(snapshot.resetCredit.expiresAt, settings.locale),
             hint: formatAbsoluteDate(snapshot.resetCredit.expiresAt, settings.locale)
@@ -287,16 +408,25 @@ function App(): React.JSX.Element {
       ? [
           {
             icon: <SparkleIcon />,
+            iconTone: 'var(--panel-icon-violet)',
             label: settings.locale === 'zh-CN' ? '雷达推荐模型' : 'Top model',
+            labelHref: 'https://codex-reset-radar.pages.dev/',
             value: formatModelPick(snapshot.bestModelPick.shortLabel),
             valueColor: resolveModelColor(snapshot.bestModelPick.label),
             hint:
               settings.locale === 'zh-CN'
-                ? `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/题 · ${snapshot.bestModelPick.averageTaskMinutes}分/题`
-                : `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/task · ${snapshot.bestModelPick.averageTaskMinutes}m/task`
+                ? `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/题`
+                : `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/task`
           }
         ]
-      : [])
+      : []),
+    // 额度特赦重置:静态外链入口,跳转 codex-resets.com 查看官方重置记录
+    {
+      icon: <ResetIcon />,
+      iconTone: 'var(--panel-icon-green)',
+      label: settings.locale === 'zh-CN' ? '额度重置监测' : 'Usage reset monitor',
+      labelHref: 'https://codex-resets.com/'
+    }
   ]
 
   // 周重置倒计时显示到秒级:详情面板有长窗口时每秒 tick 一次驱动重渲染
@@ -317,17 +447,56 @@ function App(): React.JSX.Element {
     }
   }, [windowRole, panelView, hasLongWindow])
 
-  function openDetails(): void {
-    setPanelView('details')
-  }
-
-  function openSettings(): void {
-    setPanelView('settings')
-  }
+  // panel 窗口显示时机:等 React commit + 浏览器 paint 完成后再通知主进程 show。
+  // 用 rAF 推迟到下一帧,确保 DOM 已真正绘制——避免窗口 show 时画面仍空导致闪一下。
+  useEffect(() => {
+    if (!ready || windowRole !== 'panel') {
+      return
+    }
+    const raf = window.requestAnimationFrame(() => {
+      void window.codexStatus.notifyPanelReady()
+    })
+    return () => {
+      window.cancelAnimationFrame(raf)
+    }
+  }, [ready, windowRole])
 
   function closePanel(): void {
     setPanelView('details')
     void window.codexStatus.closePanel()
+  }
+
+  // 手动检查更新:dev 下主进程返回 available=false,UI 回到 idle 表示无更新
+  async function handleCheckUpdate(): Promise<void> {
+    setUpdateState('checking')
+    setUpdateError('')
+    try {
+      const result = await window.codexStatus.checkForUpdate()
+      if (result.available) {
+        setUpdateState('available')
+        setUpdateVersion(result.version ?? '')
+      } else {
+        setUpdateState('idle')
+      }
+    } catch (error) {
+      setUpdateState('error')
+      setUpdateError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function handleDownloadUpdate(): Promise<void> {
+    setUpdateState('downloading')
+    setUpdateProgress(0)
+    try {
+      await window.codexStatus.downloadUpdate()
+    } catch (error) {
+      setUpdateState('error')
+      setUpdateError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  function handleInstallUpdate(): void {
+    void window.codexStatus.installUpdate()
   }
 
   async function handleRefresh(): Promise<void> {
@@ -340,9 +509,22 @@ function App(): React.JSX.Element {
     try {
       const nextSnapshot = await window.codexStatus.refreshStatus()
       setSnapshot(nextSnapshot)
+      triggerJustRefreshed()
     } catch (error) {
       recordSnapshotIssue(error)
     }
+  }
+
+  // 刷新成功后触发百分比弹跳反馈(680ms),与手动刷新扫光错开一点
+  function triggerJustRefreshed(): void {
+    if (justRefreshedTimerRef.current !== undefined) {
+      window.clearTimeout(justRefreshedTimerRef.current)
+    }
+    setJustRefreshed(true)
+    justRefreshedTimerRef.current = window.setTimeout(() => {
+      setJustRefreshed(false)
+      justRefreshedTimerRef.current = undefined
+    }, MANUAL_REFRESH_FEEDBACK_MS)
   }
 
   function showManualRefreshFeedback(): void {
@@ -439,8 +621,9 @@ function App(): React.JSX.Element {
       return
     }
 
-    if (shouldRefreshOnClick && canRefresh) {
-      void handleRefresh()
+    // 点击胶囊(无拖拽)直接打开详情面板,不再触发刷新;刷新入口移至右键菜单和面板内按钮
+    if (shouldRefreshOnClick) {
+      void window.codexStatus.showPanel('details')
     }
   }
 
@@ -449,12 +632,8 @@ function App(): React.JSX.Element {
       return
     }
 
-    if (!canRefresh) {
-      return
-    }
-
     event.preventDefault()
-    void handleRefresh()
+    void window.codexStatus.showPanel('details')
   }
 
   function recordSnapshotIssue(error: unknown): void {
@@ -514,6 +693,25 @@ function App(): React.JSX.Element {
     }
   }
 
+  // 团队昵称:trim 后提交;空串保存为 undefined(主进程 normalizeSettings 兜底)
+  function commitTeamNickname(): void {
+    const trimmed = teamNicknameInput.trim()
+    setTeamNicknameInput(trimmed)
+    const normalized = trimmed.length > 0 ? trimmed : undefined
+    if (normalized !== settings.teamNickname) {
+      void handleSettingsPatch({ teamNickname: normalized })
+    }
+  }
+
+  function commitTeamGroup(): void {
+    const trimmed = teamGroupInput.trim()
+    setTeamGroupInput(trimmed)
+    const normalized = trimmed.length > 0 ? trimmed : undefined
+    if (normalized !== settings.teamGroup) {
+      void handleSettingsPatch({ teamGroup: normalized })
+    }
+  }
+
   function selectRefreshInterval(value: string): void {
     if (value === 'custom') {
       const parsed = Number.parseInt(customRefreshInput, 10)
@@ -545,7 +743,7 @@ function App(): React.JSX.Element {
       <div className="app-shell app-shell--capsule">
         <main className="widget">
           <section
-            aria-label={canRefresh ? copy.refresh : sourceValue}
+            aria-label={copy.details}
             className={capsuleClassName}
             style={capsuleProgressStyle}
             onKeyDown={handleCapsuleKeyDown}
@@ -553,8 +751,8 @@ function App(): React.JSX.Element {
             onPointerDown={handleCapsulePointerDown}
             onPointerMove={handleCapsulePointerMove}
             onPointerUp={handleCapsulePointerUp}
-            role={canRefresh ? 'button' : undefined}
-            tabIndex={canRefresh ? 0 : -1}
+            role="button"
+            tabIndex={0}
           >
             {capsuleViewMode === 'orb' ? (
               <div className="capsule__layout capsule__layout--v" aria-hidden="true">
@@ -578,7 +776,11 @@ function App(): React.JSX.Element {
                   <span>{capsuleWeeklyText}</span>
                 </div>
                 <div className="capsule__metric-box">
-                  <div className="capsule__percent">{capsulePercentText}</div>
+                  <div
+                    className={`capsule__percent${justRefreshed ? ' is-just-refreshed' : ''}${isCritical ? ' is-critical' : ''}`}
+                  >
+                    {capsulePercentText}
+                  </div>
                   <span className="capsule__progress" aria-hidden="true">
                     <span />
                   </span>
@@ -594,7 +796,11 @@ function App(): React.JSX.Element {
                 </div>
                 <div className="capsule__col capsule__col--metric">
                   <div className="capsule__metric-box">
-                    <div className="capsule__percent">{capsulePercentText}</div>
+                    <div
+                      className={`capsule__percent${justRefreshed ? ' is-just-refreshed' : ''}${isCritical ? ' is-critical' : ''}`}
+                    >
+                      {capsulePercentText}
+                    </div>
                     <span className="capsule__progress" aria-hidden="true">
                       <span />
                     </span>
@@ -628,12 +834,14 @@ function App(): React.JSX.Element {
   return (
     <div className="app-shell app-shell--panel">
       <section className={`panel panel--${panelView}`}>
-        <div aria-hidden="true" className="panel__grabber">
-          <span />
-        </div>
         {panelView === 'details' ? (
           <div className="panel__body panel__body--details">
             <div className="panel__content">
+              <PanelTabs
+                current={panelView}
+                labels={{ details: copy.details, team: copy.team, settings: copy.settings }}
+                onChange={(view) => setPanelView(view)}
+              />
               <div className="panel__header panel__header--details">
                 <div>
                   <p className={eyebrowClassName}>{eyebrowText}</p>
@@ -643,9 +851,10 @@ function App(): React.JSX.Element {
 
               {cardWindows.length > 0 ? (
                 <div className={`quota-grid${cardWindowCount === 1 ? ' quota-grid--single' : ''}`}>
-                  {cardWindows.map((windowState) => (
+                  {cardWindows.map((windowState, index) => (
                     <QuotaCard
                       key={windowState.id}
+                      isAccent={index === 0}
                       locale={settings.locale}
                       modeLabel={settings.percentageMode === 'used' ? copy.used : copy.remaining}
                       percentageMode={settings.percentageMode}
@@ -663,7 +872,9 @@ function App(): React.JSX.Element {
                     badge={row.badge}
                     hint={row.hint}
                     icon={row.icon}
+                    iconTone={row.iconTone}
                     label={row.label}
+                    labelHref={row.labelHref}
                     value={row.value}
                     valueColor={row.valueColor}
                   />
@@ -671,14 +882,20 @@ function App(): React.JSX.Element {
               </div>
 
               <div className="panel__meta">
-                <span className="panel__meta-row">
+                <span
+                  className="panel__meta-row"
+                  style={{ '--icon-tone': 'var(--panel-icon-blue)' } as CSSProperties}
+                >
                   <ServerIcon />
                   <span className="panel__meta-value-group">
                     <span className="panel__meta-main">{sourceValue}</span>
                     <span className={sourceBadgeClassName}>{sourceBadgeText}</span>
                   </span>
                 </span>
-                <span className="panel__meta-row">
+                <span
+                  className="panel__meta-row"
+                  style={{ '--icon-tone': 'var(--panel-icon-amber)' } as CSSProperties}
+                >
                   <HistoryIcon />
                   <span className="panel__meta-value-group">
                     <span className="panel__meta-main">
@@ -694,10 +911,87 @@ function App(): React.JSX.Element {
             </div>
 
             <div className="panel__footer">
-              <button className="ghost-button" onClick={openSettings} type="button">
-                <SettingsIcon />
-                <span>{copy.settings}</span>
+              <span className="panel__footer-meta">
+                {copy.lastRefreshHint} · {formatRelativeDate(snapshot.generatedAt, settings.locale)}
+              </span>
+              <button className="ghost-button" onClick={closePanel} type="button">
+                <CloseIcon />
+                <span>{copy.close}</span>
               </button>
+            </div>
+          </div>
+        ) : panelView === 'team' ? (
+          <div className="panel__body panel__body--team">
+            <div className="panel__content">
+              <PanelTabs
+                current={panelView}
+                labels={{ details: copy.details, team: copy.team, settings: copy.settings }}
+                onChange={(view) => setPanelView(view)}
+              />
+              <div className="panel__header panel__header--team">
+                <div>
+                  <h2 className="panel__title">{copy.teamBoard}</h2>
+                </div>
+                <button
+                  className={`ghost-button ghost-button--accent team__refresh${
+                    manualRefreshActive ? ' is-refreshing' : ''
+                  }`}
+                  disabled={manualRefreshActive || !canRefresh}
+                  onClick={() => void handleRefresh()}
+                  type="button"
+                  aria-label={copy.refresh}
+                >
+                  <RefreshIcon />
+                  <span>{manualRefreshActive ? copy.refreshing : copy.refresh}</span>
+                </button>
+              </div>
+
+              {teamPeers.length > 0 ? (
+                <>
+                  <div className="team-summary">
+                    <div className="team-summary__item">
+                      <span className="team-summary__label">{copy.teamSummaryOnline}</span>
+                      <span className="team-summary__value team-summary__value--accent">
+                        {teamPeers.length}
+                        <span className="team-summary__unit">{copy.teamSummaryOnlineUnit}</span>
+                      </span>
+                    </div>
+                    <div className="team-summary__item">
+                      <span className="team-summary__label">{copy.teamSummaryAvg}</span>
+                      <span className="team-summary__value">
+                        {formatAveragePercent(teamPeers)}%
+                      </span>
+                    </div>
+                    <div className="team-summary__item">
+                      <span className="team-summary__label">{copy.teamSummaryCredits}</span>
+                      <span className="team-summary__value">
+                        {formatTotalCredits(teamPeers)}
+                        <span className="team-summary__unit">{copy.teamSummaryCreditsUnit}</span>
+                      </span>
+                    </div>
+                  </div>
+                  <div className="team-board">
+                    {teamPeers.map((peer, index) => (
+                      <TeamRow
+                        key={peer.id}
+                        isSelf={peer.isSelf}
+                        rank={index + 1}
+                        nickname={peer.nickname}
+                        remainingPercent={peer.remainingPercent}
+                        resetCreditCount={peer.resetCreditCount}
+                      />
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="team-empty">{copy.teamEmpty}</p>
+              )}
+            </div>
+
+            <div className="panel__footer">
+              <span className="panel__footer-meta">
+                {copy.lastRefreshHint} · {formatRelativeDate(snapshot.generatedAt, settings.locale)}
+              </span>
               <button className="ghost-button" onClick={closePanel} type="button">
                 <CloseIcon />
                 <span>{copy.close}</span>
@@ -707,9 +1001,13 @@ function App(): React.JSX.Element {
         ) : (
           <div className="panel__body panel__body--settings">
             <div className="panel__content">
+              <PanelTabs
+                current={panelView}
+                labels={{ details: copy.details, team: copy.team, settings: copy.settings }}
+                onChange={(view) => setPanelView(view)}
+              />
               <div className="panel__header">
                 <div>
-                  <p className="panel__eyebrow">CODEX</p>
                   <h2 className="panel__title">{copy.settings}</h2>
                 </div>
               </div>
@@ -791,7 +1089,10 @@ function App(): React.JSX.Element {
                       value={settings.percentageMode}
                     />
                   </SettingField>
+                </div>
 
+                <div className="settings-section">
+                  <p className="settings-section__title">{copy.groupRecommend}</p>
                   <SettingField label={copy.iqThreshold} hint={copy.iqThresholdHint}>
                     <label className="inline-input is-active">
                       <span>{copy.iqThreshold}</span>
@@ -814,7 +1115,25 @@ function App(): React.JSX.Element {
                       <em>IQ</em>
                     </label>
                   </SettingField>
+                </div>
 
+                <div className="settings-section">
+                  <p className="settings-section__title">{copy.groupGeneral}</p>
+                  <div className="setting-row">
+                    <span>{copy.launchAtLogin}</span>
+                    <ToggleSwitch
+                      checked={settings.launchAtLogin}
+                      offLabel={copy.disabled}
+                      onChange={(checked) => {
+                        void handleSettingsPatch({ launchAtLogin: checked })
+                      }}
+                      onLabel={copy.enabled}
+                    />
+                  </div>
+                </div>
+
+                <div className="settings-section">
+                  <p className="settings-section__title">{copy.groupRegion}</p>
                   <SettingField label={copy.language}>
                     <SegmentedControl
                       onChange={(value) => {
@@ -832,34 +1151,111 @@ function App(): React.JSX.Element {
                 </div>
 
                 <div className="settings-section">
-                  <p className="settings-section__title">{copy.groupGeneral}</p>
-                  <div className="setting-row">
-                    <span>{copy.launchAtLogin}</span>
-                    <ToggleSwitch
-                      checked={settings.launchAtLogin}
-                      offLabel={copy.disabled}
-                      onChange={(checked) => {
-                        void handleSettingsPatch({ launchAtLogin: checked })
-                      }}
-                      onLabel={copy.enabled}
-                    />
-                  </div>
+                  <p className="settings-section__title">{copy.team}</p>
+                  <SettingField label={copy.teamNickname} hint={copy.teamNicknameHint}>
+                    <label className="inline-input is-active">
+                      <span>{copy.teamNickname}</span>
+                      <input
+                        onBlur={commitTeamNickname}
+                        onChange={(event) => {
+                          setTeamNicknameInput(event.target.value)
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.currentTarget.blur()
+                          }
+                        }}
+                        placeholder="我"
+                        type="text"
+                        value={teamNicknameInput}
+                      />
+                    </label>
+                  </SettingField>
+                  <SettingField label={copy.teamGroup} hint={copy.teamGroupHint}>
+                    <label className="inline-input is-active">
+                      <span>{copy.teamGroup}</span>
+                      <input
+                        onBlur={commitTeamGroup}
+                        onChange={(event) => {
+                          setTeamGroupInput(event.target.value)
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.currentTarget.blur()
+                          }
+                        }}
+                        type="text"
+                        value={teamGroupInput}
+                      />
+                    </label>
+                  </SettingField>
                 </div>
               </div>
             </div>
 
             <div className="panel__footer">
-              <button className="ghost-button" onClick={openDetails} type="button">
-                <ChevronLeftIcon />
-                <span>{copy.back}</span>
-              </button>
-              <button
-                className="ghost-button ghost-button--accent"
-                onClick={closePanel}
-                type="button"
-              >
-                <span>{copy.done}</span>
-                <ChevronRightIcon />
+              <span className="panel__footer-meta">
+                {copy.author} · libing{appVersion ? `  ·  ${copy.version} ${appVersion}` : ''}
+              </span>
+              <div className="update-zone">
+                {updateState === 'idle' && (
+                  <button
+                    className="ghost-button update-zone__btn"
+                    onClick={handleCheckUpdate}
+                    type="button"
+                  >
+                    {copy.checkUpdate}
+                  </button>
+                )}
+                {updateState === 'checking' && (
+                  <span className="update-zone__text">{copy.checking}</span>
+                )}
+                {updateState === 'available' && (
+                  <>
+                    <span className="update-zone__text">
+                      {copy.newVersionAvailable} v{updateVersion}
+                    </span>
+                    <button
+                      className="ghost-button update-zone__btn"
+                      onClick={handleDownloadUpdate}
+                      type="button"
+                    >
+                      {copy.downloading}
+                    </button>
+                  </>
+                )}
+                {updateState === 'downloading' && (
+                  <span className="update-zone__text">
+                    {copy.downloading} {updateProgress}%
+                  </span>
+                )}
+                {updateState === 'downloaded' && (
+                  <button
+                    className="ghost-button update-zone__btn"
+                    onClick={handleInstallUpdate}
+                    type="button"
+                  >
+                    {copy.installNow}
+                  </button>
+                )}
+                {updateState === 'error' && (
+                  <>
+                    <span className="update-zone__text update-zone__text--error">
+                      {copy.updateError}: {updateError}
+                    </span>
+                    <button
+                      className="ghost-button update-zone__btn"
+                      onClick={handleCheckUpdate}
+                      type="button"
+                    >
+                      {copy.retryUpdate}
+                    </button>
+                  </>
+                )}
+              </div>
+              <button className="ghost-button" onClick={closePanel} type="button">
+                <CloseIcon />
+                <span>{copy.close}</span>
               </button>
             </div>
           </div>
@@ -870,12 +1266,14 @@ function App(): React.JSX.Element {
 }
 
 function QuotaCard({
+  isAccent,
   locale,
   modeLabel,
   percentageMode,
   windowState,
   resetExpiryLabel
 }: {
+  isAccent?: boolean
   locale: LocaleCode
   modeLabel: string
   percentageMode: PercentageMode
@@ -888,7 +1286,7 @@ function QuotaCard({
   const resetTimeText = formatCapsuleResetTime(windowState?.resetsAt, locale)
 
   return (
-    <div className="quota-card" style={progressStyle}>
+    <div className={`quota-card${isAccent ? ' is-accent' : ''}`} style={progressStyle}>
       <div className="quota-card__head">
         <span className="quota-card__label">{windowState.label}</span>
         <span className="quota-card__mode">{modeLabel}</span>
@@ -923,31 +1321,58 @@ function formatQuotaResetHint(seconds: number | undefined, locale: LocaleCode): 
 function DetailRow({
   badge,
   icon,
+  iconTone,
   label,
+  labelHref,
   value,
   hint,
   valueColor
 }: {
   badge?: string
   icon: React.JSX.Element
+  iconTone?: string
   label: string
-  value: string
+  labelHref?: string
+  value?: string
   hint?: string
   valueColor?: string
 }): React.JSX.Element {
   return (
     <div className="detail-row">
       <div className="detail-row__label-group">
-        <span className="detail-row__icon">{icon}</span>
-        <span className="detail-row__label">{label}</span>
-      </div>
-      <div className="detail-row__value-group">
-        <span className="detail-row__value" style={valueColor ? { color: valueColor } : undefined}>
-          {value}
+        <span
+          className="detail-row__icon"
+          style={iconTone ? ({ '--icon-tone': iconTone } as CSSProperties) : undefined}
+        >
+          {icon}
         </span>
-        {badge ? <span className="detail-row__badge">{badge}</span> : null}
-        {hint ? <span className="detail-row__hint">{hint}</span> : null}
+        {labelHref ? (
+          <a
+            className="detail-row__link"
+            href={labelHref}
+            onClick={(event) => {
+              event.preventDefault()
+              void window.codexStatus.openExternal(labelHref)
+            }}
+            title={labelHref}
+          >
+            {label}
+          </a>
+        ) : (
+          <span className="detail-row__label">{label}</span>
+        )}
       </div>
+      {value || badge || hint ? (
+        <div className="detail-row__value-group">
+          {value ? (
+            <span className="detail-row__value" style={valueColor ? { color: valueColor } : undefined}>
+              {value}
+            </span>
+          ) : null}
+          {badge ? <span className="detail-row__badge">{badge}</span> : null}
+          {hint ? <span className="detail-row__hint">{hint}</span> : null}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -966,6 +1391,79 @@ function SettingField({
       <span className="setting-field__label">{label}</span>
       {children}
       {hint ? <span className="setting-field__hint">{hint}</span> : null}
+    </div>
+  )
+}
+
+// 团队排行榜一行:排名/昵称/剩余百分比横条+数字/重置卡数量;self 行高亮
+function TeamRow({
+  isSelf,
+  rank,
+  nickname,
+  remainingPercent,
+  resetCreditCount
+}: {
+  isSelf: boolean
+  rank: number
+  nickname: string
+  remainingPercent?: number
+  resetCreditCount?: number
+}): React.JSX.Element {
+  const percent =
+    remainingPercent === undefined || !Number.isFinite(remainingPercent)
+      ? undefined
+      : Math.min(100, Math.max(0, remainingPercent))
+  const accent = resolveMetricColor(percent, 'remaining')
+  const rankClass = rank === 1 ? ' is-top-1' : rank === 2 ? ' is-top-2' : rank === 3 ? ' is-top-3' : ''
+  return (
+    <div className={`team-row${isSelf ? ' is-self' : ''}${rankClass}`}>
+      <span className="team-row__rank">{rank}</span>
+      <span className="team-row__name">{nickname}</span>
+      <span className="team-row__bar" style={{ '--metric-accent': accent } as CSSProperties}>
+        <span
+          className="team-row__bar-fill"
+          style={{ width: percent === undefined ? 0 : `${percent}%` }}
+        />
+      </span>
+      <span className="team-row__value">
+        {percent === undefined ? '--' : `${Math.round(percent)}%`}
+      </span>
+      <span className="team-row__credit" title="重置卡数量">
+        <TicketIcon />
+        <span>{resetCreditCount ?? 0}</span>
+      </span>
+    </div>
+  )
+}
+
+function PanelTabs({
+  current,
+  labels,
+  onChange
+}: {
+  current: PanelView
+  labels: { details: string; team: string; settings: string }
+  onChange: (view: PanelView) => void
+}): React.JSX.Element {
+  const tabs: Array<{ key: PanelView; label: string }> = [
+    { key: 'details', label: labels.details },
+    { key: 'team', label: labels.team },
+    { key: 'settings', label: labels.settings }
+  ]
+  return (
+    <div className="panel__tabs" role="tablist">
+      {tabs.map((tab) => (
+        <button
+          aria-selected={tab.key === current}
+          className={`panel__tab${tab.key === current ? ' is-active' : ''}`}
+          key={tab.key}
+          onClick={() => onChange(tab.key)}
+          role="tab"
+          type="button"
+        >
+          {tab.label}
+        </button>
+      ))}
     </div>
   )
 }
@@ -1025,8 +1523,9 @@ function ToggleSwitch({
   )
 }
 
-// 额度色:按 goodScore(remaining=显示值,used=100-显示值)从红(0%)到绿(100%)线性插值
-// 100% 剩余→纯绿,0% 剩余→纯红,中间渐变;无数据返回灰色
+// 额度色:按 goodScore(remaining=显示值,used=100-显示值)从柔粉红(0%)到系统绿(100%)线性插值
+// 100% 剩余→系统绿 #56d36c,0% 剩余→柔粉红 #f87171,中间渐变;无数据返回灰色
+// 危险端用柔粉红替代高饱和橙红,与深青蓝冷调背景协调,不堆霓虹
 function resolveMetricColor(
   displayPercent: number | undefined,
   percentageMode: PercentageMode
@@ -1036,10 +1535,10 @@ function resolveMetricColor(
   }
   const goodScore = percentageMode === 'remaining' ? displayPercent : 100 - displayPercent
   const t = Math.min(100, Math.max(0, goodScore)) / 100
-  // 红 (239,87,82) -> 绿 (80,214,124)
-  const r = Math.round(239 + (80 - 239) * t)
-  const g = Math.round(87 + (214 - 87) * t)
-  const b = Math.round(82 + (124 - 82) * t)
+  // 柔粉红 (248,113,113) -> 系统绿 (86,211,108)
+  const r = Math.round(248 + (86 - 248) * t)
+  const g = Math.round(113 + (211 - 113) * t)
+  const b = Math.round(113 + (108 - 113) * t)
   return `rgb(${r}, ${g}, ${b})`
 }
 
@@ -1299,6 +1798,23 @@ function formatCountdownSingleUnit(
   return locale === 'zh-CN' ? `${totalSeconds}秒` : `${totalSeconds}s`
 }
 
+// 团队摘要:平均剩余百分比(无有效值的 peer 不计入;全无则显示 --)
+function formatAveragePercent(peers: TeamPeer[]): string {
+  const valid = peers
+    .map((peer) => peer.remainingPercent)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  if (valid.length === 0) {
+    return '--'
+  }
+  const avg = valid.reduce((sum, value) => sum + Math.min(100, Math.max(0, value)), 0) / valid.length
+  return String(Math.round(avg))
+}
+
+// 团队摘要:重置卡总数
+function formatTotalCredits(peers: TeamPeer[]): number {
+  return peers.reduce((sum, peer) => sum + (peer.resetCreditCount ?? 0), 0)
+}
+
 function formatModelPick(shortLabel: string): string {
   // shortLabel 形如 "Terra xhigh" -> "Terra Xh", "Sol medium" -> "Sol M", "Luna max" -> "Luna U"
   const parts = shortLabel.split(/\s+/)
@@ -1399,11 +1915,11 @@ function HistoryIcon(): React.JSX.Element {
   )
 }
 
-function SettingsIcon(): React.JSX.Element {
+function RefreshIcon(): React.JSX.Element {
   return (
     <svg fill="none" viewBox="0 0 24 24">
       <path
-        d="M10 4h10M4 12h16M14 20h6M14 4a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM9 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM14 20a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z"
+        d="M20 11a8 8 0 1 0-1.5 5M20 5v6h-6"
         stroke="currentColor"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -1413,29 +1929,23 @@ function SettingsIcon(): React.JSX.Element {
   )
 }
 
-function ChevronLeftIcon(): React.JSX.Element {
+// 额度特赦重置:环形单向箭头(区别于 RefreshIcon 双向箭头),表达"周期/恢复"语义
+function ResetIcon(): React.JSX.Element {
   return (
     <svg fill="none" viewBox="0 0 24 24">
       <path
-        d="m14 6-6 6 6 6"
+        d="M5.6 7A8 8 0 1 1 4 12.5"
         stroke="currentColor"
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth="1.75"
       />
-    </svg>
-  )
-}
-
-function ChevronRightIcon(): React.JSX.Element {
-  return (
-    <svg fill="none" viewBox="0 0 24 24">
       <path
-        d="m9 5 7 7-7 7"
+        d="M5 4v4h4"
         stroke="currentColor"
         strokeLinecap="round"
         strokeLinejoin="round"
-        strokeWidth="1.85"
+        strokeWidth="1.75"
       />
     </svg>
   )

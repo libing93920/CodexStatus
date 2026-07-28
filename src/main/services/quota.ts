@@ -3,7 +3,6 @@ import type { Dirent } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { RateLimitSource, RateLimitWindowSnapshot, UsageSnapshot } from '../../shared/capsule'
-import { fetchRadarBestPick } from './radar'
 
 interface RawRateLimit {
   windowMinutes?: number
@@ -60,6 +59,8 @@ export function invalidateQuotaCaches(): void {
 
 interface CollectOptions {
   iqThreshold?: number
+  /** 主进程当前缓存的推荐模型;radar 不再跟随额度刷新,由独立定时器维护并注入 */
+  bestModelPick?: UsageSnapshot['bestModelPick']
 }
 
 export async function collectUsageSnapshot(
@@ -111,7 +112,7 @@ export async function collectUsageSnapshot(
     officialIssue = credentialLookup.issue ?? '未找到 Codex OAuth 凭据'
   }
 
-  bestModelPick = await fetchRadarBestPick(options.iqThreshold).catch(() => undefined)
+  bestModelPick = options.bestModelPick
 
   const issues: string[] = []
   if (rateLimitSource !== 'official' && officialIssue) {
@@ -146,17 +147,39 @@ async function fetchOfficialRateLimits(
   localRateLimits: UsageSnapshot['rateLimits']
 ): Promise<{ rateLimits?: UsageSnapshot['rateLimits']; issue?: string }> {
   try {
-    let rateLimits = await requestOfficialRateLimits(headers)
-    if (rateLimits && shouldRecheckOfficialRateLimits(rateLimits, localRateLimits)) {
+    const first = await requestOfficialRateLimits(headers)
+    if (first && shouldRecheckOfficialRateLimits(first, localRateLimits)) {
+      // 第一次显示"额度恢复"(usedPercent 下降),但官方接口在重置边界可能返回陈旧高值;
+      // 延迟复查一次,逐窗口取较低 usedPercent,避免旧数据覆盖恢复值
       await new Promise((resolve) => setTimeout(resolve, OFFICIAL_QUOTA_RECHECK_DELAY_MS))
-      rateLimits = await requestOfficialRateLimits(headers)
+      const second = await requestOfficialRateLimits(headers)
+      if (second) {
+        return { rateLimits: pickLowerUsage(first, second) }
+      }
     }
-    return rateLimits !== undefined
-      ? { rateLimits }
+    return first !== undefined
+      ? { rateLimits: first }
       : { issue: '官方接口未返回额度信息' }
   } catch (error) {
     return { issue: error instanceof Error ? error.message : String(error) }
   }
+}
+
+// 逐窗口取较低 usedPercent:recheck 第二次若返回更高值(陈旧反弹),保留第一次的恢复数据
+function pickLowerUsage(
+  first: UsageSnapshot['rateLimits'],
+  second: UsageSnapshot['rateLimits']
+): UsageSnapshot['rateLimits'] {
+  const secondById = new Map(second.map((w) => [w.id, w]))
+  return first.map((firstWindow) => {
+    const secondWindow = secondById.get(firstWindow.id)
+    if (!secondWindow) return firstWindow
+    const a = firstWindow.usedPercent
+    const b = secondWindow.usedPercent
+    if (a === undefined) return secondWindow
+    if (b === undefined) return firstWindow
+    return b <= a ? secondWindow : firstWindow
+  })
 }
 
 async function requestOfficialRateLimits(

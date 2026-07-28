@@ -10,6 +10,7 @@ import {
   type MenuItemConstructorOptions,
   type Rectangle
 } from 'electron'
+import { randomUUID } from 'node:crypto'
 import { watchFile, unwatchFile } from 'node:fs'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -36,16 +37,21 @@ import {
   type RendererCommandPayload,
   type PersistedState,
   type RendererWindowRole,
+  type TeamPeer,
   type UsageSnapshot,
   type WindowPreferences
 } from '../shared/capsule'
-import {
-  collectUsageSnapshot,
-  invalidateQuotaCaches,
-  resolveCodexAuthPath
-} from './services/quota'
-import { invalidateRadarCache } from './services/radar'
+import { collectUsageSnapshot, invalidateQuotaCaches, resolveCodexAuthPath } from './services/quota'
+import { refreshRadarNow, startRadarTimer, stopRadarTimer } from './services/radar'
 import { loadPersistedState, savePersistedState } from './services/state'
+import { LanService, type PeerSnapshot } from './services/lan'
+import {
+  initAutoUpdater,
+  checkForUpdates,
+  downloadUpdate,
+  installUpdate,
+  setUpdaterProgressListener
+} from './services/updater'
 
 const CHANNELS = {
   bootstrap: 'codex-status:bootstrap',
@@ -54,9 +60,16 @@ const CHANNELS = {
   closePanel: 'codex-status:close-panel',
   moveCapsuleWindow: 'codex-status:move-capsule-window',
   finishCapsuleWindowDrag: 'codex-status:finish-capsule-window-drag',
+  openExternal: 'codex-status:open-external',
+  panelReady: 'codex-status:panel-ready',
+  showPanel: 'codex-status:show-panel',
   snapshotUpdated: 'codex-status:snapshot-updated',
   preferencesUpdated: 'codex-status:preferences-updated',
-  command: 'codex-status:command'
+  command: 'codex-status:command',
+  checkUpdate: 'codex-status:check-update',
+  downloadUpdate: 'codex-status:download-update',
+  installUpdate: 'codex-status:install-update',
+  updateProgress: 'codex-status:update-progress'
 } as const
 
 const SINGLE_CAPSULE_WINDOW_WIDTH = 160
@@ -71,6 +84,7 @@ let refreshPromise: Promise<void> | undefined
 let watchedCodexAuthPath: string | undefined
 let isQuitting = false
 let currentPanelView: PanelView = 'details'
+const lanService = new LanService()
 let persistedState: PersistedState = {
   settings: { ...DEFAULT_SETTINGS },
   window: { ...DEFAULT_WINDOW_PREFERENCES },
@@ -194,10 +208,9 @@ function createPanelWindow(): BrowserWindow {
     }
   })
 
-  window.on('ready-to-show', () => {
-    window.show()
-  })
-
+  // 首次创建不在此 show:窗口 show 交给渲染层 bootstrap 完成后的 panel-ready IPC,
+  // 否则 ready-to-show(Chromium 首屏可画)早于 React 挂载,会先闪一个空透明窗,
+  // 等 bootstrap resolve 真正内容挂载后再"重开"一次——视觉上像弹了两遍
   window.on('move', () => {
     const bounds = window.getBounds()
     persistedState = {
@@ -251,11 +264,15 @@ function loadRenderer(window: BrowserWindow, role: RendererWindowRole): void {
 if (hasSingleInstanceLock) {
   app.whenReady().then(async () => {
     const loadedState = await loadPersistedState()
-    electronApp.setAppUserModelId('com.openai.codex-status')
+    electronApp.setAppUserModelId('com.openai.codexstatus')
 
     persistedState = {
       ...loadedState,
       settings: syncLaunchAtLoginPreference(loadedState.settings)
+    }
+    if (!persistedState.peerId) {
+      persistedState.peerId = randomUUID()
+      queuePersistState()
     }
     currentSnapshot = createEmptySnapshot()
 
@@ -272,9 +289,20 @@ if (hasSingleInstanceLock) {
     }
 
     registerIpcHandlers()
+    // autoUpdater 初始化并注册进度转发:把更新事件推给渲染层
+    setUpdaterProgressListener((payload) => {
+      sendToRenderers(CHANNELS.updateProgress, payload)
+    })
+    initAutoUpdater()
     mainWindow = createCapsuleWindow()
     createTray()
     watchCodexAuthFile()
+    syncLanService()
+    // radar 推荐模型走独立定时(10 分钟),不再跟随额度刷新;拉到后注入 snapshot 并广播
+    startRadarTimer(persistedState.settings.iqThreshold, (pick) => {
+      currentSnapshot = { ...currentSnapshot, bestModelPick: pick }
+      broadcastSnapshot()
+    })
     void refreshStatus()
 
     app.on('activate', function () {
@@ -297,6 +325,8 @@ app.on('before-quit', () => {
   isQuitting = true
   clearRefreshTimer()
   clearCodexAuthWatcher()
+  stopRadarTimer()
+  lanService.stop()
 })
 
 function registerIpcHandlers(): void {
@@ -307,7 +337,8 @@ function registerIpcHandlers(): void {
       panel: persistedState.panel,
       snapshot: currentSnapshot,
       role: resolveRendererRole(event.sender.id),
-      panelView: currentPanelView
+      panelView: currentPanelView,
+      version: app.getVersion()
     }
   })
 
@@ -322,6 +353,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(CHANNELS.updateSettings, async (_, patch: Partial<AppSettings>) => {
     const previousIqThreshold = persistedState.settings.iqThreshold
+    const previousTeamGroup = persistedState.settings.teamGroup
+    const previousTeamNickname = persistedState.settings.teamNickname
     const nextSettings = syncLaunchAtLoginPreference({
       ...persistedState.settings,
       ...patch
@@ -337,13 +370,27 @@ function registerIpcHandlers(): void {
     refreshTrayMenu()
     broadcastPreferences()
 
+    // 团队口令/昵称变更:重启 LAN service(更新发布信息或启停)
+    if (
+      (typeof patch.teamGroup === 'string' || patch.teamGroup === undefined) &&
+      patch.teamGroup !== previousTeamGroup
+    ) {
+      syncLanService()
+    } else if (
+      typeof patch.teamNickname === 'string' &&
+      patch.teamNickname !== previousTeamNickname
+    ) {
+      // 仅昵称变化也需重启(更新 mDNS txt 的 nick)
+      syncLanService()
+    }
+
     const iqThresholdChanged =
       typeof patch.iqThreshold === 'number' && patch.iqThreshold !== previousIqThreshold
 
     if (iqThresholdChanged) {
-      // IQ 阈值变更,重置 radar/重置卡缓存,强制重新拉取推荐模型数据
+      // IQ 阈值变更:重置卡缓存重拉,radar 立即按新阈值重拉(独立定时,不跟随额度刷新)
       invalidateQuotaCaches()
-      invalidateRadarCache()
+      void refreshRadarNow(persistedState.settings.iqThreshold)
       void refreshStatus({ forceCredentialCheck: true })
     } else if (persistedState.settings.refreshMode === 'auto' && canRefreshStatus()) {
       void refreshStatus()
@@ -362,6 +409,48 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(CHANNELS.finishCapsuleWindowDrag, async () => {
     return finishCapsuleWindowDrag()
+  })
+
+  // 面板内链接跳转:仅放行 http/https,用系统默认浏览器打开(Electron 标准做法,不在面板内嵌网页)
+  ipcMain.handle(CHANNELS.openExternal, async (_, url: string) => {
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return
+      }
+      await shell.openExternal(url)
+    } catch {
+      // 非法 URL 静默丢弃,不打断前端
+    }
+  })
+
+  // 渲染层 bootstrap 完成、真正内容挂载后通知主进程显示窗口,
+  // 避免 ready-to-show 早于 React 挂载导致空窗闪烁
+  ipcMain.handle(CHANNELS.panelReady, async () => {
+    if (panelWindow && !panelWindow.isDestroyed() && !panelWindow.isVisible()) {
+      panelWindow.show()
+      panelWindow.focus()
+    }
+  })
+
+  // 胶囊窗口点击打开 panel:渲染层调此 IPC,主进程复用 openPanelWindow 创建/显示 panel
+  ipcMain.handle(CHANNELS.showPanel, async (_, view: PanelView) => {
+    openPanelWindow(view)
+  })
+
+  // 手动检查更新:dev 环境返回 available=false,打包后查 GitHub Releases
+  ipcMain.handle(CHANNELS.checkUpdate, async () => {
+    return checkForUpdates()
+  })
+
+  // 下载已检测到的新版本安装包;进度经 updateProgress 通道推送
+  ipcMain.handle(CHANNELS.downloadUpdate, async () => {
+    await downloadUpdate()
+  })
+
+  // 退出并运行安装程序,覆盖升级
+  ipcMain.handle(CHANNELS.installUpdate, async () => {
+    installUpdate()
   })
 }
 
@@ -384,15 +473,13 @@ function refreshTrayMenu(): void {
   tray.setToolTip(buildTrayTooltip())
 }
 
-function getTrayLabels(): Record<
-  'refresh' | 'toggle' | 'details' | 'settings' | 'quit',
-  string
-> {
+function getTrayLabels(): Record<'refresh' | 'toggle' | 'details' | 'team' | 'settings' | 'quit', string> {
   if (persistedState.settings.locale === 'en-US') {
     return {
       refresh: 'Refresh',
       toggle: 'Show/Hide',
       details: 'Details',
+      team: 'Team',
       settings: 'Settings',
       quit: 'Quit'
     }
@@ -402,6 +489,7 @@ function getTrayLabels(): Record<
     refresh: '刷新',
     toggle: '显示/隐藏',
     details: '详情',
+    team: '团队',
     settings: '设置',
     quit: '退出'
   }
@@ -428,6 +516,12 @@ function buildCapsuleContextMenuTemplate(): MenuItemConstructorOptions[] {
       label: labels.details,
       click: () => {
         openDetailsFromTray()
+      }
+    },
+    {
+      label: labels.team,
+      click: () => {
+        openTeamFromTray()
       }
     },
     {
@@ -505,10 +599,15 @@ function openDetailsFromTray(): void {
   openPanelWindow('details')
 }
 
+function openTeamFromTray(): void {
+  openPanelWindow('team')
+}
+
 function prepareToQuit(): void {
   isQuitting = true
   clearRefreshTimer()
   clearCodexAuthWatcher()
+  stopRadarTimer()
   tray?.destroy()
   panelWindow?.destroy()
 }
@@ -556,6 +655,68 @@ function clearRefreshTimer(): void {
   }
 }
 
+// 团队看板:self + LAN 发现的 peer 合并;self 剩余取当前 snapshot 第一个窗口的剩余(短窗口优先,无则用长窗口)
+function buildTeamPeers(selfRemaining: number | undefined): TeamPeer[] {
+  const selfName =
+    persistedState.settings.teamNickname && persistedState.settings.teamNickname.trim().length > 0
+      ? persistedState.settings.teamNickname
+      : '我'
+  const selfPeer: TeamPeer = {
+    id: persistedState.peerId ?? 'self',
+    nickname: selfName,
+    isSelf: true,
+    remainingPercent: selfRemaining,
+    resetCreditCount: currentSnapshot.resetCredit?.availableCount,
+    updatedAt: new Date().toISOString()
+  }
+  return [selfPeer, ...lanService.getPeers()]
+}
+
+// 取本机剩余额度百分比:优先短窗口(5h 等),无短窗口则用长窗口(7d)兜底;无任何窗口返回 undefined
+function getSelfRemaining(): number | undefined {
+  const rateLimits = currentSnapshot.rateLimits
+  const short = rateLimits.find((w) => w.windowMinutes === undefined || w.windowMinutes < 1440)
+  if (short?.remainingPercent !== undefined) return short.remainingPercent
+  const long = rateLimits.find((w) => w.windowMinutes !== undefined && w.windowMinutes >= 1440)
+  return long?.remainingPercent
+}
+
+// 本机派生展示数据,广播给已连 peer(绝不包含 Codex 凭据)
+function getLanSnapshot(): PeerSnapshot {
+  const longWindow = currentSnapshot.rateLimits.find(
+    (w) => w.windowMinutes !== undefined && w.windowMinutes >= 1440
+  )
+  return {
+    remainingPercent: getSelfRemaining(),
+    weeklyResetsAt: longWindow?.resetsAt,
+    bestModelLabel: currentSnapshot.bestModelPick?.shortLabel,
+    resetCreditCount: currentSnapshot.resetCredit?.availableCount
+  }
+}
+
+// 团队口令非空时启动/重启 LAN service,空则停止
+function syncLanService(): void {
+  const group = persistedState.settings.teamGroup
+  if (!group || group.trim().length === 0) {
+    lanService.stop()
+    return
+  }
+  lanService.start({
+    peerId: persistedState.peerId ?? 'self',
+    nickname: persistedState.settings.teamNickname ?? '我',
+    group,
+    getSnapshot: getLanSnapshot,
+    onPeersChange: () => {
+      // peer 变化时把最新 peer 表合并进 snapshot 并推送前端
+      currentSnapshot = {
+        ...currentSnapshot,
+        teamPeers: buildTeamPeers(getSelfRemaining())
+      }
+      broadcastSnapshot()
+    }
+  })
+}
+
 async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): Promise<void> {
   if (refreshPromise) {
     return refreshPromise
@@ -575,9 +736,18 @@ async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): 
 
   refreshPromise = (async () => {
     try {
-      currentSnapshot = await collectUsageSnapshot({
-        iqThreshold: persistedState.settings.iqThreshold
+      const collected = await collectUsageSnapshot({
+        iqThreshold: persistedState.settings.iqThreshold,
+        bestModelPick: currentSnapshot.bestModelPick
       })
+      // collect 期间 radar 回调可能已更新 bestModelPick;返回值若为空则保留当前已缓存的 pick,避免被覆盖清空
+      currentSnapshot = {
+        ...collected,
+        bestModelPick: collected.bestModelPick ?? currentSnapshot.bestModelPick,
+        teamPeers: buildTeamPeers(getSelfRemaining())
+      }
+      // 本机数据变化,广播给已连 peer
+      lanService.broadcastSnapshot()
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       currentSnapshot = {

@@ -3,6 +3,8 @@ import { DEFAULT_IQ_THRESHOLD, MAX_IQ_THRESHOLD, MIN_IQ_THRESHOLD } from '../../
 const RADAR_URL = 'https://codex-reset-radar.pages.dev/current.json'
 const RADAR_TIMEOUT_MS = 8000
 const RADAR_CACHE_TTL_MS = 10 * 60 * 1000
+// radar 独立定时周期:与缓存 TTL 对齐,到期就强制重拉(不再跟随额度刷新节奏)
+const RADAR_TICK_MS = RADAR_CACHE_TTL_MS
 
 interface RadarModelEntry {
   label: string
@@ -123,13 +125,9 @@ function pickBest(
   const eligible = entries.filter((e) => e.score >= minScore)
   if (eligible.length === 0) return undefined
 
-  // 排序只看 IQ 与成本:性价比(score/cost)降序优先,再按 score 降序;不看 green/yellow/red 状态
-  eligible.sort((left, right) => {
-    const leftValue = left.score / left.averageCostUsd
-    const rightValue = right.score / right.averageCostUsd
-    if (rightValue !== leftValue) return rightValue - leftValue
-    return right.score - left.score
-  })
+  // 选模型规则:先按 IQ 阈值过滤(用户设置),再在合格模型里选每题成本(average_cost_usd)最低的。
+  // 不看性价比 score/cost,也不看 green/yellow/red 状态——只认"够聪明 + 最便宜"
+  eligible.sort((left, right) => left.averageCostUsd - right.averageCostUsd)
 
   const best = eligible[0]
   return {
@@ -147,6 +145,44 @@ function pickBest(
 // 让设置面板更改阈值时能立即得到新的pick(基于已缓存数据)
 export function invalidateRadarCache(): void {
   rawCache = undefined
+}
+
+// radar 独立定时:不再跟随额度刷新,由主进程按 RADAR_TICK_MS 自行节拍
+let radarTimer: NodeJS.Timeout | undefined
+let radarHandler: ((pick: RadarBestPick | undefined) => void) | undefined
+let radarThreshold = DEFAULT_IQ_THRESHOLD
+
+export function startRadarTimer(
+  threshold: number,
+  handler: (pick: RadarBestPick | undefined) => void
+): void {
+  stopRadarTimer()
+  radarThreshold = clampThreshold(threshold)
+  radarHandler = handler
+  // 首次立即拉一次,后续按周期定时
+  void tickRadar()
+  radarTimer = setInterval(() => void tickRadar(), RADAR_TICK_MS)
+}
+
+export function stopRadarTimer(): void {
+  if (radarTimer) {
+    clearInterval(radarTimer)
+    radarTimer = undefined
+  }
+  radarHandler = undefined
+}
+
+// IQ 阈值变更:更新阈值并清缓存强制走网络立即重拉一次
+export async function refreshRadarNow(threshold: number): Promise<RadarBestPick | undefined> {
+  radarThreshold = clampThreshold(threshold)
+  invalidateRadarCache()
+  return await tickRadar()
+}
+
+async function tickRadar(): Promise<RadarBestPick | undefined> {
+  const pick = await fetchRadarBestPick(radarThreshold).catch(() => undefined)
+  radarHandler?.(pick)
+  return pick
 }
 
 function shortenLabel(label: string): string {
