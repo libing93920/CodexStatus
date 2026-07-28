@@ -90,6 +90,8 @@ const COPY = {
     teamGroupHint: '同口令的成员才互见',
     author: '作者',
     version: '版本',
+    groupAbout: '关于',
+    currentVersion: '当前版本',
     checkUpdate: '检查更新',
     checking: '检查中…',
     upToDate: '已是最新版本',
@@ -98,7 +100,8 @@ const COPY = {
     downloaded: '下载完成',
     installNow: '安装并重启',
     updateError: '更新失败',
-    retryUpdate: '重试'
+    retryUpdate: '重试',
+    downloadNow: '立即下载'
   },
   'en-US': {
     noData: 'No data',
@@ -156,6 +159,8 @@ const COPY = {
     teamGroupHint: 'Only peers with the same passphrase can see each other',
     author: 'Author',
     version: 'Version',
+    groupAbout: 'About',
+    currentVersion: 'Current version',
     checkUpdate: 'Check for updates',
     checking: 'Checking…',
     upToDate: 'Up to date',
@@ -164,7 +169,8 @@ const COPY = {
     downloaded: 'Downloaded',
     installNow: 'Install & restart',
     updateError: 'Update failed',
-    retryUpdate: 'Retry'
+    retryUpdate: 'Retry',
+    downloadNow: 'Download'
   }
 } as const
 
@@ -187,9 +193,10 @@ function App(): React.JSX.Element {
   const [capsulePointerActive, setCapsulePointerActive] = useState(false)
   const [manualRefreshActive, setManualRefreshActive] = useState(false)
   const [appVersion, setAppVersion] = useState('')
-  // 在线更新状态机:idle/checking/available/downloading/downloaded/error
+  // 在线更新状态机:idle/checking/upToDate/available/downloading/downloaded/error
+  // upToDate:检查完无更新(或 dev 环境),提示几秒后回 idle
   const [updateState, setUpdateState] = useState<
-    'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error'
+    'idle' | 'checking' | 'upToDate' | 'available' | 'downloading' | 'downloaded' | 'error'
   >('idle')
   const [updateVersion, setUpdateVersion] = useState('')
   const [updateProgress, setUpdateProgress] = useState(0)
@@ -202,6 +209,8 @@ function App(): React.JSX.Element {
   const capsulePointerRef = useRef<CapsulePointerState | null>(null)
   const manualRefreshTimerRef = useRef<number | undefined>(undefined)
   const justRefreshedTimerRef = useRef<number | undefined>(undefined)
+  // "已是最新"提示停留几秒后自动回 idle
+  const upToDateTimerRef = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     let active = true
@@ -269,8 +278,16 @@ function App(): React.JSX.Element {
           setUpdateVersion(payload.version ?? '')
           break
         case 'not-available':
-          setUpdateState('idle')
+          // 无更新:进 upToDate 态停留几秒回 idle,给用户明确反馈而非静默
           setUpdateError('')
+          setUpdateState('upToDate')
+          if (upToDateTimerRef.current !== undefined) {
+            window.clearTimeout(upToDateTimerRef.current)
+          }
+          upToDateTimerRef.current = window.setTimeout(() => {
+            setUpdateState('idle')
+            upToDateTimerRef.current = undefined
+          }, 3000)
           break
         case 'downloading':
           setUpdateState('downloading')
@@ -293,6 +310,9 @@ function App(): React.JSX.Element {
       }
       if (justRefreshedTimerRef.current !== undefined) {
         window.clearTimeout(justRefreshedTimerRef.current)
+      }
+      if (upToDateTimerRef.current !== undefined) {
+        window.clearTimeout(upToDateTimerRef.current)
       }
       disposeSnapshot()
       disposePreferences()
@@ -466,17 +486,24 @@ function App(): React.JSX.Element {
     void window.codexStatus.closePanel()
   }
 
-  // 手动检查更新:dev 下主进程返回 available=false,UI 回到 idle 表示无更新
+  // 手动检查更新:无更新(含 dev 环境)进 upToDate 态停留几秒,给用户明确反馈
   async function handleCheckUpdate(): Promise<void> {
     setUpdateState('checking')
     setUpdateError('')
+    if (upToDateTimerRef.current !== undefined) {
+      window.clearTimeout(upToDateTimerRef.current)
+    }
     try {
       const result = await window.codexStatus.checkForUpdate()
       if (result.available) {
         setUpdateState('available')
         setUpdateVersion(result.version ?? '')
       } else {
-        setUpdateState('idle')
+        setUpdateState('upToDate')
+        upToDateTimerRef.current = window.setTimeout(() => {
+          setUpdateState('idle')
+          upToDateTimerRef.current = undefined
+        }, 3000)
       }
     } catch (error) {
       setUpdateState('error')
@@ -1190,6 +1217,90 @@ function App(): React.JSX.Element {
                     </label>
                   </SettingField>
                 </div>
+
+                <div className="settings-section">
+                  <p className="settings-section__title">{copy.groupAbout}</p>
+                  <div className="setting-row about-row">
+                    <div className="about-row__info">
+                      <span className="about-row__label">{copy.currentVersion}</span>
+                      <span className="about-row__version">v{appVersion || '--'}</span>
+                    </div>
+                    {updateState === 'idle' && (
+                      <button
+                        className="ghost-button about-row__btn"
+                        onClick={handleCheckUpdate}
+                        type="button"
+                      >
+                        {copy.checkUpdate}
+                      </button>
+                    )}
+                    {updateState === 'checking' && (
+                      <button
+                        className="ghost-button about-row__btn"
+                        disabled
+                        type="button"
+                      >
+                        {copy.checking}
+                      </button>
+                    )}
+                    {updateState === 'upToDate' && (
+                      <span className="about-row__badge">{copy.upToDate}</span>
+                    )}
+                    {updateState === 'available' && (
+                      <button
+                        className="ghost-button about-row__btn"
+                        onClick={handleDownloadUpdate}
+                        type="button"
+                      >
+                        {copy.downloadNow} v{updateVersion}
+                      </button>
+                    )}
+                    {updateState === 'downloaded' && (
+                      <button
+                        className="ghost-button about-row__btn"
+                        onClick={handleInstallUpdate}
+                        type="button"
+                      >
+                        {copy.installNow}
+                      </button>
+                    )}
+                    {updateState === 'error' && (
+                      <button
+                        className="ghost-button about-row__btn"
+                        onClick={handleCheckUpdate}
+                        type="button"
+                      >
+                        {copy.retryUpdate}
+                      </button>
+                    )}
+                  </div>
+                  {updateState === 'available' && (
+                    <p className="about-row__hint">
+                      {copy.newVersionAvailable} v{updateVersion}
+                    </p>
+                  )}
+                  {updateState === 'downloading' && (
+                    <div className="update-progress">
+                      <div className="update-progress__bar">
+                        <span
+                          className="update-progress__fill"
+                          style={{ width: `${updateProgress}%` }}
+                        />
+                      </div>
+                      <span className="update-progress__text">
+                        {copy.downloading} {updateProgress}%
+                      </span>
+                    </div>
+                  )}
+                  {updateState === 'downloaded' && (
+                    <p className="about-row__hint">{copy.downloaded}</p>
+                  )}
+                  {updateState === 'error' && (
+                    <p className="about-row__hint about-row__hint--error">
+                      {copy.updateError}: {updateError}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1197,62 +1308,6 @@ function App(): React.JSX.Element {
               <span className="panel__footer-meta">
                 {copy.author} · libing{appVersion ? `  ·  ${copy.version} ${appVersion}` : ''}
               </span>
-              <div className="update-zone">
-                {updateState === 'idle' && (
-                  <button
-                    className="ghost-button update-zone__btn"
-                    onClick={handleCheckUpdate}
-                    type="button"
-                  >
-                    {copy.checkUpdate}
-                  </button>
-                )}
-                {updateState === 'checking' && (
-                  <span className="update-zone__text">{copy.checking}</span>
-                )}
-                {updateState === 'available' && (
-                  <>
-                    <span className="update-zone__text">
-                      {copy.newVersionAvailable} v{updateVersion}
-                    </span>
-                    <button
-                      className="ghost-button update-zone__btn"
-                      onClick={handleDownloadUpdate}
-                      type="button"
-                    >
-                      {copy.downloading}
-                    </button>
-                  </>
-                )}
-                {updateState === 'downloading' && (
-                  <span className="update-zone__text">
-                    {copy.downloading} {updateProgress}%
-                  </span>
-                )}
-                {updateState === 'downloaded' && (
-                  <button
-                    className="ghost-button update-zone__btn"
-                    onClick={handleInstallUpdate}
-                    type="button"
-                  >
-                    {copy.installNow}
-                  </button>
-                )}
-                {updateState === 'error' && (
-                  <>
-                    <span className="update-zone__text update-zone__text--error">
-                      {copy.updateError}: {updateError}
-                    </span>
-                    <button
-                      className="ghost-button update-zone__btn"
-                      onClick={handleCheckUpdate}
-                      type="button"
-                    >
-                      {copy.retryUpdate}
-                    </button>
-                  </>
-                )}
-              </div>
               <button className="ghost-button" onClick={closePanel} type="button">
                 <CloseIcon />
                 <span>{copy.close}</span>

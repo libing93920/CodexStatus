@@ -1089,30 +1089,92 @@ body {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--panel-accent) 32%, transparent);
 }
 
-/* 设置页底部"检查更新"区:容纳按钮/状态文案,居中于 footer */
-.update-zone {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 32px;
+/* 设置页「关于」section:版本号 + 检查更新按钮 + 进度条 */
+.about-row {
+  justify-content: space-between;
 }
 
-.update-zone__btn {
-  padding: 6px 14px;
+.about-row__info {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.about-row__label {
+  color: var(--panel-muted);
   font-size: 12px;
 }
 
-.update-zone__text {
+.about-row__version {
+  color: var(--panel-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.about-row__btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.about-row__btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* "已是最新"态:替代按钮的静默提示标签 */
+.about-row__badge {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-line);
+  color: var(--panel-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.about-row__hint {
+  margin: 10px 0 0;
+  padding: 0 4px;
+  color: var(--panel-muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.about-row__hint--error {
+  color: var(--panel-warn, #e06c3b);
+}
+
+/* 下载进度条 */
+.update-progress {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.update-progress__bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--panel-line);
+  overflow: hidden;
+}
+
+.update-progress__fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--panel-accent);
+  transition: width 0.2s ease;
+}
+
+.update-progress__text {
   color: var(--panel-muted);
   font-size: 11.5px;
   white-space: nowrap;
-}
-
-.update-zone__text--error {
-  color: var(--panel-warn, #e06c3b);
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .panel__header {
