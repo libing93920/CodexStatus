@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <!-- 剩余额度渐变:绿(高)→琥珀(中)→红(低),与 app resolveMetricColor 一致 -->
+    <linearGradient id="ring" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#50d67c"/>
+      <stop offset="55%" stop-color="#e6b151"/>
+      <stop offset="100%" stop-color="#ef5754"/>
+    </linearGradient>
+    <!-- 底板渐变:呼应胶囊 rgba(38,48,62)→rgba(16,22,32) -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#26303e"/>
+      <stop offset="100%" stop-color="#101620"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 圆角底板 -->
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#bg)"/>
+
+  <!-- 轨道(未填充环) -->
+  <circle cx="128" cy="128" r="84" fill="none" stroke="#2a3340" stroke-width="20"/>
+
+  <!-- 填充环:70% 从顶部顺时针 -->
+  <!-- 圆周=2πr≈527.8,70%≈369.5,dash 用此 -->
+  <circle cx="128" cy="128" r="84" fill="none" stroke="url(#ring)" stroke-width="20"
+          stroke-linecap="round"
+          stroke-dasharray="369.5 527.8"
+          transform="rotate(-90 128 128)"/>
+
+  <!-- 中心沙漏(重置倒计时,呼应 UI HourglassIcon):上半空心腔体(只画两腰)+顶部残沙,下半实心沙堆,中颈下落 -->
+  <!-- 下半沙堆(实心三角,顶点对齐中颈 128,128) -->
+  <path d="M100 168 H156 L128 128 Z" fill="#dce6f0"/>
+  <!-- 上半腔体(只画两条腰,不画底边=中颈开口) -->
+  <path d="M100 88 L128 128 M156 88 L128 128"
+        fill="none" stroke="#dce6f0" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 上半顶部残沙(一窄条,表示快漏完) -->
+  <path d="M104 92 H152 L142 100 H114 Z" fill="#dce6f0"/>
+  <!-- 中颈下落沙粒 -->
+  <rect x="125" y="120" width="6" height="10" rx="2" fill="#dce6f0"/>
+  <!-- 上下横板 -->
+  <rect x="98" y="82" width="60" height="8" rx="3" fill="#dce6f0"/>
+  <rect x="98" y="166" width="60" height="8" rx="3" fill="#dce6f0"/>
+</svg>
