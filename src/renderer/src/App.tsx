@@ -346,17 +346,17 @@ function App(): React.JSX.Element {
     : 'panel__meta-badge'
   const eyebrowText = officialDown ? copy.officialUnavailable : sourceLabel
   const eyebrowClassName = officialDown ? 'panel__eyebrow panel__eyebrow--danger' : 'panel__eyebrow'
-  const rateLimitWindows = snapshot.rateLimits
-  // 短窗口(<1天)用于胶囊/大卡片展示;长窗口(≥1天,如 7d)只在明细行显示重置倒计时,不显示百分比
-  const cardWindows = rateLimitWindows.filter(
-    (windowState) => windowState.windowMinutes === undefined || windowState.windowMinutes < 1440
-  )
-  const longWindows = rateLimitWindows.filter(
-    (windowState) => windowState.windowMinutes !== undefined && windowState.windowMinutes >= 1440
-  )
+  const rateLimitWindows = [...snapshot.rateLimits].sort((a, b) => {
+    // 短窗口(5h)排在前,长窗口(7d)排在后,确保胶囊取到5h优先
+    const am = a.windowMinutes ?? 0
+    const bm = b.windowMinutes ?? 0
+    return am - bm
+  })
+  // 所有窗口都用 QuotaCard 展示(5h+7d);胶囊百分比+进度条优先取短窗口,无短窗口则取长窗口兜底
+  const cardWindows = rateLimitWindows
   const cardWindowCount = cardWindows.length
-  // 胶囊固定分区布局:百分比+进度条取第一个短窗口;周重置倒计时取第一个长窗口
-  const displayedRateLimit = cardWindows[0] ?? rateLimitWindows[0]
+  // 胶囊:百分比+进度条取首窗口(5h优先,无则7d);左侧倒计时也取同一个窗口的resetsAt
+  const displayedRateLimit = rateLimitWindows[0]
   const capsuleDisplayPercent =
     settings.percentageMode === 'used'
       ? displayedRateLimit?.usedPercent
@@ -367,8 +367,8 @@ function App(): React.JSX.Element {
     capsuleDisplayPercent,
     settings.percentageMode
   )
-  const capsuleWeeklyResetsAt = longWindows[0]?.resetsAt
-  const capsuleWeeklyText = formatCountdownCapsule(capsuleWeeklyResetsAt, nowTick)
+  const capsuleResetAt = displayedRateLimit?.resetsAt
+  const capsuleResetText = formatCountdownCapsule(capsuleResetAt, nowTick)
   const capsuleCreditText = snapshot.resetCredit?.expiresAt
     ? formatCountdownShort(snapshot.resetCredit.expiresAt, settings.locale)
     : ''
@@ -406,13 +406,6 @@ function App(): React.JSX.Element {
     .join(' ')
 
   const detailRows: Array<React.ComponentProps<typeof DetailRow>> = [
-    ...longWindows.map((windowState) => ({
-      icon: <HourglassIcon />,
-      iconTone: 'var(--panel-icon-amber)',
-      label: settings.locale === 'zh-CN' ? '周重置' : 'Weekly reset',
-      value: formatCountdownSingleUnit(windowState.resetsAt, settings.locale, nowTick),
-      hint: formatAbsoluteDate(windowState.resetsAt, settings.locale)
-    })),
     ...(snapshot.resetCredit?.expiresAt
       ? [
           {
@@ -449,13 +442,12 @@ function App(): React.JSX.Element {
     }
   ]
 
-  // 周重置倒计时显示到秒级:详情面板有长窗口时每秒 tick 一次驱动重渲染
-  const hasLongWindow = longWindows.length > 0
-  // 周重置倒计时显示到秒级:详情面板有长窗口时每秒 tick;胶囊常驻有长窗口时也 tick 驱动倒计时
+  // 有窗口带重置倒计时时每秒 tick 刷新显示
+  const hasResetWindow = rateLimitWindows.some((w) => w.resetsAt !== undefined)
   useEffect(() => {
-    const isPanelWithLongWindow = windowRole === 'panel' && panelView === 'details' && hasLongWindow
-    const isCapsuleWithLongWindow = windowRole === 'capsule' && hasLongWindow
-    if (!isPanelWithLongWindow && !isCapsuleWithLongWindow) {
+    const isPanelWithResetWindow = windowRole === 'panel' && panelView === 'details' && hasResetWindow
+    const isCapsuleWithResetWindow = windowRole === 'capsule' && hasResetWindow
+    if (!isPanelWithResetWindow && !isCapsuleWithResetWindow) {
       return
     }
 
@@ -465,7 +457,7 @@ function App(): React.JSX.Element {
     return () => {
       window.clearInterval(timer)
     }
-  }, [windowRole, panelView, hasLongWindow])
+  }, [windowRole, panelView, hasResetWindow])
 
   // panel 窗口显示时机:等 React commit + 浏览器 paint 完成后再通知主进程 show。
   // 用 rAF 推迟到下一帧,确保 DOM 已真正绘制——避免窗口 show 时画面仍空导致闪一下。
@@ -800,7 +792,7 @@ function App(): React.JSX.Element {
                 ) : null}
                 <div className="capsule__weekly">
                   <HourglassIcon />
-                  <span>{capsuleWeeklyText}</span>
+                  <span>{capsuleResetText}</span>
                 </div>
                 <div className="capsule__metric-box">
                   <div
@@ -818,7 +810,7 @@ function App(): React.JSX.Element {
                 <div className="capsule__col capsule__col--weekly">
                   <span className="capsule__weekly">
                     <HourglassIcon />
-                    {capsuleWeeklyText}
+                    {capsuleResetText}
                   </span>
                 </div>
                 <div className="capsule__col capsule__col--metric">
@@ -1814,43 +1806,6 @@ function formatCountdownCapsule(value: string | undefined, nowMs: number): strin
     return `${minutes}M`
   }
   return `${totalSeconds}S`
-}
-
-// 周重置倒计时:只取最高非零单位(d/h/m/s),秒级实时刷新
-// 有天显天,0天显时,0时显分,0分显秒,始终只显示一个单位
-function formatCountdownSingleUnit(
-  value: string | undefined,
-  locale: LocaleCode,
-  nowMs: number
-): string {
-  if (!value) {
-    return '--'
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return '--'
-  }
-
-  const diffMs = date.getTime() - nowMs
-  if (diffMs <= 0) {
-    return locale === 'zh-CN' ? '0秒' : '0s'
-  }
-
-  const totalSeconds = Math.floor(diffMs / 1000)
-  const days = Math.floor(totalSeconds / 86400)
-  if (days >= 1) {
-    return locale === 'zh-CN' ? `${days}天` : `${days}d`
-  }
-  const hours = Math.floor(totalSeconds / 3600)
-  if (hours >= 1) {
-    return locale === 'zh-CN' ? `${hours}时` : `${hours}h`
-  }
-  const minutes = Math.floor(totalSeconds / 60)
-  if (minutes >= 1) {
-    return locale === 'zh-CN' ? `${minutes}分` : `${minutes}m`
-  }
-  return locale === 'zh-CN' ? `${totalSeconds}秒` : `${totalSeconds}s`
 }
 
 // 团队摘要:平均剩余百分比(无有效值的 peer 不计入;全无则显示 --)
