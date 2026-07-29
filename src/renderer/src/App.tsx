@@ -385,6 +385,9 @@ function App(): React.JSX.Element {
   const capsuleClassName = [
     'capsule',
     `capsule--${capsuleViewMode}`,
+    updateState === 'available' || updateState === 'downloading' || updateState === 'downloaded'
+      ? 'has-update'
+      : '',
     snapshot.isRefreshing ? 'is-refreshing' : '',
     manualRefreshActive ? 'is-manual-refreshing' : '',
     canRefresh ? '' : 'is-static',

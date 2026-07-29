@@ -79,6 +79,19 @@ body {
   transform: scale(0.982);
 }
 
+.capsule.has-update::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  pointer-events: none;
+  z-index: 1;
+}
+
 .capsule.is-manual-refreshing {
   animation: capsule-manual-refresh 680ms ease-out;
 }

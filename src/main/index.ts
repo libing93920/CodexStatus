@@ -297,17 +297,25 @@ if (hasSingleInstanceLock) {
       sendToRenderers(CHANNELS.updateProgress, payload)
     })
     initAutoUpdater()
-    // 启动后延迟检查更新:用户无需手动点"检查更新"即可获知新版本
+    // 启动后自动检查更新 + 后续定时检查(每2小时)
     if (app.isPackaged) {
-      setTimeout(async () => {
+      let updateCheckTimer: NodeJS.Timeout | undefined
+      const doCheck = async () => {
         const result = await checkForUpdates()
         if (result.available && result.version) {
           sendToRenderers(CHANNELS.updateProgress, {
             stage: 'available',
             version: result.version
           })
+          // 已获知新版本,停止后续定时检查,等用户点击下载
+          if (updateCheckTimer) {
+            clearInterval(updateCheckTimer)
+            updateCheckTimer = undefined
+          }
         }
-      }, 5000)
+      }
+      setTimeout(() => void doCheck(), 5000)
+      updateCheckTimer = setInterval(() => void doCheck(), 2 * 60 * 60 * 1000)
     }
     mainWindow = createCapsuleWindow()
     createTray()
