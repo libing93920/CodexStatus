@@ -33,6 +33,7 @@ import {
   type CapsuleDragMovePayload,
   type DockEdge,
   type PanelView,
+  type RateLimitWindowSnapshot,
   type AppSettings,
   type PreferencesPayload,
   type RendererCommandPayload,
@@ -679,21 +680,47 @@ function clearRefreshTimer(): void {
   }
 }
 
-// 团队看板:self + LAN 发现的 peer 合并;self 剩余取当前 snapshot 第一个窗口的剩余(短窗口优先,无则用长窗口)
+// 团队看板:self + LAN 发现的 peer 合并;self 取当前 snapshot 的两个窗口分别展示
 function buildTeamPeers(selfRemaining: number | undefined): TeamPeer[] {
   const selfName =
     persistedState.settings.teamNickname && persistedState.settings.teamNickname.trim().length > 0
       ? persistedState.settings.teamNickname
       : '我'
+  const short = getShortWindow()
+  const long = getLongWindow()
   const selfPeer: TeamPeer = {
     id: persistedState.peerId ?? 'self',
     nickname: selfName,
     isSelf: true,
     remainingPercent: selfRemaining,
+    shortWindow: short
+      ? { label: short.label, remainingPercent: short.remainingPercent }
+      : undefined,
+    longWindow: long
+      ? { label: long.label, remainingPercent: long.remainingPercent }
+      : undefined,
     resetCreditCount: currentSnapshot.resetCredit?.availableCount,
     updatedAt: new Date().toISOString()
   }
   return [selfPeer, ...lanService.getPeers()]
+}
+
+// 取短窗口(5h):windowMinutes < 1440 且最短的
+function getShortWindow(): RateLimitWindowSnapshot | undefined {
+  const shorts = currentSnapshot.rateLimits.filter(
+    (w) => w.windowMinutes !== undefined && w.windowMinutes < 1440
+  )
+  shorts.sort((a, b) => (a.windowMinutes ?? 0) - (b.windowMinutes ?? 0))
+  return shorts[0]
+}
+
+// 取长窗口(7d):windowMinutes >= 1440 且最短的
+function getLongWindow(): RateLimitWindowSnapshot | undefined {
+  const longs = currentSnapshot.rateLimits.filter(
+    (w) => w.windowMinutes !== undefined && w.windowMinutes >= 1440
+  )
+  longs.sort((a, b) => (a.windowMinutes ?? 0) - (b.windowMinutes ?? 0))
+  return longs[0]
 }
 
 // 取本机剩余额度百分比:优先短窗口(5h 等),无短窗口则用长窗口(7d)兜底;无任何窗口返回 undefined
@@ -707,14 +734,19 @@ function getSelfRemaining(): number | undefined {
 
 // 本机派生展示数据,广播给已连 peer(绝不包含 Codex 凭据)
 function getLanSnapshot(): PeerSnapshot {
-  const longWindow = currentSnapshot.rateLimits.find(
-    (w) => w.windowMinutes !== undefined && w.windowMinutes >= 1440
-  )
+  const short = getShortWindow()
+  const long = getLongWindow()
   return {
     remainingPercent: getSelfRemaining(),
-    weeklyResetsAt: longWindow?.resetsAt,
+    weeklyResetsAt: long?.resetsAt,
     bestModelLabel: currentSnapshot.bestModelPick?.shortLabel,
-    resetCreditCount: currentSnapshot.resetCredit?.availableCount
+    resetCreditCount: currentSnapshot.resetCredit?.availableCount,
+    shortWindow: short
+      ? { label: short.label, remainingPercent: short.remainingPercent }
+      : undefined,
+    longWindow: long
+      ? { label: long.label, remainingPercent: long.remainingPercent }
+      : undefined
   }
 }
 

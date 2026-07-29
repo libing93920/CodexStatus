@@ -57,7 +57,7 @@ export interface UsageSnapshot {
   teamPeers?: TeamPeer[]
 }
 
-/** 团队成员一行:排行榜展示剩余额度% + 重置卡数量,按剩余降序排名 */
+/** 团队成员一行:排行榜展示 5h/7d 双窗口剩余额度% + 重置卡数量,按短窗口剩余降序排名 */
 export interface TeamPeer {
   /** peer 标识 */
   id: string
@@ -65,8 +65,12 @@ export interface TeamPeer {
   nickname: string
   /** 是否本机 */
   isSelf: boolean
-  /** 剩余额度百分比(排行榜主依据) */
+  /** 剩余额度百分比(短窗口优先,排行主依据) */
   remainingPercent?: number
+  /** 短窗口(5h):标签 + 剩余百分比 */
+  shortWindow?: { label: string; remainingPercent?: number }
+  /** 长窗口(7d):标签 + 剩余百分比 */
+  longWindow?: { label: string; remainingPercent?: number }
   /** 可用重置卡数量 */
   resetCreditCount?: number
   /** 该 peer 最后更新时间(留作后续显示,本期 UI 不展示) */

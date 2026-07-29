@@ -17,6 +17,10 @@ export interface PeerSnapshot {
   weeklyResetsAt?: string
   bestModelLabel?: string
   resetCreditCount?: number
+  /** 短窗口(5h)展示用:label + 剩余% */
+  shortWindow?: { label: string; remainingPercent?: number }
+  /** 长窗口(7d/1周)展示用:label + 剩余% */
+  longWindow?: { label: string; remainingPercent?: number }
 }
 
 interface PeerEntry {
@@ -26,6 +30,8 @@ interface PeerEntry {
   weeklyResetsAt?: string
   bestModelLabel?: string
   resetCreditCount?: number
+  shortWindow?: { label: string; remainingPercent?: number }
+  longWindow?: { label: string; remainingPercent?: number }
   updatedAt?: string
 }
 
@@ -156,6 +162,8 @@ export class LanService {
       nickname: entry.nickname,
       isSelf: false,
       remainingPercent: entry.remainingPercent,
+      shortWindow: entry.shortWindow,
+      longWindow: entry.longWindow,
       resetCreditCount: entry.resetCreditCount,
       updatedAt: entry.updatedAt
     }))
@@ -349,6 +357,8 @@ export class LanService {
       weeklyResetsAt: snapshot?.weeklyResetsAt ?? existing?.weeklyResetsAt,
       bestModelLabel: snapshot?.bestModelLabel ?? existing?.bestModelLabel,
       resetCreditCount: snapshot?.resetCreditCount ?? existing?.resetCreditCount,
+      shortWindow: snapshot?.shortWindow ?? existing?.shortWindow,
+      longWindow: snapshot?.longWindow ?? existing?.longWindow,
       updatedAt: new Date().toISOString()
     }
     this.peers.set(peerId, entry)

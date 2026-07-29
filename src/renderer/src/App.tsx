@@ -15,7 +15,6 @@ import {
   type PercentageMode,
   type RateLimitWindowSnapshot,
   type RendererWindowRole,
-  type TeamPeer,
   type UsageSnapshot,
   type WindowPreferences
 } from '../../shared/capsule'
@@ -339,7 +338,7 @@ function App(): React.JSX.Element {
     return am - bm
   }).map((w) => ({
     ...w,
-    label: w.label === '7d' && settings.locale === 'zh-CN' ? '1周' : w.label
+    label: w.label === '7d' && settings.locale === 'zh-CN' ? '1周' : w.label === '5h' && settings.locale === 'zh-CN' ? '5小时' : w.label
   }))
   // 所有窗口都用 QuotaCard 展示(5h+7d);胶囊百分比+进度条优先取短窗口,无短窗口则取长窗口兜底
   const cardWindows = rateLimitWindows
@@ -927,28 +926,6 @@ function App(): React.JSX.Element {
 
               {teamPeers.length > 0 ? (
                 <>
-                  <div className="team-summary">
-                    <div className="team-summary__item">
-                      <span className="team-summary__label">{copy.teamSummaryOnline}</span>
-                      <span className="team-summary__value team-summary__value--accent">
-                        {teamPeers.length}
-                        <span className="team-summary__unit">{copy.teamSummaryOnlineUnit}</span>
-                      </span>
-                    </div>
-                    <div className="team-summary__item">
-                      <span className="team-summary__label">{copy.teamSummaryAvg}</span>
-                      <span className="team-summary__value">
-                        {formatAveragePercent(teamPeers)}%
-                      </span>
-                    </div>
-                    <div className="team-summary__item">
-                      <span className="team-summary__label">{copy.teamSummaryCredits}</span>
-                      <span className="team-summary__value">
-                        {formatTotalCredits(teamPeers)}
-                        <span className="team-summary__unit">{copy.teamSummaryCreditsUnit}</span>
-                      </span>
-                    </div>
-                  </div>
                   <div className="team-board">
                     {teamPeers.map((peer, index) => (
                       <TeamRow
@@ -957,6 +934,8 @@ function App(): React.JSX.Element {
                         rank={index + 1}
                         nickname={peer.nickname}
                         remainingPercent={peer.remainingPercent}
+                        shortWindow={peer.shortWindow}
+                        longWindow={peer.longWindow}
                         resetCreditCount={peer.resetCreditCount}
                       />
                     ))}
@@ -1408,12 +1387,16 @@ function TeamRow({
   rank,
   nickname,
   remainingPercent,
+  shortWindow,
+  longWindow,
   resetCreditCount
 }: {
   isSelf: boolean
   rank: number
   nickname: string
   remainingPercent?: number
+  shortWindow?: { label: string; remainingPercent?: number }
+  longWindow?: { label: string; remainingPercent?: number }
   resetCreditCount?: number
 }): React.JSX.Element {
   const percent =
@@ -1422,24 +1405,69 @@ function TeamRow({
       : Math.min(100, Math.max(0, remainingPercent))
   const accent = resolveMetricColor(percent, 'remaining')
   const rankClass = rank === 1 ? ' is-top-1' : rank === 2 ? ' is-top-2' : rank === 3 ? ' is-top-3' : ''
+  const hasBoth = shortWindow !== undefined && longWindow !== undefined
   return (
-    <div className={`team-row${isSelf ? ' is-self' : ''}${rankClass}`}>
+    <div
+      className={`team-row${isSelf ? ' is-self' : ''}${rankClass}${hasBoth ? ' team-row--dual' : ''}`}
+      style={{ '--metric-accent': accent } as CSSProperties}
+    >
       <span className="team-row__rank">{rank}</span>
       <span className="team-row__name">{nickname}</span>
-      <span className="team-row__bar" style={{ '--metric-accent': accent } as CSSProperties}>
-        <span
-          className="team-row__bar-fill"
-          style={{ width: percent === undefined ? 0 : `${percent}%` }}
-        />
-      </span>
+      {hasBoth ? (
+        <div className="team-row__windows">
+          <WindowLine
+            label={shortWindow.label}
+            percent={shortWindow.remainingPercent}
+          />
+          <WindowLine
+            label={longWindow.label}
+            percent={longWindow.remainingPercent}
+          />
+        </div>
+      ) : (
+        <span className="team-row__bar">
+          <span
+            className="team-row__bar-fill"
+            style={{ width: percent === undefined ? 0 : `${percent}%` }}
+          />
+        </span>
+      )}
       <span className="team-row__value">
         {percent === undefined ? '--' : `${Math.round(percent)}%`}
       </span>
-      <span className="team-row__credit" title="重置卡数量">
+      <span className="team-row__credit">
         <TicketIcon />
         <span>{resetCreditCount ?? 0}</span>
       </span>
     </div>
+  )
+}
+
+function WindowLine({
+  label,
+  percent
+}: {
+  label: string
+  percent?: number
+}): React.JSX.Element {
+  const safePercent =
+    percent === undefined || !Number.isFinite(percent)
+      ? undefined
+      : Math.min(100, Math.max(0, percent))
+  const accent = resolveMetricColor(safePercent, 'remaining')
+  return (
+    <span className="team-row__window" style={{ '--metric-accent': accent } as CSSProperties}>
+      <span className="team-row__window-label">{label}</span>
+      <span className="team-row__window-bar">
+        <span
+          className="team-row__window-bar-fill"
+          style={{ width: safePercent === undefined ? 0 : `${safePercent}%` }}
+        />
+      </span>
+      <span className="team-row__window-value">
+        {safePercent === undefined ? '--' : `${Math.round(safePercent)}%`}
+      </span>
+    </span>
   )
 }
 
@@ -1766,23 +1794,6 @@ function formatCountdownCapsule(value: string | undefined, nowMs: number): strin
     return `${minutes}M`
   }
   return `${totalSeconds}S`
-}
-
-// 团队摘要:平均剩余百分比(无有效值的 peer 不计入;全无则显示 --)
-function formatAveragePercent(peers: TeamPeer[]): string {
-  const valid = peers
-    .map((peer) => peer.remainingPercent)
-    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
-  if (valid.length === 0) {
-    return '--'
-  }
-  const avg = valid.reduce((sum, value) => sum + Math.min(100, Math.max(0, value)), 0) / valid.length
-  return String(Math.round(avg))
-}
-
-// 团队摘要:重置卡总数
-function formatTotalCredits(peers: TeamPeer[]): number {
-  return peers.reduce((sum, peer) => sum + (peer.resetCreditCount ?? 0), 0)
 }
 
 function formatModelPick(shortLabel: string): string {

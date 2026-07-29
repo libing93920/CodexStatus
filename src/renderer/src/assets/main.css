@@ -840,18 +840,54 @@ body {
 
 .team-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1.4fr) 48px 34px;
+  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1.2fr) 48px 36px;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  /* 行卡:常规明度,中等圆角 */
-  border-radius: var(--panel-radius-md);
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--panel-radius-lg);
   border: 1px solid var(--panel-line);
   background: var(--panel-card);
   transition:
     transform 200ms cubic-bezier(0.22, 0.9, 0.3, 1),
     border-color 200ms cubic-bezier(0.22, 0.9, 0.3, 1),
     box-shadow 200ms cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+
+/* 双窗口模式:四列——rank | name | windows(上下堆叠) | credit */
+.team-row--dual {
+  grid-template-columns: 28px auto 1fr 36px;
+  grid-template-rows: auto auto;
+  padding: 12px 16px;
+  gap: 4px 10px;
+  align-items: start;
+}
+
+.team-row--dual .team-row__rank {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  align-self: center;
+}
+
+.team-row--dual .team-row__name {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  align-self: center;
+}
+
+.team-row--dual .team-row__windows {
+  grid-column: 3;
+  grid-row: 1 / 3;
+}
+
+.team-row--dual .team-row__credit {
+  grid-column: 4;
+  grid-row: 1 / 3;
+  align-self: center;
+}
+
+.team-row--dual .team-row__value,
+.team-row--dual .team-row__bar {
+  display: none;
 }
 
 .team-row:hover {
@@ -936,59 +972,48 @@ body {
   height: 12px;
 }
 
-/* 团队摘要区:横排小统计标签 */
-.team-summary {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: var(--panel-space-section);
-  padding: 14px 16px;
-  border-radius: var(--panel-radius-lg);
-  border: 1px solid var(--panel-line);
-  background: var(--panel-card-2);
-}
-
-.team-summary__item {
+/* 双窗口行:每个窗口一行,紧凑横排 label + 百分比 + 进度条 */
+.team-row__windows {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+  gap: 5px;
 }
 
-.team-summary__label {
+.team-row__window {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 6px;
+}
+
+.team-row__window-label {
   color: var(--panel-muted);
-  font-size: 10.5px;
-  font-weight: 480;
+  font-size: 11px;
+  font-weight: 520;
   line-height: 1;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.team-summary__value {
+.team-row__window-value {
   color: var(--panel-text);
-  font-size: 19px;
-  font-weight: 720;
-  line-height: 1;
+  font-size: 13px;
+  font-weight: 660;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.015em;
+  line-height: 1;
 }
 
-.team-summary__value--accent {
-  color: var(--panel-accent);
+.team-row__window-bar {
+  height: 3px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
 }
 
-.team-summary__unit {
-  margin-left: 3px;
-  font-size: 12px;
-  font-weight: 540;
-  color: var(--panel-muted);
-}
-
-.team-summary__unit:empty {
-  margin-left: 0;
+.team-row__window-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--metric-accent, rgba(151, 163, 176, 0.74));
+  transition: width 400ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .team-empty {
