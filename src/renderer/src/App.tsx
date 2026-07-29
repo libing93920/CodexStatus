@@ -62,7 +62,7 @@ const COPY = {
     manual: '手动',
     enabled: '开启',
     disabled: '关闭',
-    remaining: '未使用',
+    remaining: '剩余',
     used: '已使用',
     officialSource: '官方接口',
     localSource: '本地 JSONL',
@@ -331,27 +331,16 @@ function App(): React.JSX.Element {
     ? 'custom'
     : String(settings.refreshIntervalSeconds)
   const canEditCustomRefresh = settings.refreshMode === 'auto' && isCustomRefreshInterval
-  const sourceLabel =
-    snapshot.rateLimitSource === 'official'
-      ? copy.officialSource
-      : snapshot.rateLimitSource === 'local'
-        ? copy.localSource
-        : copy.emptySource
   const sourceValue = snapshot.rateLimitSource === 'none' ? copy.noData : snapshot.sourceHost
-  // 官方不可用(退回本地)时,来源处直接以红色"不可用"badge 提示,不再单独渲染横幅
-  const officialDown = snapshot.rateLimitSource === 'local' && Boolean(snapshot.officialIssue)
-  const sourceBadgeText = officialDown ? copy.officialUnavailable : sourceLabel
-  const sourceBadgeClassName = officialDown
-    ? 'panel__meta-badge panel__meta-badge--danger'
-    : 'panel__meta-badge'
-  const eyebrowText = officialDown ? copy.officialUnavailable : sourceLabel
-  const eyebrowClassName = officialDown ? 'panel__eyebrow panel__eyebrow--danger' : 'panel__eyebrow'
   const rateLimitWindows = [...snapshot.rateLimits].sort((a, b) => {
     // 短窗口(5h)排在前,长窗口(7d)排在后,确保胶囊取到5h优先
     const am = a.windowMinutes ?? 0
     const bm = b.windowMinutes ?? 0
     return am - bm
-  })
+  }).map((w) => ({
+    ...w,
+    label: w.label === '7d' && settings.locale === 'zh-CN' ? '1周' : w.label
+  }))
   // 所有窗口都用 QuotaCard 展示(5h+7d);胶囊百分比+进度条优先取短窗口,无短窗口则取长窗口兜底
   const cardWindows = rateLimitWindows
   const cardWindowCount = cardWindows.length
@@ -863,7 +852,6 @@ function App(): React.JSX.Element {
               />
               <div className="panel__header panel__header--details">
                 <div>
-                  <p className={eyebrowClassName}>{eyebrowText}</p>
                   <h2 className="panel__title">{copy.details}</h2>
                 </div>
               </div>
@@ -899,39 +887,11 @@ function App(): React.JSX.Element {
                   />
                 ))}
               </div>
-
-              <div className="panel__meta">
-                <span
-                  className="panel__meta-row"
-                  style={{ '--icon-tone': 'var(--panel-icon-blue)' } as CSSProperties}
-                >
-                  <ServerIcon />
-                  <span className="panel__meta-value-group">
-                    <span className="panel__meta-main">{sourceValue}</span>
-                    <span className={sourceBadgeClassName}>{sourceBadgeText}</span>
-                  </span>
-                </span>
-                <span
-                  className="panel__meta-row"
-                  style={{ '--icon-tone': 'var(--panel-icon-amber)' } as CSSProperties}
-                >
-                  <HistoryIcon />
-                  <span className="panel__meta-value-group">
-                    <span className="panel__meta-main">
-                      {formatAbsoluteDate(snapshot.generatedAt, settings.locale)}
-                    </span>
-                    <span className="panel__meta-hint">
-                      {copy.lastRefreshHint} ·{' '}
-                      {formatRelativeDate(snapshot.generatedAt, settings.locale)}
-                    </span>
-                  </span>
-                </span>
-              </div>
             </div>
 
             <div className="panel__footer">
               <span className="panel__footer-meta">
-                {copy.lastRefreshHint} · {formatRelativeDate(snapshot.generatedAt, settings.locale)}
+                {sourceValue} · {copy.lastRefreshHint} · {formatRelativeDate(snapshot.generatedAt, settings.locale)}
               </span>
               <button className="ghost-button" onClick={closePanel} type="button">
                 <CloseIcon />
@@ -1875,47 +1835,11 @@ function CloseIcon(): React.JSX.Element {
   )
 }
 
-function ServerIcon(): React.JSX.Element {
-  return (
-    <svg fill="none" viewBox="0 0 24 24">
-      <rect height="5" rx="1.5" stroke="currentColor" strokeWidth="1.75" width="16" x="4" y="5" />
-      <rect height="5" rx="1.5" stroke="currentColor" strokeWidth="1.75" width="16" x="4" y="14" />
-      <path
-        d="M8 7.5h.01M8 16.5h.01M12 7.5h6M12 16.5h6"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="1.75"
-      />
-    </svg>
-  )
-}
-
 function HourglassIcon(): React.JSX.Element {
   return (
     <svg fill="none" viewBox="0 0 24 24">
       <path
         d="M7 3.75h10M7 20.25h10M7.5 3.75v3.2c0 1.5.9 2.8 2.3 3.3l3.9 1.4c1.4.5 2.3 1.8 2.3 3.3v3.2M16.5 3.75v3.2c0 1.5-.9 2.8-2.3 3.3l-3.9 1.4c-1.4.5-2.3 1.8-2.3 3.3v3.2"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.75"
-      />
-    </svg>
-  )
-}
-
-function HistoryIcon(): React.JSX.Element {
-  return (
-    <svg fill="none" viewBox="0 0 24 24">
-      <path
-        d="M4.5 12A7.5 7.5 0 1 0 7 6.42M4.5 4.5v4h4"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.75"
-      />
-      <path
-        d="M12 8.25V12l2.75 1.5"
         stroke="currentColor"
         strokeLinecap="round"
         strokeLinejoin="round"

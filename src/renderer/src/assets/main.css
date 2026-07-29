@@ -465,8 +465,8 @@ body {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 16px 18px 17px;
+  gap: 7px;
+  padding: 12px 14px 13px;
   overflow: hidden;
   /* 大圆角,层级靠明度阶梯:默认常规卡,--is-accent 时升为主卡 */
   border-radius: var(--panel-radius-xl);
@@ -518,7 +518,7 @@ body {
 
 .quota-card__label {
   color: var(--panel-text);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 660;
   line-height: 1;
   letter-spacing: 0.01em;
@@ -528,17 +528,17 @@ body {
 .quota-card__mode {
   overflow: hidden;
   color: var(--panel-muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 480;
   line-height: 1;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-/* 主数据:重字重撑起视觉重心,不用霓虹发光;主卡 36px,次卡 28px(由 is-accent 控制) */
+/* 主数据:重字重撑起视觉重心,不用霓虹发光;主卡 28px,次卡 24px(由 is-accent 控制) */
 .quota-card__value {
   color: var(--metric-accent);
-  font-size: 32px;
+  font-size: 26px;
   font-weight: 760;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -546,12 +546,12 @@ body {
 }
 
 .quota-card.is-accent .quota-card__value {
-  font-size: 36px;
+  font-size: 28px;
   font-weight: 780;
 }
 
 .quota-card__progress {
-  height: 4px;
+  height: 3px;
   display: block;
   overflow: hidden;
   border-radius: 999px;
@@ -559,7 +559,7 @@ body {
 }
 
 .quota-card.is-accent .quota-card__progress {
-  height: 6px;
+  height: 4px;
 }
 
 .quota-card__progress span {
