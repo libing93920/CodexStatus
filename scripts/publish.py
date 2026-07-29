@@ -163,10 +163,11 @@ def publish(gh: str, version: str, artifacts: dict[str, Path], notes: str | None
         str(artifacts["latest"]),
         str(artifacts["blockmap"]),
     ]
-    # notes:有自定义用自定义,否则用简单版本号说明(不依赖仓库 commit 历史,
-    # 空仓库/无 tag 时 --generate-notes 会 HTTP 422)
     if notes:
-        cmd += ["--notes", notes]
+        # 写临时文件避免 shell 转义截断多行 notes
+        notes_path = root() / "dist" / "release-notes.md"
+        notes_path.write_text(notes, encoding="utf-8")
+        cmd += ["--notes-file", str(notes_path)]
     else:
         cmd += ["--notes", f"CodexStatus {tag}"]
     run(cmd)

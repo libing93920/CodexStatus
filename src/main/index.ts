@@ -297,6 +297,18 @@ if (hasSingleInstanceLock) {
       sendToRenderers(CHANNELS.updateProgress, payload)
     })
     initAutoUpdater()
+    // 启动后延迟检查更新:用户无需手动点"检查更新"即可获知新版本
+    if (app.isPackaged) {
+      setTimeout(async () => {
+        const result = await checkForUpdates()
+        if (result.available && result.version) {
+          sendToRenderers(CHANNELS.updateProgress, {
+            stage: 'available',
+            version: result.version
+          })
+        }
+      }, 5000)
+    }
     mainWindow = createCapsuleWindow()
     createTray()
     watchCodexAuthFile()
