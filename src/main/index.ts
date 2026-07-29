@@ -764,10 +764,10 @@ async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): 
         iqThreshold: persistedState.settings.iqThreshold,
         bestModelPick: currentSnapshot.bestModelPick
       })
-      // collect 期间 radar 回调可能已更新 bestModelPick;返回值若为空则保留当前已缓存的 pick,避免被覆盖清空
+      // collect 期间 radar 回调可能已更新 bestModelPick;优先取最新值,旧值仅作兜底
       currentSnapshot = {
         ...collected,
-        bestModelPick: collected.bestModelPick ?? currentSnapshot.bestModelPick,
+        bestModelPick: currentSnapshot.bestModelPick ?? collected.bestModelPick,
         teamPeers: buildTeamPeers(getSelfRemaining())
       }
       // 本机数据变化,广播给已连 peer
