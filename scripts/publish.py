@@ -165,7 +165,7 @@ def publish(gh: str, version: str, artifacts: dict[str, Path], notes: str | None
     ]
     if notes:
         # 写临时文件避免 shell 转义截断多行 notes
-        notes_path = root() / "dist" / "release-notes.md"
+        notes_path = repo_root() / "dist" / "release-notes.md"
         notes_path.write_text(notes, encoding="utf-8")
         cmd += ["--notes-file", str(notes_path)]
     else:
