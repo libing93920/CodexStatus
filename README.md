@@ -160,7 +160,7 @@ python scripts/publish.py --notes "说明"  # 自定义 Release 备注
 
 When using Codex daily, you often face:
 
-- Need to open a browser just to check your remaining quota — constant context switching
+- Need to click through Codex → username → usage — at least 3 clicks just to see your quota
 - Can't see 5h vs. 7d quota separately, or when each resets
 - Too many model options, not sure which gives the best value
 - Can't see team members' quota usage to coordinate
