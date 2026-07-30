@@ -476,8 +476,12 @@ function registerIpcHandlers(): void {
     }
   })
 
-  // 胶囊窗口点击打开 panel:渲染层调此 IPC,主进程复用 openPanelWindow 创建/显示 panel
+  // 胶囊窗口点击 toggle panel:已显示则关闭,未显示则打开
   ipcMain.handle(CHANNELS.showPanel, async (_, view: PanelView) => {
+    if (panelWindow && !panelWindow.isDestroyed() && panelWindow.isVisible()) {
+      panelWindow.hide()
+      return
+    }
     openPanelWindow(view)
   })
 
