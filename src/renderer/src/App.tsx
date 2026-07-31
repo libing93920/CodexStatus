@@ -408,22 +408,23 @@ function App(): React.JSX.Element {
           }
         ]
       : []),
-    ...(snapshot.bestModelPick
-      ? [
-          {
-            icon: <SparkleIcon />,
-            iconTone: 'var(--panel-icon-violet)',
-            label: settings.locale === 'zh-CN' ? '雷达推荐模型' : 'Top model',
-            labelHref: 'https://codex-reset-radar.pages.dev/',
-            value: formatModelPick(snapshot.bestModelPick.shortLabel),
-            valueColor: resolveModelColor(snapshot.bestModelPick.label),
-            hint:
-              settings.locale === 'zh-CN'
-                ? `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/题`
-                : `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/task`
-          }
-        ]
-      : []),
+    {
+      icon: <SparkleIcon />,
+      iconTone: 'var(--panel-icon-violet)',
+      label: settings.locale === 'zh-CN' ? '雷达推荐模型' : 'Top model',
+      labelHref: 'https://codex-reset-radar.pages.dev/',
+      value: snapshot.bestModelPick
+        ? formatModelPick(snapshot.bestModelPick.shortLabel)
+        : (settings.locale === 'zh-CN' ? '查看雷达' : 'View radar'),
+      valueColor: snapshot.bestModelPick
+        ? resolveModelColor(snapshot.bestModelPick.label)
+        : undefined,
+      hint: snapshot.bestModelPick
+        ? (settings.locale === 'zh-CN'
+          ? `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/题`
+          : `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/task`)
+        : undefined
+    },
     // 额度特赦重置:静态外链入口,跳转 codex-resets.com 查看官方重置记录
     {
       icon: <ResetIcon />,
