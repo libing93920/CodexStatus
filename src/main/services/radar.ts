@@ -66,16 +66,19 @@ function clampThreshold(value: number): number {
 
 async function fetchRawEntries(): Promise<{ entries: RadarModelEntry[]; updatedAt?: string } | undefined> {
   try {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), RADAR_TIMEOUT_MS)
-    const response = await net.fetch(RADAR_URL, {
-      signal: controller.signal,
-      headers: { Accept: 'application/json' }
-    })
-    clearTimeout(timer)
+    console.log('[codex-status] radar fetching:', RADAR_URL)
+    const response = await Promise.race([
+      net.fetch(RADAR_URL, { headers: { Accept: 'application/json' } }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), RADAR_TIMEOUT_MS)
+      )
+    ]) as Response
+    console.log('[codex-status] radar response:', response.status, response.ok)
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const data = (await response.json()) as unknown
+    console.log('[codex-status] radar data keys:', Object.keys(data as Record<string,unknown>))
     const parsed = parseComparisons(data)
+    console.log('[codex-status] radar parsed:', parsed ? `${parsed.entries.length} entries` : 'undefined')
     return parsed
   } catch (error) {
     console.warn('[codex-status] radar fetch failed:', error instanceof Error ? error.message : error)
@@ -87,7 +90,10 @@ function parseComparisons(response: unknown): { entries: RadarModelEntry[]; upda
   const body = getRecord(response)
   const modelIq = getRecord(body?.model_iq)
   const comparisons = modelIq?.comparisons
-  if (!comparisons || typeof comparisons !== 'object') return undefined
+  if (!comparisons || typeof comparisons !== 'object') {
+    console.warn('[codex-status] radar parse: comparisons missing, model_iq keys:', modelIq ? Object.keys(modelIq) : 'model_iq missing')
+    return undefined
+  }
 
   const entries: RadarModelEntry[] = []
   for (const value of Object.values(comparisons as Record<string, unknown>)) {
@@ -179,7 +185,9 @@ export async function refreshRadarNow(threshold: number): Promise<RadarBestPick 
 }
 
 async function tickRadar(): Promise<RadarBestPick | undefined> {
+  console.log('[codex-status] radar tick, threshold:', radarThreshold)
   const pick = await fetchRadarBestPick(radarThreshold).catch(() => undefined)
+  console.log('[codex-status] radar pick:', pick ? pick.shortLabel : 'undefined')
   radarHandler?.(pick)
   return pick
 }
