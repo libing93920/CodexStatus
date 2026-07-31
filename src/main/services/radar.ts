@@ -127,14 +127,21 @@ function pickBest(
   minScore: number,
   updatedAt?: string
 ): RadarBestPick | undefined {
-  const eligible = entries.filter((e) => e.score >= minScore)
-  if (eligible.length === 0) return undefined
+  if (entries.length === 0) return undefined
 
+  const eligible = entries.filter((e) => e.score >= minScore)
   // 选模型规则:先按 IQ 阈值过滤(用户设置),再在合格模型里选每题成本(average_cost_usd)最低的。
   // 不看性价比 score/cost,也不看 green/yellow/red 状态——只认"够聪明 + 最便宜"
-  eligible.sort((left, right) => left.averageCostUsd - right.averageCostUsd)
+  // 无模型达标时:降级取分数最高的模型(而非啥都不显示)
+  const pool = eligible.length > 0 ? eligible : entries
+  pool.sort((left, right) => left.averageCostUsd - right.averageCostUsd)
 
-  const best = eligible[0]
+  if (eligible.length === 0) {
+    console.warn(
+      `[codex-status] radar: no model meets IQ≥${minScore}, fallback to best available (${pool[0].label}, score ${pool[0].score.toFixed(1)})`
+    )
+  }
+  const best = pool[0]
   return {
     label: best.label,
     shortLabel: shortenLabel(best.label),
