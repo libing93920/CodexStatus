@@ -1,4 +1,5 @@
 import { DEFAULT_IQ_THRESHOLD, MAX_IQ_THRESHOLD, MIN_IQ_THRESHOLD } from '../../shared/capsule'
+import { net } from 'electron'
 
 const RADAR_URL = 'https://codex-reset-radar.pages.dev/current.json'
 const RADAR_TIMEOUT_MS = 8000
@@ -35,9 +36,7 @@ interface RawCacheEntry {
 
 let rawCache: RawCacheEntry | undefined
 
-// 公开数据走全局 fetch (Node 24 原生,不走 Electron net/代理):
-// codex-reset-radar 是 Cloudflare Pages 静态站点,不需要鉴权/cookie/系统代理;
-// Electron net 在部分代理环境对 Cloudflare 可能握手异常,Node fetch 实测稳定。
+// 走 Electron net(Chromium 网络栈),跟随系统代理,与浏览器行为一致
 export async function fetchRadarBestPick(
   minScore: number = DEFAULT_IQ_THRESHOLD
 ): Promise<RadarBestPick | undefined> {
@@ -69,7 +68,7 @@ async function fetchRawEntries(): Promise<{ entries: RadarModelEntry[]; updatedA
   try {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), RADAR_TIMEOUT_MS)
-    const response = await globalThis.fetch(RADAR_URL, {
+    const response = await net.fetch(RADAR_URL, {
       signal: controller.signal,
       headers: { Accept: 'application/json' }
     })
