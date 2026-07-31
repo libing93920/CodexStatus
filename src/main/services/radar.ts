@@ -133,15 +133,16 @@ function pickBest(
   // 选模型规则:先按 IQ 阈值过滤(用户设置),再在合格模型里选每题成本(average_cost_usd)最低的。
   // 不看性价比 score/cost,也不看 green/yellow/red 状态——只认"够聪明 + 最便宜"
   // 无模型达标时:降级取分数最高的模型(而非啥都不显示)
-  const pool = eligible.length > 0 ? eligible : entries
-  pool.sort((left, right) => left.averageCostUsd - right.averageCostUsd)
-
-  if (eligible.length === 0) {
+  const fallback = eligible.length === 0
+  if (fallback) {
+    entries.sort((left, right) => right.score - left.score)
     console.warn(
-      `[codex-status] radar: no model meets IQ≥${minScore}, fallback to best available (${pool[0].label}, score ${pool[0].score.toFixed(1)})`
+      `[codex-status] radar: no model meets IQ≥${minScore}, fallback to best available (${entries[0].label}, score ${entries[0].score.toFixed(1)})`
     )
+  } else {
+    eligible.sort((left, right) => left.averageCostUsd - right.averageCostUsd)
   }
-  const best = pool[0]
+  const best = fallback ? entries[0] : eligible[0]
   return {
     label: best.label,
     shortLabel: shortenLabel(best.label),

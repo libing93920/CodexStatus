@@ -520,7 +520,7 @@ function refreshTrayMenu(): void {
   tray.setToolTip(buildTrayTooltip())
 }
 
-function getTrayLabels(): Record<'refresh' | 'toggle' | 'details' | 'team' | 'settings' | 'quit', string> {
+function getTrayLabels(): Record<'refresh' | 'toggle' | 'details' | 'team' | 'settings' | 'checkUpdate' | 'quit', string> {
   if (persistedState.settings.locale === 'en-US') {
     return {
       refresh: 'Refresh',
@@ -528,6 +528,7 @@ function getTrayLabels(): Record<'refresh' | 'toggle' | 'details' | 'team' | 'se
       details: 'Details',
       team: 'Team',
       settings: 'Settings',
+      checkUpdate: 'Check for updates',
       quit: 'Quit'
     }
   }
@@ -538,6 +539,7 @@ function getTrayLabels(): Record<'refresh' | 'toggle' | 'details' | 'team' | 'se
     details: '详情',
     team: '团队',
     settings: '设置',
+    checkUpdate: '检查更新',
     quit: '退出'
   }
 }
@@ -575,6 +577,20 @@ function buildCapsuleContextMenuTemplate(): MenuItemConstructorOptions[] {
       label: labels.settings,
       click: () => {
         openSettingsFromTray()
+      }
+    },
+    {
+      label: labels.checkUpdate,
+      click: () => {
+        void (async () => {
+          const result = await checkForUpdates()
+          if (result.available && result.version) {
+            sendToRenderers(CHANNELS.updateProgress, {
+              stage: 'available',
+              version: result.version
+            })
+          }
+        })()
       }
     },
     { type: 'separator' },
