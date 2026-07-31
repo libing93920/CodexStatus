@@ -1,6 +1,6 @@
 {
   "name": "codex-status",
-  "version": "1.0.48",
+  "version": "1.0.49",
   "description": "CodexStatus - Codex 额度悬浮监控",
   "main": "./out/main/index.js",
   "author": "codex-status",
