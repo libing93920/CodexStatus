@@ -415,7 +415,7 @@ function App(): React.JSX.Element {
       labelHref: 'https://codex-reset-radar.pages.dev/',
       value: snapshot.bestModelPick
         ? formatModelPick(snapshot.bestModelPick.shortLabel)
-        : (settings.locale === 'zh-CN' ? '未获取到数据' : 'No data'),
+        : undefined,
       valueColor: snapshot.bestModelPick
         ? resolveModelColor(snapshot.bestModelPick.label)
         : undefined,

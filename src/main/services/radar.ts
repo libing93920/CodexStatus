@@ -66,20 +66,15 @@ function clampThreshold(value: number): number {
 
 async function fetchRawEntries(): Promise<{ entries: RadarModelEntry[]; updatedAt?: string } | undefined> {
   try {
-    console.log('[codex-status] radar fetching:', RADAR_URL)
     const response = await Promise.race([
       net.fetch(RADAR_URL, { headers: { Accept: 'application/json' } }),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('timeout')), RADAR_TIMEOUT_MS)
       )
     ]) as Response
-    console.log('[codex-status] radar response:', response.status, response.ok)
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const data = (await response.json()) as unknown
-    console.log('[codex-status] radar data keys:', Object.keys(data as Record<string,unknown>))
-    const parsed = parseComparisons(data)
-    console.log('[codex-status] radar parsed:', parsed ? `${parsed.entries.length} entries` : 'undefined')
-    return parsed
+    return parseComparisons(data)
   } catch (error) {
     console.warn('[codex-status] radar fetch failed:', error instanceof Error ? error.message : error)
     return undefined
@@ -122,6 +117,15 @@ function parseComparisons(response: unknown): { entries: RadarModelEntry[]; upda
   return { entries, updatedAt: getString(modelIq?.updated_at) }
 }
 
+interface Extremes {
+  minScore: number
+  maxScore: number
+  minCost: number
+  maxCost: number
+  minTaskSec: number
+  maxTaskSec: number
+}
+
 function pickBest(
   entries: RadarModelEntry[],
   minScore: number,
@@ -129,30 +133,79 @@ function pickBest(
 ): RadarBestPick | undefined {
   if (entries.length === 0) return undefined
 
-  const eligible = entries.filter((e) => e.score >= minScore)
-  // 选模型规则:先按 IQ 阈值过滤(用户设置),再在合格模型里选每题成本(average_cost_usd)最低的。
-  // 不看性价比 score/cost,也不看 green/yellow/red 状态——只认"够聪明 + 最便宜"
-  // 无模型达标时:降级取分数最高的模型(而非啥都不显示)
-  const fallback = eligible.length === 0
-  if (fallback) {
-    entries.sort((left, right) => right.score - left.score)
-    console.warn(
-      `[codex-status] radar: no model meets IQ≥${minScore}, fallback to best available (${entries[0].label}, score ${entries[0].score.toFixed(1)})`
-    )
-  } else {
-    eligible.sort((left, right) => left.averageCostUsd - right.averageCostUsd)
+  let threshold = minScore
+  let qualified = entries.filter((e) => e.score >= threshold)
+  while (qualified.length === 0) {
+    threshold--
+    qualified = entries.filter((e) => e.score >= threshold)
   }
-  const best = fallback ? entries[0] : eligible[0]
+  if (threshold < minScore) {
+    console.warn(
+      `[codex-status] radar: no model above IQ ${minScore}, auto-lowered to ${threshold} (${qualified.length} candidates)`
+    )
+  }
+
+  const ext = calcExtremes(qualified)
+  const scored = qualified.map((e) => ({
+    entry: e,
+    final: compositeScore(e, ext)
+  }))
+  scored.sort((a, b) => b.final - a.final)
+  const best = scored[0]
+
   return {
-    label: best.label,
-    shortLabel: shortenLabel(best.label),
-    score: best.score,
-    averageCostUsd: best.averageCostUsd,
-    averageTaskMinutes: Math.max(1, Math.round(best.averageTaskSeconds / 60)),
-    status: best.status,
-    threshold: minScore,
+    label: best.entry.label,
+    shortLabel: shortenLabel(best.entry.label),
+    score: best.entry.score,
+    averageCostUsd: best.entry.averageCostUsd,
+    averageTaskMinutes: Math.max(1, Math.round(best.entry.averageTaskSeconds / 60)),
+    status: best.entry.status,
+    threshold,
     updatedAt
   }
+}
+
+function calcExtremes(entries: RadarModelEntry[]): Extremes {
+  let minScore = Infinity, maxScore = -Infinity
+  let minCost = Infinity, maxCost = -Infinity
+  let minTaskSec = Infinity, maxTaskSec = -Infinity
+  for (const e of entries) {
+    if (e.score < minScore) minScore = e.score
+    if (e.score > maxScore) maxScore = e.score
+    if (e.averageCostUsd < minCost) minCost = e.averageCostUsd
+    if (e.averageCostUsd > maxCost) maxCost = e.averageCostUsd
+    if (e.averageTaskSeconds < minTaskSec) minTaskSec = e.averageTaskSeconds
+    if (e.averageTaskSeconds > maxTaskSec) maxTaskSec = e.averageTaskSeconds
+  }
+  return { minScore, maxScore, minCost, maxCost, minTaskSec, maxTaskSec }
+}
+
+function compositeScore(entry: RadarModelEntry, ext: Extremes): number {
+  const perf = normalizePositive(entry.score, ext.minScore, ext.maxScore)
+  const model = calcModelFamily(entry.label)
+  const price = normalizeReverse(entry.averageCostUsd, ext.minCost, ext.maxCost)
+  const time = normalizeReverse(entry.averageTaskSeconds, ext.minTaskSec, ext.maxTaskSec)
+  // 表现分 50% + 模型分 5% + 价格分 40% + 时间分 5%
+  return perf * 0.5 + model * 0.05 + price * 0.4 + time * 0.05
+}
+
+function normalizePositive(value: number, min: number, max: number): number {
+  if (max === min) return 100
+  return ((value - min) / (max - min)) * 100
+}
+
+function normalizeReverse(value: number, min: number, max: number): number {
+  if (max === min) return 100
+  return ((max - value) / (max - min)) * 100
+}
+
+function calcModelFamily(label: string): number {
+  const lower = label.toLowerCase()
+  if (lower.includes('sol')) return 100
+  if (/gpt-5\.5/i.test(lower)) return 90
+  if (lower.includes('terra')) return 80
+  if (lower.includes('luna')) return 60
+  return 50
 }
 
 // 让设置面板更改阈值时能立即得到新的pick(基于已缓存数据)
@@ -193,9 +246,7 @@ export async function refreshRadarNow(threshold: number): Promise<RadarBestPick 
 }
 
 async function tickRadar(): Promise<RadarBestPick | undefined> {
-  console.log('[codex-status] radar tick, threshold:', radarThreshold)
   const pick = await fetchRadarBestPick(radarThreshold).catch(() => undefined)
-  console.log('[codex-status] radar pick:', pick ? pick.shortLabel : 'undefined')
   radarHandler?.(pick)
   return pick
 }
