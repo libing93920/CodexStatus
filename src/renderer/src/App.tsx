@@ -15,7 +15,10 @@ import {
   type PercentageMode,
   type RateLimitWindowSnapshot,
   type RendererWindowRole,
+  type TokenUsageDay,
+  type TokenUsageOverview,
   type UsageSnapshot,
+  type UsageWindow,
   type WindowPreferences
 } from '../../shared/capsule'
 
@@ -100,7 +103,19 @@ const COPY = {
     installNow: '安装并重启',
     updateError: '更新失败',
     retryUpdate: '重试',
-    downloadNow: '立即下载'
+    downloadNow: '立即下载',
+    usage: '用量统计',
+    usageTotal: '总 Token',
+    usageInput: '输入',
+    usageOutput: '输出',
+    usageCost: '花费',
+    usageCached: '缓存',
+    usageReasoning: '思考',
+    usageCacheHit: '缓存命中',
+    usageEmpty: '暂无用量数据',
+    usage1d: '1天',
+    usage7d: '7天',
+    usage30d: '30天'
   },
   'en-US': {
     noData: 'No data',
@@ -169,7 +184,19 @@ const COPY = {
     installNow: 'Install & restart',
     updateError: 'Update failed',
     retryUpdate: 'Retry',
-    downloadNow: 'Download'
+    downloadNow: 'Download',
+    usage: 'Usage stats',
+    usageTotal: 'Tokens',
+    usageInput: 'Input',
+    usageOutput: 'Output',
+    usageCost: 'Cost',
+    usageCached: 'Cached',
+    usageReasoning: 'Reasoning',
+    usageCacheHit: 'Cache hit',
+    usageEmpty: 'No usage data yet',
+    usage1d: '1d',
+    usage7d: '7d',
+    usage30d: '30d'
   }
 } as const
 
@@ -875,6 +902,8 @@ function App(): React.JSX.Element {
                 </div>
               ) : null}
 
+              <UsageCard locale={settings.locale} />
+
               <div className="panel__rows">
                 {detailRows.map((row) => (
                   <DetailRow
@@ -1306,6 +1335,295 @@ function formatQuotaResetHint(seconds: number | undefined, locale: LocaleCode): 
   }
 
   return locale === 'zh-CN' ? `${duration}重置` : `resets in ${duration}`
+}
+
+// 用量统计卡片:1/7/30 天 token 与花费,分段切换 + 每日柱状图
+const EMPTY_USAGE_OVERVIEW: TokenUsageOverview = {
+  available: false,
+  generatedAt: '',
+  days: [],
+  totals: { input: 0, cachedInput: 0, output: 0, reasoning: 0, total: 0, cost: 0 }
+}
+
+function UsageCard({ locale }: { locale: LocaleCode }): React.JSX.Element {
+  const copy = COPY[locale]
+  const [windowKey, setWindowKey] = useState<UsageWindow>('7d')
+  // 三个窗口一次性预取,切换按钮即时显示,避免每次切换重新拉取导致的闪烁
+  const [usageByWindow, setUsageByWindow] = useState<
+    Partial<Record<UsageWindow, TokenUsageOverview>>
+  >({})
+  const [hoveredIndex, setHoveredIndex] = useState<number | undefined>(undefined)
+
+  useEffect(() => {
+    let cancelled = false
+    for (const w of ['1d', '7d', '30d'] as UsageWindow[]) {
+      window.codexStatus
+        .getTokenUsage(w)
+        .then((result) => {
+          if (!cancelled) {
+            setUsageByWindow((prev) => ({ ...prev, [w]: result }))
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setUsageByWindow((prev) => ({ ...prev, [w]: EMPTY_USAGE_OVERVIEW }))
+          }
+        })
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const usage = usageByWindow[windowKey]
+  const isLoading = usage === undefined
+  const days = usage?.days ?? []
+  const totals = usage?.totals
+  const hasData = usage?.available === true && totals !== undefined
+  const chartMax = Math.max(1, days.reduce((max, day) => Math.max(max, day.input + day.output), 0))
+
+  return (
+    <section className="usage-card">
+      <div className="usage-card__head">
+        <span className="usage-card__title">{copy.usage}</span>
+        <div className="usage-card__seg">
+          <SegmentedControl
+            value={windowKey}
+            onChange={(value) => setWindowKey(value as UsageWindow)}
+            options={[
+              { label: copy.usage1d, value: '1d' },
+              { label: copy.usage7d, value: '7d' },
+              { label: copy.usage30d, value: '30d' }
+            ]}
+          />
+        </div>
+      </div>
+
+      {isLoading ? (
+        <p className="usage-card__empty">{copy.refreshing}</p>
+      ) : !hasData ? (
+        <p className="usage-card__empty">{copy.usageEmpty}</p>
+      ) : (
+        <>
+          <div className="usage-summary">
+            <UsageSummaryItem label={copy.usageTotal} value={formatCompactTokens(totals.total, locale)} />
+            <UsageSummaryItem
+              label={copy.usageInput}
+              value={formatCompactTokens(totals.input, locale)}
+              tone="input"
+            />
+            <UsageSummaryItem
+              label={copy.usageOutput}
+              value={formatCompactTokens(totals.output, locale)}
+              tone="output"
+            />
+            <UsageSummaryItem
+              label={copy.usageCacheHit}
+              value={formatCacheHit(totals.input, totals.cachedInput)}
+              tone="cached"
+            />
+            <UsageSummaryItem label={copy.usageCost} value={formatUsd(totals.cost)} tone="cost" />
+          </div>
+          {days.length <= 1 && days[0] ? (
+            <UsageBar day={days[0]} locale={locale} />
+          ) : (
+            <div className="usage-chart" onMouseLeave={() => setHoveredIndex(undefined)}>
+              {hoveredIndex !== undefined && days[hoveredIndex] ? (
+                <UsageTooltip
+                  day={days[hoveredIndex]}
+                  index={hoveredIndex}
+                  count={days.length}
+                  locale={locale}
+                />
+              ) : null}
+              {days.map((day, index) => {
+                const value = day.input + day.output
+                const percent = value > 0 ? Math.max(6, (value / chartMax) * 100) : 2
+                const total = Math.max(1, value)
+                const newInput = Math.max(0, day.input - day.cachedInput)
+                // 三段占比合计 100%,从下到上:缓存输入 / 新输入 / 输出
+                const cachedPct = (day.cachedInput / total) * 100
+                const inputPct = (newInput / total) * 100
+                const outputPct = (day.output / total) * 100
+                return (
+                  <div
+                    className="usage-chart__col"
+                    key={day.date}
+                    onMouseEnter={() => setHoveredIndex(index)}
+                  >
+                    <span className="usage-chart__bar-wrap">
+                      <span className="usage-chart__bar usage-chart__bar--stack" style={{ height: `${percent}%` }}>
+                        <span className="usage-chart__bar-seg is-cached" style={{ height: `${cachedPct}%` }} />
+                        <span className="usage-chart__bar-seg is-input" style={{ height: `${inputPct}%` }} />
+                        <span className="usage-chart__bar-seg is-output" style={{ height: `${outputPct}%` }} />
+                      </span>
+                    </span>
+                    <span
+                      className={`usage-chart__date${shouldShowDateLabel(days.length, index) ? '' : ' is-hidden'}`}
+                    >
+                      {formatDayLabel(day.date)}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
+// 柱状图 hover 浮层:单日完整明细
+function UsageTooltip({
+  day,
+  index,
+  count,
+  locale
+}: {
+  day: TokenUsageDay
+  index: number
+  count: number
+  locale: LocaleCode
+}): React.JSX.Element {
+  const copy = COPY[locale]
+  // 浮层居中于当前柱,靠边时向内收避免溢出卡片
+  const left = Math.max(15, Math.min(85, ((index + 0.5) / count) * 100))
+  return (
+    <div className="usage-tooltip" style={{ left: `${left}%` }}>
+      <div className="usage-tooltip__date">{day.date}</div>
+      <div className="usage-tooltip__row">
+        <span>{copy.usageTotal}</span>
+        <span>{formatCompactTokens(day.input + day.output, locale)}</span>
+      </div>
+      <div className="usage-tooltip__row">
+        <span>{copy.usageInput}</span>
+        <span>{formatCompactTokens(day.input, locale)}</span>
+      </div>
+      <div className="usage-tooltip__row">
+        <span>{copy.usageCached}</span>
+        <span>{formatCompactTokens(day.cachedInput, locale)}</span>
+      </div>
+      <div className="usage-tooltip__row">
+        <span>{copy.usageCacheHit}</span>
+        <span>{formatCacheHit(day.input, day.cachedInput)}</span>
+      </div>
+      <div className="usage-tooltip__row">
+        <span>{copy.usageOutput}</span>
+        <span>{formatCompactTokens(day.output, locale)}</span>
+      </div>
+      <div className="usage-tooltip__row">
+        <span>{copy.usageReasoning}</span>
+        <span>{formatCompactTokens(day.reasoning, locale)}</span>
+      </div>
+      <div className="usage-tooltip__row usage-tooltip__cost">
+        <span>{copy.usageCost}</span>
+        <span>{formatUsd(day.cost)}</span>
+      </div>
+    </div>
+  )
+}
+
+// 1天视图:横向堆叠进度条(输入/缓存/输出分段着色),避免单柱图过于空旷
+function UsageBar({ day, locale }: { day: TokenUsageDay; locale: LocaleCode }): React.JSX.Element {
+  const copy = COPY[locale]
+  const totalTokens = Math.max(1, day.input + day.output)
+  const newInput = Math.max(0, day.input - day.cachedInput)
+  const segments = [
+    { key: 'input', label: copy.usageInput, value: newInput, cls: 'is-input' },
+    { key: 'cached', label: copy.usageCached, value: day.cachedInput, cls: 'is-cached' },
+    { key: 'output', label: copy.usageOutput, value: day.output, cls: 'is-output' }
+  ].filter((s) => s.value > 0)
+  return (
+    <div className="usage-bar">
+      <div className="usage-bar__track">
+        {segments.map((s) => (
+          <span
+            className={`usage-bar__seg ${s.cls}`}
+            key={s.key}
+            style={{ width: `${(s.value / totalTokens) * 100}%` }}
+            title={`${s.label} ${formatCompactTokens(s.value, locale)}`}
+          />
+        ))}
+      </div>
+      <div className="usage-bar__legend">
+        {segments.map((s) => (
+          <span className="usage-bar__legend-item" key={s.key}>
+            <i className={`usage-bar__dot ${s.cls}`} />
+            {s.label} {formatCompactTokens(s.value, locale)}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function UsageSummaryItem({
+  label,
+  value,
+  tone
+}: {
+  label: string
+  value: string
+  tone?: 'input' | 'output' | 'cached' | 'cost'
+}): React.JSX.Element {
+  return (
+    <div className="usage-summary__item">
+      <span className={`usage-summary__value${tone ? `--${tone}` : ''}`}>{value}</span>
+      <span className="usage-summary__label">{label}</span>
+    </div>
+  )
+}
+
+// 窗口天数多时只标首/末与每 5 天,避免拥挤
+function shouldShowDateLabel(count: number, index: number): boolean {
+  if (count <= 7) {
+    return true
+  }
+  return index % 5 === 0 || index === count - 1
+}
+
+function formatDayLabel(date: string): string {
+  return date.slice(5)
+}
+
+// 紧凑数字:zh-CN 用 1.2万 / 3.4亿,其余用 1.2K / 3.4M / 1.1B
+function formatCompactTokens(value: number, locale: LocaleCode): string {
+  if (locale === 'zh-CN') {
+    if (value >= 1e8) return `${trimTrailingZero((value / 1e8).toFixed(1))}亿`
+    if (value >= 1e4) return `${trimTrailingZero((value / 1e4).toFixed(1))}万`
+    return String(Math.round(value))
+  }
+  if (value >= 1e9) return `${trimTrailingZero((value / 1e9).toFixed(1))}B`
+  if (value >= 1e6) return `${trimTrailingZero((value / 1e6).toFixed(1))}M`
+  if (value >= 1e3) return `${trimTrailingZero((value / 1e3).toFixed(1))}K`
+  return String(Math.round(value))
+}
+
+function trimTrailingZero(value: string): string {
+  return value.endsWith('.0') ? value.slice(0, -2) : value
+}
+
+// 缓存命中率 = cached_input / input(input 含缓存)
+function formatCacheHit(input: number, cached: number): string {
+  if (input <= 0) {
+    return '--'
+  }
+  const rate = (cached / input) * 100
+  return `${rate >= 99.95 ? rate.toFixed(0) : rate.toFixed(1)}%`
+}
+
+function formatUsd(value: number): string {
+  if (!Number.isFinite(value)) {
+    return '--'
+  }
+  if (value <= 0) {
+    return '$0'
+  }
+  if (value >= 100) {
+    return `$${Math.round(value)}`
+  }
+  return `$${value.toFixed(value < 0.01 ? 4 : 2)}`
 }
 
 function DetailRow({

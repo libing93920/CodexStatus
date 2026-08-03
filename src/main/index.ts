@@ -41,10 +41,13 @@ import {
   type RendererWindowRole,
   type TeamPeer,
   type UsageSnapshot,
+  type UsageWindow,
   type WindowPreferences
 } from '../shared/capsule'
 import { collectUsageSnapshot, invalidateQuotaCaches, resolveCodexAuthPath } from './services/quota'
 import { refreshRadarNow, startRadarTimer, stopRadarTimer } from './services/radar'
+import { getTokenUsage, setRateLookup } from './services/usage'
+import { fetchModelsDevRates, getPricingRate } from './services/pricing'
 import { loadPersistedState, savePersistedState } from './services/state'
 import { LanService, type PeerSnapshot } from './services/lan'
 import {
@@ -71,6 +74,7 @@ const CHANNELS = {
   checkUpdate: 'codex-status:check-update',
   downloadUpdate: 'codex-status:download-update',
   installUpdate: 'codex-status:install-update',
+  tokenUsage: 'codex-status:token-usage',
   updateProgress: 'codex-status:update-progress'
 } as const
 
@@ -328,6 +332,10 @@ if (hasSingleInstanceLock) {
     })
     void refreshStatus()
 
+    // models.dev 价格后台同步:注入花费计算,拉取失败自动回落内置价格表
+    setRateLookup(getPricingRate)
+    void fetchModelsDevRates()
+
     app.on('activate', function () {
       if (mainWindow === null) {
         mainWindow = createCapsuleWindow()
@@ -488,6 +496,11 @@ function registerIpcHandlers(): void {
   // 手动检查更新:dev 环境返回 available=false,打包后查 GitHub Releases
   ipcMain.handle(CHANNELS.checkUpdate, async () => {
     return checkForUpdates()
+  })
+
+  // 按需拉取 1/7/30 天 token 用量统计(独立 IPC,不进快照广播)
+  ipcMain.handle(CHANNELS.tokenUsage, async (_event, window: UsageWindow) => {
+    return getTokenUsage(window)
   })
 
   // 下载已检测到的新版本安装包;进度经 updateProgress 通道推送

@@ -77,6 +77,40 @@ export interface TeamPeer {
   updatedAt?: string
 }
 
+export type UsageWindow = '1d' | '7d' | '30d'
+
+/** 单日 token 用量与估算花费 */
+export interface TokenUsageDay {
+  /** 本地自然日 YYYY-MM-DD */
+  date: string
+  /** 总输入 token(含缓存) */
+  input: number
+  /** 其中缓存输入 token */
+  cachedInput: number
+  /** 总输出 token(含思考) */
+  output: number
+  /** 其中思考输出 token */
+  reasoning: number
+  /** 估算花费(USD) */
+  cost: number
+}
+
+/** 1/7/30 天 token 用量统计总览 */
+export interface TokenUsageOverview {
+  available: boolean
+  generatedAt: string
+  /** 升序日期序列,长度=窗口天数,缺失日零填充 */
+  days: TokenUsageDay[]
+  totals: {
+    input: number
+    cachedInput: number
+    output: number
+    reasoning: number
+    total: number
+    cost: number
+  }
+}
+
 export const DEFAULT_IQ_THRESHOLD = 90
 export const MIN_IQ_THRESHOLD = 60
 export const MAX_IQ_THRESHOLD = 115
@@ -158,6 +192,8 @@ export interface CodexStatusApi {
   showPanel: (view: PanelView) => Promise<void>
   /** 手动检查 GitHub Releases 是否有新版本 */
   checkForUpdate: () => Promise<UpdateCheckResult>
+  /** 获取 1/7/30 天 token 用量与估算花费(按需拉取,不走快照广播) */
+  getTokenUsage: (window: UsageWindow) => Promise<TokenUsageOverview>
   /** 下载已检测到的新版本安装包 */
   downloadUpdate: () => Promise<void>
   /** 退出并运行安装程序,覆盖升级 */

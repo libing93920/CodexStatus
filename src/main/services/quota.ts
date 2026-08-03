@@ -17,7 +17,7 @@ interface RateLimitSnapshot {
   secondary?: RawRateLimit
 }
 
-interface JsonlFileEntry {
+export interface JsonlFileEntry {
   filePath: string
   mtimeMs: number
 }
@@ -478,7 +478,7 @@ function resolveCodexConfigDir(): string {
   return codexHome ? path.resolve(expandHome(codexHome)) : path.join(os.homedir(), '.codex')
 }
 
-function resolveSessionPaths(): string[] {
+export function resolveSessionPaths(): string[] {
   const paths: string[] = []
   const codexHome = process.env.CODEX_HOME?.trim()
 
@@ -500,7 +500,10 @@ function expandHome(value: string): string {
   return value
 }
 
-async function collectJsonlFiles(root: string, maxEntries: number): Promise<JsonlFileEntry[]> {
+export async function collectJsonlFiles(
+  root: string,
+  maxEntries: number
+): Promise<JsonlFileEntry[]> {
   const entries: JsonlFileEntry[] = []
   await collectJsonlFilesInto(root, entries, maxEntries)
   return entries
@@ -691,7 +694,7 @@ function resolveSourceHost(rateLimitSource: RateLimitSource): string {
   return 'No data'
 }
 
-function parseJsonObject(value: string): Record<string, unknown> | undefined {
+export function parseJsonObject(value: string): Record<string, unknown> | undefined {
   try {
     return getRecord(JSON.parse(value))
   } catch {
@@ -699,7 +702,7 @@ function parseJsonObject(value: string): Record<string, unknown> | undefined {
   }
 }
 
-function parseTimestamp(record: Record<string, unknown>): Date | undefined {
+export function parseTimestamp(record: Record<string, unknown>): Date | undefined {
   const value = getString(record.timestamp ?? record.time ?? record.created_at ?? record.createdAt)
   if (!value) {
     return undefined
@@ -744,17 +747,17 @@ function getOfficialWindowEntries(
   return Array.from(windows.entries())
 }
 
-function getRecord(value: unknown): Record<string, unknown> | undefined {
+export function getRecord(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined
 }
 
-function getString(value: unknown): string | undefined {
+export function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
 }
 
-function getNonNegativeNumber(value: unknown): number | undefined {
+export function getNonNegativeNumber(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value >= 0 ? value : undefined
   }
