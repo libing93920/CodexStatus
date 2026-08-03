@@ -77,10 +77,11 @@ export async function fetchModelsDevRates(): Promise<void> {
     }
     ratesCache = map
     fetchedAtMs = Date.now()
-    console.log(`[codex-status] models.dev 价格同步完成,${map.size} 个模型`)
+    // 用 ASCII 避免 Windows 控制台按 GBK 解码 UTF-8 中文出现乱码
+    console.log(`[codex-status] models.dev pricing synced, ${map.size} models`)
   } catch (error) {
     console.warn(
-      '[codex-status] models.dev 价格拉取失败,回落内置表:',
+      '[codex-status] models.dev pricing fetch failed, fallback to built-in table:',
       error instanceof Error ? error.message : String(error)
     )
   }
