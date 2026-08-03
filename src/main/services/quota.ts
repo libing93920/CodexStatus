@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs'
 import type { Dirent } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import type { RateLimitSource, RateLimitWindowSnapshot, UsageSnapshot } from '../../shared/capsule'
+import type { AuthMode, RateLimitSource, RateLimitWindowSnapshot, UsageSnapshot } from '../../shared/capsule'
 
 interface RawRateLimit {
   windowMinutes?: number
@@ -22,14 +22,11 @@ export interface JsonlFileEntry {
   mtimeMs: number
 }
 
-interface CredentialLookup {
-  credentials?: {
-    accessToken: string
-    accountId?: string
-  }
-  canRefresh: boolean
-  issue?: string
-}
+// 凭据判别式:chatgpt=订阅 OAuth,api=API Key,none=未识别/缺失
+type CredentialLookup =
+  | { canRefresh: true; mode: 'chatgpt'; accessToken: string; accountId?: string }
+  | { canRefresh: true; mode: 'api'; apiKey: string }
+  | { canRefresh: false; mode: 'none'; issue?: string }
 
 const SESSION_SUBDIR = 'sessions'
 const OFFICIAL_CODEX_USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage'
@@ -98,8 +95,13 @@ export async function collectUsageSnapshot(
   let bestModelPick: UsageSnapshot['bestModelPick']
 
   const credentialLookup = await readOfficialCodexCredentials()
-  if (credentialLookup.credentials) {
-    const headers = buildOfficialHeaders(credentialLookup.credentials)
+  let authMode: AuthMode = 'none'
+  if (credentialLookup.mode === 'chatgpt') {
+    authMode = 'chatgpt'
+    const headers = buildOfficialHeaders({
+      accessToken: credentialLookup.accessToken,
+      accountId: credentialLookup.accountId
+    })
     const lookup = await fetchOfficialRateLimits(headers, localRateLimits)
     if (lookup.rateLimits !== undefined) {
       rateLimits = lookup.rateLimits
@@ -108,8 +110,11 @@ export async function collectUsageSnapshot(
       officialIssue = lookup.issue
     }
     resetCredit = await getResetCreditWithCache(headers)
+  } else if (credentialLookup.mode === 'api') {
+    // API Key 模式:无订阅额度窗口与重置卡,保持本地来源;不产生官方接口错误噪音
+    authMode = 'api'
   } else {
-    officialIssue = credentialLookup.issue ?? '未找到 Codex OAuth 凭据'
+    officialIssue = credentialLookup.issue ?? '未找到 Codex 凭据'
   }
 
   bestModelPick = options.bestModelPick
@@ -129,6 +134,7 @@ export async function collectUsageSnapshot(
     available: hasRateLimits(rateLimits),
     isRefreshing: false,
     canRefresh: credentialLookup?.canRefresh ?? true,
+    authMode,
     generatedAt: new Date().toISOString(),
     rateLimits,
     rateLimitSource,
@@ -331,35 +337,44 @@ function buildOfficialHeaders(credentials: {
   return headers
 }
 
-async function readOfficialCodexCredentials(): Promise<CredentialLookup> {
+export async function readOfficialCodexCredentials(): Promise<CredentialLookup> {
   const authPath = resolveCodexAuthPath()
 
   try {
     const content = await fs.readFile(authPath, 'utf8')
     const auth = parseJsonObject(content)
     if (!auth) {
-      return { canRefresh: false, issue: 'Codex auth.json 不是有效 JSON' }
+      return { canRefresh: false, mode: 'none', issue: 'Codex auth.json 不是有效 JSON' }
     }
 
-    if (getString(auth.auth_mode ?? auth.authMode) !== 'chatgpt') {
-      return { canRefresh: false, issue: 'Codex 当前不是 ChatGPT OAuth 模式' }
-    }
-
+    const mode = getString(auth.auth_mode ?? auth.authMode)
     const tokens = getRecord(auth.tokens)
+
+    if (mode === 'api') {
+      const apiKey = getString(tokens?.api_key ?? tokens?.apiKey ?? auth.api_key ?? auth.apiKey)
+      if (!apiKey) {
+        return { canRefresh: false, mode: 'none', issue: 'Codex auth.json 缺少 API Key' }
+      }
+      return { canRefresh: true, mode: 'api', apiKey }
+    }
+
+    if (mode !== 'chatgpt') {
+      return { canRefresh: false, mode: 'none', issue: 'Codex 未识别登录模式' }
+    }
+
     const accessToken = getString(tokens?.access_token ?? tokens?.accessToken)
     if (!accessToken) {
-      return { canRefresh: false, issue: 'Codex auth.json 缺少 access_token' }
+      return { canRefresh: false, mode: 'none', issue: 'Codex auth.json 缺少 access_token' }
     }
 
     return {
       canRefresh: true,
-      credentials: {
-        accessToken,
-        accountId: getString(tokens?.account_id ?? tokens?.accountId)
-      }
+      mode: 'chatgpt',
+      accessToken,
+      accountId: getString(tokens?.account_id ?? tokens?.accountId)
     }
   } catch {
-    return { canRefresh: false, issue: '未找到 ~/.codex/auth.json' }
+    return { canRefresh: false, mode: 'none', issue: '未找到 ~/.codex/auth.json' }
   }
 }
 

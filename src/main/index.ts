@@ -48,6 +48,7 @@ import { collectUsageSnapshot, invalidateQuotaCaches, resolveCodexAuthPath } fro
 import { refreshRadarNow, startRadarTimer, stopRadarTimer } from './services/radar'
 import { getTokenUsage, setRateLookup } from './services/usage'
 import { fetchModelsDevRates, getPricingRate } from './services/pricing'
+import { getSpendUsage } from './services/billing'
 import { loadPersistedState, savePersistedState } from './services/state'
 import { LanService, type PeerSnapshot } from './services/lan'
 import {
@@ -75,6 +76,7 @@ const CHANNELS = {
   downloadUpdate: 'codex-status:download-update',
   installUpdate: 'codex-status:install-update',
   tokenUsage: 'codex-status:token-usage',
+  spendUsage: 'codex-status:spend-usage',
   updateProgress: 'codex-status:update-progress'
 } as const
 
@@ -501,6 +503,11 @@ function registerIpcHandlers(): void {
   // 按需拉取 1/7/30 天 token 用量统计(独立 IPC,不进快照广播)
   ipcMain.handle(CHANNELS.tokenUsage, async (_event, window: UsageWindow) => {
     return getTokenUsage(window)
+  })
+
+  // 按需拉取 1/7/30 天真实账单花费(仅 API Key 模式;不可用返回 available:false)
+  ipcMain.handle(CHANNELS.spendUsage, async (_event, window: UsageWindow) => {
+    return getSpendUsage(window)
   })
 
   // 下载已检测到的新版本安装包;进度经 updateProgress 通道推送

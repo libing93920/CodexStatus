@@ -7,6 +7,7 @@ import type {
   CodexStatusApi,
   PanelView,
   PreferencesPayload,
+  SpendUsage,
   TokenUsageOverview,
   UpdateCheckResult,
   UsageSnapshot,
@@ -31,6 +32,7 @@ const CHANNELS = {
   downloadUpdate: 'codex-status:download-update',
   installUpdate: 'codex-status:install-update',
   tokenUsage: 'codex-status:token-usage',
+  spendUsage: 'codex-status:spend-usage',
   updateProgress: 'codex-status:update-progress'
 } as const
 
@@ -50,6 +52,8 @@ const api: CodexStatusApi = {
   checkForUpdate: () => ipcRenderer.invoke(CHANNELS.checkUpdate) as Promise<UpdateCheckResult>,
   getTokenUsage: (window: UsageWindow) =>
     ipcRenderer.invoke(CHANNELS.tokenUsage, window) as Promise<TokenUsageOverview>,
+  getSpendUsage: (window: UsageWindow) =>
+    ipcRenderer.invoke(CHANNELS.spendUsage, window) as Promise<SpendUsage>,
   downloadUpdate: () => ipcRenderer.invoke(CHANNELS.downloadUpdate) as Promise<void>,
   installUpdate: () => ipcRenderer.invoke(CHANNELS.installUpdate) as Promise<void>,
   onSnapshotUpdated: listener => subscribe(CHANNELS.snapshotUpdated, listener),

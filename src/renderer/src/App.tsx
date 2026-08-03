@@ -10,11 +10,13 @@ import {
   MIN_REFRESH_INTERVAL_SECONDS,
   createEmptySnapshot,
   type AppSettings,
+  type AuthMode,
   type LocaleCode,
   type PanelView,
   type PercentageMode,
   type RateLimitWindowSnapshot,
   type RendererWindowRole,
+  type SpendUsage,
   type TokenUsageDay,
   type TokenUsageOverview,
   type UsageSnapshot,
@@ -112,7 +114,11 @@ const COPY = {
     usageCached: '缓存',
     usageReasoning: '思考',
     usageCacheHit: '缓存命中',
+    usageToday: '今日消耗',
     usageEmpty: '暂无用量数据',
+    apiModeSource: 'API Key · 按量计费',
+    apiBadge: 'API Key',
+    spendReal: '真实账单',
     usage1d: '1天',
     usage7d: '7天',
     usage30d: '30天'
@@ -193,7 +199,11 @@ const COPY = {
     usageCached: 'Cached',
     usageReasoning: 'Reasoning',
     usageCacheHit: 'Cache hit',
+    usageToday: 'Today used',
     usageEmpty: 'No usage data yet',
+    apiModeSource: 'API Key · usage-based',
+    apiBadge: 'API Key',
+    spendReal: 'Real billing',
     usage1d: '1d',
     usage7d: '7d',
     usage30d: '30d'
@@ -202,6 +212,8 @@ const COPY = {
 
 function App(): React.JSX.Element {
   const [snapshot, setSnapshot] = useState<UsageSnapshot>(() => createEmptySnapshot())
+  // API Key 模式胶囊:今日 token 用量(取 1d 窗口,算缓存命中率与今日用量)
+  const [capsuleToday, setCapsuleToday] = useState<TokenUsageOverview | undefined>(undefined)
   const [settings, setSettings] = useState<AppSettings>({ ...DEFAULT_SETTINGS })
   const [windowPreferences, setWindowPreferences] = useState<WindowPreferences>({
     ...DEFAULT_WINDOW_PREFERENCES
@@ -347,6 +359,27 @@ function App(): React.JSX.Element {
     }
   }, [])
 
+  // API Key 模式胶囊:随快照刷新(每 30s)拉取今日 token,驱动缓存命中率进度条与今日用量
+  useEffect(() => {
+    if (windowRole !== 'capsule' || snapshot.authMode !== 'api') {
+      return
+    }
+    let cancelled = false
+    window.codexStatus
+      .getTokenUsage('1d')
+      .then((result) => {
+        if (!cancelled) {
+          setCapsuleToday(result)
+        }
+      })
+      .catch(() => {
+        // 拉取失败:胶囊回退显示 '--'
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [windowRole, snapshot.authMode, snapshot.generatedAt])
+
   const copy = COPY[settings.locale]
   const canRefresh = snapshot.canRefresh !== false
   const fixedRefreshValues = REFRESH_INTERVAL_OPTIONS.map((option) => String(option))
@@ -357,7 +390,12 @@ function App(): React.JSX.Element {
     ? 'custom'
     : String(settings.refreshIntervalSeconds)
   const canEditCustomRefresh = settings.refreshMode === 'auto' && isCustomRefreshInterval
-  const sourceValue = snapshot.rateLimitSource === 'none' ? copy.noData : snapshot.sourceHost
+  const isApiMode = snapshot.authMode === 'api'
+  const sourceValue = isApiMode
+    ? copy.apiModeSource
+    : snapshot.rateLimitSource === 'none'
+      ? copy.noData
+      : snapshot.sourceHost
   const rateLimitWindows = [...snapshot.rateLimits].sort((a, b) => {
     // 短窗口(5h)排在前,长窗口(7d)排在后,确保胶囊取到5h优先
     const am = a.windowMinutes ?? 0
@@ -372,18 +410,37 @@ function App(): React.JSX.Element {
   const cardWindowCount = cardWindows.length
   // 胶囊:百分比+进度条取首窗口(5h优先,无则7d);左侧倒计时也取同一个窗口的resetsAt
   const displayedRateLimit = rateLimitWindows[0]
-  const capsuleDisplayPercent =
-    settings.percentageMode === 'used'
+  // API Key 模式:无订阅额度窗口,主指标改为今日缓存命中率,左槽改为今日 token
+  const apiTodayTotal = capsuleToday?.available === true ? capsuleToday.totals.total : undefined
+  const apiTodayInput = capsuleToday?.available === true ? capsuleToday.totals.input : 0
+  const apiTodayCached = capsuleToday?.available === true ? capsuleToday.totals.cachedInput : 0
+  const apiCacheHit = apiTodayInput > 0 ? (apiTodayCached / apiTodayInput) * 100 : undefined
+  const capsuleDisplayPercent = isApiMode
+    ? apiCacheHit
+    : settings.percentageMode === 'used'
       ? displayedRateLimit?.usedPercent
       : displayedRateLimit?.remainingPercent
   const capsulePercentText =
     capsuleDisplayPercent === undefined ? '--' : `${Math.round(capsuleDisplayPercent)}%`
   const capsuleProgressStyle = createMetricProgressStyle(
     capsuleDisplayPercent,
-    settings.percentageMode
+    isApiMode ? 'remaining' : settings.percentageMode
   )
   const capsuleResetAt = displayedRateLimit?.resetsAt
   const capsuleResetText = formatCountdownCapsule(capsuleResetAt, nowTick)
+  // API Key 模式左槽:今日 token;OAuth 模式为窗口重置倒计时
+  const capsuleWeeklyText = isApiMode
+    ? apiTodayTotal === undefined
+      ? '--'
+      : formatCompactTokens(apiTodayTotal, settings.locale)
+    : capsuleResetText
+  // API Key 模式胶囊数值与自适应字号(长文本自动缩小,不出框)
+  // 竖版仅 50px 宽,字号与最大宽度都比横版收紧
+  const apiTokenText = isApiMode ? capsuleWeeklyText : ''
+  const apiHitText = isApiMode ? capsulePercentText : ''
+  const apiIsOrb = windowPreferences.viewMode === 'orb'
+  const apiTokenFont = fitFontSize(apiTokenText, apiIsOrb ? 12 : 14, apiIsOrb ? 40 : 80)
+  const apiHitFont = fitFontSize(apiHitText, apiIsOrb ? 12 : 14, apiIsOrb ? 44 : 64)
   const capsuleCreditText = snapshot.resetCredit?.expiresAt
     ? formatCountdownShort(snapshot.resetCredit.expiresAt, settings.locale)
     : ''
@@ -402,7 +459,27 @@ function App(): React.JSX.Element {
       : settings.percentageMode === 'remaining'
         ? capsuleDisplayPercent
         : 100 - capsuleDisplayPercent
-  const isCritical = goodScore !== undefined && goodScore < 20
+  const isCritical = !isApiMode && goodScore !== undefined && goodScore < 20
+  // 胶囊中部指标盒(百分比+进度条):OAuth 显示额度,API 模式显示缓存命中率
+  const capsuleMetricBox = (
+    <div className="capsule__metric-box">
+      <div
+        className={`capsule__percent${justRefreshed ? ' is-just-refreshed' : ''}${isCritical ? ' is-critical' : ''}`}
+      >
+        {capsulePercentText}
+      </div>
+      <span className="capsule__progress" aria-hidden="true">
+        <span />
+      </span>
+    </div>
+  )
+  // 胶囊左槽:OAuth 为窗口重置倒计时(沙漏),API 模式为今日 token(由 ApiCapsuleStat 渲染)
+  const capsuleWeeklyOrb = (
+    <div className="capsule__weekly">
+      <HourglassIcon />
+      <span>{capsuleWeeklyText}</span>
+    </div>
+  )
   // 团队排行榜:按剩余额度降序(undefined 视为 0,排末尾)
   const teamPeers = [...(snapshot.teamPeers ?? [])].sort((a, b) => {
     const ar = a.remainingPercent ?? -1
@@ -424,7 +501,8 @@ function App(): React.JSX.Element {
     .join(' ')
 
   const detailRows: Array<React.ComponentProps<typeof DetailRow>> = [
-    ...(snapshot.resetCredit?.expiresAt
+    // 重置卡是订阅(OAuth)专有,API Key 模式不展示
+    ...(!isApiMode && snapshot.resetCredit?.expiresAt
       ? [
           {
             icon: <TicketIcon />,
@@ -452,13 +530,17 @@ function App(): React.JSX.Element {
           : `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/task`)
         : undefined
     },
-    // 额度特赦重置:静态外链入口,跳转 codex-resets.com 查看官方重置记录
-    {
-      icon: <ResetIcon />,
-      iconTone: 'var(--panel-icon-green)',
-      label: settings.locale === 'zh-CN' ? '额度重置监测' : 'Usage reset monitor',
-      labelHref: 'https://codex-resets.com/'
-    }
+    // 额度特赦重置:静态外链入口,跳转 codex-resets.com 查看官方重置记录(订阅专有,API Key 模式隐藏)
+    ...(isApiMode
+      ? []
+      : [
+          {
+            icon: <ResetIcon />,
+            iconTone: 'var(--panel-icon-green)',
+            label: settings.locale === 'zh-CN' ? '额度重置监测' : 'Usage reset monitor',
+            labelHref: 'https://codex-resets.com/'
+          }
+        ])
   ]
 
   // 有窗口带重置倒计时时每秒 tick 刷新显示
@@ -794,12 +876,6 @@ function App(): React.JSX.Element {
           >
             {capsuleViewMode === 'orb' ? (
               <div className="capsule__layout capsule__layout--v" aria-hidden="true">
-                {capsuleCreditText ? (
-                  <div className="capsule__credit">
-                    <TicketIcon />
-                    <span>{capsuleCreditText}</span>
-                  </div>
-                ) : null}
                 {capsulePickText ? (
                   <div
                     className="capsule__pick"
@@ -809,58 +885,82 @@ function App(): React.JSX.Element {
                     <span>{capsulePickText}</span>
                   </div>
                 ) : null}
-                <div className="capsule__weekly">
-                  <HourglassIcon />
-                  <span>{capsuleResetText}</span>
-                </div>
-                <div className="capsule__metric-box">
-                  <div
-                    className={`capsule__percent${justRefreshed ? ' is-just-refreshed' : ''}${isCritical ? ' is-critical' : ''}`}
-                  >
-                    {capsulePercentText}
-                  </div>
-                  <span className="capsule__progress" aria-hidden="true">
-                    <span />
-                  </span>
-                </div>
+                {isApiMode ? (
+                  <>
+                    {/* API 模式竖版:缓存命中率(含进度) → 今日 token */}
+                    <ApiCapsuleStat
+                      label={copy.usageCacheHit}
+                      value={apiHitText}
+                      fontPx={apiHitFont}
+                      withProgress
+                    />
+                    <ApiCapsuleStat label={copy.usageToday} value={apiTokenText} fontPx={apiTokenFont} />
+                  </>
+                ) : (
+                  <>
+                    {capsuleCreditText ? (
+                      <div className="capsule__credit">
+                        <TicketIcon />
+                        <span>{capsuleCreditText}</span>
+                      </div>
+                    ) : null}
+                    {capsuleWeeklyOrb}
+                    {capsuleMetricBox}
+                  </>
+                )}
               </div>
             ) : (
               <div className="capsule__layout capsule__layout--h" aria-hidden="true">
-                <div className="capsule__col capsule__col--weekly">
-                  <span className="capsule__weekly">
-                    <HourglassIcon />
-                    {capsuleResetText}
-                  </span>
-                </div>
-                <div className="capsule__col capsule__col--metric">
-                  <div className="capsule__metric-box">
-                    <div
-                      className={`capsule__percent${justRefreshed ? ' is-just-refreshed' : ''}${isCritical ? ' is-critical' : ''}`}
-                    >
-                      {capsulePercentText}
+                {isApiMode ? (
+                  <>
+                    {/* API 模式横版:今日 token → 缓存命中率(含进度) → 推荐模型 */}
+                    <ApiCapsuleStat label={copy.usageToday} value={apiTokenText} fontPx={apiTokenFont} />
+                    <ApiCapsuleStat
+                      label={copy.usageCacheHit}
+                      value={apiHitText}
+                      fontPx={apiHitFont}
+                      withProgress
+                    />
+                    <div className="capsule__col capsule__col--right">
+                      {capsulePickText ? (
+                        <div
+                          className="capsule__pick"
+                          style={{ color: capsulePickColor }}
+                          title={capsulePickTitle}
+                        >
+                          <span>{capsulePickText}</span>
+                        </div>
+                      ) : null}
                     </div>
-                    <span className="capsule__progress" aria-hidden="true">
-                      <span />
-                    </span>
-                  </div>
-                </div>
-                <div className="capsule__col capsule__col--right">
-                  {capsuleCreditText ? (
-                    <div className="capsule__credit">
-                      <TicketIcon />
-                      <span>{capsuleCreditText}</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="capsule__col capsule__col--weekly">
+                      <span className="capsule__weekly">
+                        <HourglassIcon />
+                        {capsuleResetText}
+                      </span>
                     </div>
-                  ) : null}
-                  {capsulePickText ? (
-                    <div
-                      className="capsule__pick"
-                      style={{ color: capsulePickColor }}
-                      title={capsulePickTitle}
-                    >
-                      <span>{capsulePickText}</span>
+                    <div className="capsule__col capsule__col--metric">{capsuleMetricBox}</div>
+                    <div className="capsule__col capsule__col--right">
+                      {capsuleCreditText ? (
+                        <div className="capsule__credit">
+                          <TicketIcon />
+                          <span>{capsuleCreditText}</span>
+                        </div>
+                      ) : null}
+                      {capsulePickText ? (
+                        <div
+                          className="capsule__pick"
+                          style={{ color: capsulePickColor }}
+                          title={capsulePickTitle}
+                        >
+                          <span>{capsulePickText}</span>
+                        </div>
+                      ) : null}
                     </div>
-                  ) : null}
-                </div>
+                  </>
+                )}
               </div>
             )}
           </section>
@@ -881,12 +981,13 @@ function App(): React.JSX.Element {
                 onChange={(view) => setPanelView(view)}
               />
               <div className="panel__header panel__header--details">
-                <div>
+                <div className="panel__header-title-group">
                   <h2 className="panel__title">{copy.details}</h2>
+                  {isApiMode ? <span className="details-badge">{copy.apiBadge}</span> : null}
                 </div>
               </div>
 
-              {cardWindows.length > 0 ? (
+              {!isApiMode && cardWindows.length > 0 ? (
                 <div className={`quota-grid${cardWindowCount === 1 ? ' quota-grid--single' : ''}`}>
                   {cardWindows.map((windowState, index) => (
                     <QuotaCard
@@ -902,7 +1003,7 @@ function App(): React.JSX.Element {
                 </div>
               ) : null}
 
-              <UsageCard locale={settings.locale} />
+              <UsageCard locale={settings.locale} authMode={snapshot.authMode} />
 
               <div className="panel__rows">
                 {detailRows.map((row) => (
@@ -1338,6 +1439,33 @@ function formatQuotaResetHint(seconds: number | undefined, locale: LocaleCode): 
 }
 
 // 用量统计卡片:1/7/30 天 token 与花费,分段切换 + 每日柱状图
+// API Key 模式胶囊统计单元:小标签 + 自适应字号数值 + 可选进度条
+function ApiCapsuleStat({
+  label,
+  value,
+  fontPx,
+  withProgress
+}: {
+  label: string
+  value: string
+  fontPx: number
+  withProgress?: boolean
+}): React.JSX.Element {
+  return (
+    <div className={`capsule__stat${withProgress ? ' capsule__stat--metric' : ''}`}>
+      <span className="capsule__stat-label">{label}</span>
+      <span className="capsule__stat-value" style={{ fontSize: `${fontPx}px` }}>
+        {value}
+      </span>
+      {withProgress ? (
+        <span className="capsule__progress" aria-hidden="true">
+          <span />
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
 const EMPTY_USAGE_OVERVIEW: TokenUsageOverview = {
   available: false,
   generatedAt: '',
@@ -1345,13 +1473,21 @@ const EMPTY_USAGE_OVERVIEW: TokenUsageOverview = {
   totals: { input: 0, cachedInput: 0, output: 0, reasoning: 0, total: 0, cost: 0 }
 }
 
-function UsageCard({ locale }: { locale: LocaleCode }): React.JSX.Element {
+function UsageCard({
+  locale,
+  authMode
+}: {
+  locale: LocaleCode
+  authMode: AuthMode
+}): React.JSX.Element {
   const copy = COPY[locale]
   const [windowKey, setWindowKey] = useState<UsageWindow>('7d')
   // 三个窗口一次性预取,切换按钮即时显示,避免每次切换重新拉取导致的闪烁
   const [usageByWindow, setUsageByWindow] = useState<
     Partial<Record<UsageWindow, TokenUsageOverview>>
   >({})
+  // API Key 模式真实账单花费(窗口维度)
+  const [spendByWindow, setSpendByWindow] = useState<Partial<Record<UsageWindow, SpendUsage>>>({})
   const [hoveredIndex, setHoveredIndex] = useState<number | undefined>(undefined)
 
   useEffect(() => {
@@ -1375,12 +1511,41 @@ function UsageCard({ locale }: { locale: LocaleCode }): React.JSX.Element {
     }
   }, [])
 
+  // API Key 模式:预取真实账单花费,账单不可用时 UI 回落 token 估算
+  useEffect(() => {
+    if (authMode !== 'api') {
+      return
+    }
+    let cancelled = false
+    for (const w of ['1d', '7d', '30d'] as UsageWindow[]) {
+      window.codexStatus
+        .getSpendUsage(w)
+        .then((result) => {
+          if (!cancelled) {
+            setSpendByWindow((prev) => ({ ...prev, [w]: result }))
+          }
+        })
+        .catch(() => {
+          // 忽略:账单失败保持空,回落估算
+        })
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [authMode])
+
   const usage = usageByWindow[windowKey]
   const isLoading = usage === undefined
   const days = usage?.days ?? []
   const totals = usage?.totals
   const hasData = usage?.available === true && totals !== undefined
   const chartMax = Math.max(1, days.reduce((max, day) => Math.max(max, day.input + day.output), 0))
+  // API Key 模式:真实账单可用时用账单金额替代 token 估算
+  const spend = spendByWindow[windowKey]
+  const spendMap =
+    spend?.available === true ? new Map(spend.days.map((d) => [d.date, d.cost])) : undefined
+  const costIsReal = spendMap !== undefined
+  const costValue = costIsReal ? formatUsd(spend?.total ?? 0) : formatUsd(totals?.cost ?? 0)
 
   return (
     <section className="usage-card">
@@ -1422,7 +1587,7 @@ function UsageCard({ locale }: { locale: LocaleCode }): React.JSX.Element {
               value={formatCacheHit(totals.input, totals.cachedInput)}
               tone="cached"
             />
-            <UsageSummaryItem label={copy.usageCost} value={formatUsd(totals.cost)} tone="cost" />
+            <UsageSummaryItem label={copy.usageCost} value={costValue} tone="cost" />
           </div>
           {days.length <= 1 && days[0] ? (
             <UsageBar day={days[0]} locale={locale} />
@@ -1434,6 +1599,7 @@ function UsageCard({ locale }: { locale: LocaleCode }): React.JSX.Element {
                   index={hoveredIndex}
                   count={days.length}
                   locale={locale}
+                  spendMap={spendMap}
                 />
               ) : null}
               {days.map((day, index) => {
@@ -1468,6 +1634,7 @@ function UsageCard({ locale }: { locale: LocaleCode }): React.JSX.Element {
               })}
             </div>
           )}
+          {costIsReal ? <p className="usage-card__spend-hint">{copy.spendReal}</p> : null}
         </>
       )}
     </section>
@@ -1479,16 +1646,20 @@ function UsageTooltip({
   day,
   index,
   count,
-  locale
+  locale,
+  spendMap
 }: {
   day: TokenUsageDay
   index: number
   count: number
   locale: LocaleCode
+  spendMap?: Map<string, number>
 }): React.JSX.Element {
   const copy = COPY[locale]
   // 浮层居中于当前柱,靠边时向内收避免溢出卡片
   const left = Math.max(15, Math.min(85, ((index + 0.5) / count) * 100))
+  const realCost = spendMap?.get(day.date)
+  const costText = realCost !== undefined ? formatUsd(realCost) : formatUsd(day.cost)
   return (
     <div className="usage-tooltip" style={{ left: `${left}%` }}>
       <div className="usage-tooltip__date">{day.date}</div>
@@ -1518,7 +1689,7 @@ function UsageTooltip({
       </div>
       <div className="usage-tooltip__row usage-tooltip__cost">
         <span>{copy.usageCost}</span>
-        <span>{formatUsd(day.cost)}</span>
+        <span>{costText}</span>
       </div>
     </div>
   )
@@ -1602,6 +1773,22 @@ function formatCompactTokens(value: number, locale: LocaleCode): string {
 
 function trimTrailingZero(value: string): string {
   return value.endsWith('.0') ? value.slice(0, -2) : value
+}
+
+// 胶囊自适应字号:按文本宽度估算(CJK≈1em,数字/字母≈0.55em,符号≈0.3em),
+// 长文本自动缩小,保证不超出给定最大宽度
+function fitFontSize(text: string, basePx: number, maxWidth: number): number {
+  let units = 0
+  for (const ch of text) {
+    if (/[一-鿿]/.test(ch)) units += 1
+    else if (ch === '.' || ch === ',' || ch === '：' || ch === '·') units += 0.3
+    else units += 0.55
+  }
+  if (units <= 0) {
+    return basePx
+  }
+  const fitted = (maxWidth / units) * 0.95
+  return Math.max(10, Math.min(basePx, Math.floor(fitted * 10) / 10))
 }
 
 // 缓存命中率 = cached_input / input(input 含缓存)

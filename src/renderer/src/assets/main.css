@@ -214,6 +214,48 @@ body {
   color: rgba(205, 218, 232, 0.9);
 }
 
+/* API Key 模式胶囊统计单元:小标签 + 自适应字号数值 + 可选进度条 */
+.capsule__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.capsule__stat-label {
+  color: rgba(205, 218, 232, 0.72);
+  font-size: 9px;
+  font-weight: 520;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.capsule__stat-value {
+  color: rgba(220, 230, 242, 0.96);
+  font-weight: 760;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 中间指标单元(缓存命中):数值用 --metric-accent 着色,进度条与单元同宽 */
+.capsule__stat--metric .capsule__stat-value {
+  color: var(--metric-accent, rgba(151, 163, 176, 0.74));
+}
+
+.capsule__stat--metric .capsule__progress {
+  width: 100%;
+  margin-top: 3px;
+}
+
+/* 竖版统计单元纵向稍松 */
+.capsule--orb .capsule__stat {
+  gap: 3px;
+}
+
 /* 剩余额度百分比:按 tone 变色(tone class 加在 layout/col 上,百分比和进度条共用 --metric-accent);字号小于周重置 */
 .capsule__percent {
   color: var(--metric-accent, rgba(151, 163, 176, 0.74));
@@ -612,6 +654,16 @@ body {
   box-shadow:
     0 10px 24px rgba(0, 0, 0, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition:
+    transform 220ms cubic-bezier(0.22, 0.9, 0.3, 1),
+    border-color 220ms cubic-bezier(0.22, 0.9, 0.3, 1),
+    box-shadow 220ms cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+
+.usage-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--panel-line-strong);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
 }
 
 .usage-card__head {
@@ -636,6 +688,14 @@ body {
   margin: 12px 0 2px;
   color: var(--panel-muted);
   font-size: 12px;
+}
+
+/* API Key 模式:花费为真实账单的提示 */
+.usage-card__spend-hint {
+  margin: 10px 0 0;
+  color: var(--panel-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .usage-summary {
@@ -1553,6 +1613,26 @@ body {
   line-height: 1.05;
   font-weight: 760;
   letter-spacing: -0.015em;
+}
+
+/* 标题旁的登录模式徽标(API Key 模式) */
+.panel__header-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.details-badge {
+  margin-top: 9px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--panel-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--panel-accent) 14%, transparent);
+  color: var(--panel-accent);
+  font-size: 10px;
+  font-weight: 640;
+  letter-spacing: 0.3px;
+  line-height: 1.4;
 }
 
 .settings-list {

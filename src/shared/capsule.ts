@@ -2,6 +2,7 @@ export type PercentageMode = 'remaining' | 'used'
 export type RefreshMode = 'auto' | 'manual'
 export type LocaleCode = 'zh-CN' | 'en-US'
 export type RateLimitSource = 'official' | 'local' | 'none'
+export type AuthMode = 'chatgpt' | 'api' | 'none'
 export type PanelView = 'details' | 'settings' | 'team'
 export type RendererWindowRole = 'capsule' | 'panel'
 export type CapsuleViewMode = 'capsule' | 'orb'
@@ -23,6 +24,8 @@ export interface UsageSnapshot {
   available: boolean
   isRefreshing: boolean
   canRefresh: boolean
+  /** Codex 登录方式:chatgpt=订阅 OAuth,api=API Key,none=未识别 */
+  authMode: AuthMode
   generatedAt?: string
   rateLimits: RateLimitWindowSnapshot[]
   rateLimitSource: RateLimitSource
@@ -111,6 +114,21 @@ export interface TokenUsageOverview {
   }
 }
 
+/** 单日真实账单花费(USD) */
+export interface SpendDay {
+  date: string
+  cost: number
+}
+
+/** 1/7/30 天真实账单花费总览(仅 API Key 模式) */
+export interface SpendUsage {
+  available: boolean
+  generatedAt: string
+  /** 升序日期序列,长度=窗口天数 */
+  days: SpendDay[]
+  total: number
+}
+
 export const DEFAULT_IQ_THRESHOLD = 90
 export const MIN_IQ_THRESHOLD = 60
 export const MAX_IQ_THRESHOLD = 115
@@ -194,6 +212,8 @@ export interface CodexStatusApi {
   checkForUpdate: () => Promise<UpdateCheckResult>
   /** 获取 1/7/30 天 token 用量与估算花费(按需拉取,不走快照广播) */
   getTokenUsage: (window: UsageWindow) => Promise<TokenUsageOverview>
+  /** 获取 1/7/30 天真实账单花费(仅 API Key 模式;不可用返回 available:false) */
+  getSpendUsage: (window: UsageWindow) => Promise<SpendUsage>
   /** 下载已检测到的新版本安装包 */
   downloadUpdate: () => Promise<void>
   /** 退出并运行安装程序,覆盖升级 */
@@ -264,6 +284,7 @@ export function createEmptySnapshot(): UsageSnapshot {
     available: false,
     isRefreshing: false,
     canRefresh: true,
+    authMode: 'none',
     rateLimits: [],
     rateLimitSource: 'none',
     sourceHost: 'No data',
