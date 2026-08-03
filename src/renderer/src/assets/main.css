@@ -168,6 +168,13 @@ body {
   padding: 6px 4px;
 }
 
+/* API 模式竖版:内容仅 3 块(雷达/命中率/今日消耗),均布填满 165px 高度,避免上下大片留白 */
+.capsule__layout--v-api {
+  justify-content: space-evenly;
+  gap: 2px;
+  padding: 8px 4px;
+}
+
 .capsule__col {
   display: flex;
   flex-direction: column;
@@ -241,14 +248,19 @@ body {
   white-space: nowrap;
 }
 
-/* 中间指标单元(缓存命中):数值用 --metric-accent 着色,进度条与单元同宽 */
+/* 中间指标单元(缓存命中):数值用 --metric-accent 着色,进度条固定宽居中(不撑满整列) */
 .capsule__stat--metric .capsule__stat-value {
   color: var(--metric-accent, rgba(151, 163, 176, 0.74));
 }
 
 .capsule__stat--metric .capsule__progress {
-  width: 100%;
+  width: 48px;
   margin-top: 3px;
+}
+
+/* 竖版 orb 更窄:进度条收到 40px */
+.capsule--orb .capsule__stat--metric .capsule__progress {
+  width: 40px;
 }
 
 /* 竖版统计单元纵向稍松 */
