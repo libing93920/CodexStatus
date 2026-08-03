@@ -350,8 +350,12 @@ export async function readOfficialCodexCredentials(): Promise<CredentialLookup> 
     const mode = getString(auth.auth_mode ?? auth.authMode)
     const tokens = getRecord(auth.tokens)
 
-    if (mode === 'api') {
-      const apiKey = getString(tokens?.api_key ?? tokens?.apiKey ?? auth.api_key ?? auth.apiKey)
+    // Codex auth_mode 序列化:ApiKey 变体经 #[serde(rename_all = "lowercase")] → "apikey";
+    // key 存顶层 OPENAI_API_KEY(大写),非 tokens 下。'api' 仅为兼容历史/测试。
+    if (mode === 'apikey' || mode === 'api') {
+      const apiKey = getString(
+        auth.OPENAI_API_KEY ?? tokens?.api_key ?? tokens?.apiKey ?? auth.api_key ?? auth.apiKey
+      )
       if (!apiKey) {
         return { canRefresh: false, mode: 'none', issue: 'Codex auth.json 缺少 API Key' }
       }
