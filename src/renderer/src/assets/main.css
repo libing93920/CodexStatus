@@ -253,7 +253,7 @@ body {
   color: var(--metric-accent, rgba(151, 163, 176, 0.74));
 }
 
-.capsule__stat--metric .capsule__progress {
+.capsule__layout--h .capsule__stat--metric .capsule__progress {
   width: 48px;
   margin-top: 3px;
 }
