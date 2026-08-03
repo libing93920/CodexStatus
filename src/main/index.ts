@@ -77,6 +77,7 @@ const CHANNELS = {
   installUpdate: 'codex-status:install-update',
   tokenUsage: 'codex-status:token-usage',
   spendUsage: 'codex-status:spend-usage',
+  setCapsuleSize: 'codex-status:set-capsule-size',
   updateProgress: 'codex-status:update-progress'
 } as const
 
@@ -508,6 +509,17 @@ function registerIpcHandlers(): void {
   // 按需拉取 1/7/30 天真实账单花费(仅 API Key 模式;不可用返回 available:false)
   ipcMain.handle(CHANNELS.spendUsage, async (_event, window: UsageWindow) => {
     return getSpendUsage(window)
+  })
+
+  // 胶囊窗口按内容自适应尺寸:渲染层量内容后调用,主进程 setSize 贴合(限幅防越界)
+  ipcMain.handle(CHANNELS.setCapsuleSize, async (_event, size: { width: number; height: number }) => {
+    if (!mainWindow || !Number.isFinite(size?.width) || !Number.isFinite(size?.height)) {
+      return
+    }
+    mainWindow.setSize(
+      Math.round(clamp(size.width, 40, 480)),
+      Math.round(clamp(size.height, 28, 320))
+    )
   })
 
   // 下载已检测到的新版本安装包;进度经 updateProgress 通道推送
@@ -1166,6 +1178,13 @@ function resolveCapsuleWindowSize(viewMode: 'capsule' | 'orb'): {
   width: number
   height: number
 } {
+  // API Key 模式:无额度窗口,胶囊固定用单窗口尺寸(横版 160 宽 / orb 96 高),
+  // 与本地正确 mock 一致,避免按 rateLimits 数量变化导致机器间尺寸不一(250 宽会让紧凑内容两边空白)
+  if (currentSnapshot.authMode === 'api') {
+    return viewMode === 'orb'
+      ? { width: ORB_WINDOW_SIZE.width, height: SINGLE_ORB_WINDOW_HEIGHT }
+      : { width: SINGLE_CAPSULE_WINDOW_WIDTH, height: CAPSULE_WINDOW_SIZE.height }
+  }
   const size = viewMode === 'orb' ? ORB_WINDOW_SIZE : CAPSULE_WINDOW_SIZE
   // 短窗口(百分比段)和长窗口(周重置倒计时段)都参与胶囊展示,尺寸按总窗口数增长
   const visibleCount = currentSnapshot.rateLimits.length

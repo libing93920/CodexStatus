@@ -214,6 +214,8 @@ export interface CodexStatusApi {
   getTokenUsage: (window: UsageWindow) => Promise<TokenUsageOverview>
   /** 获取 1/7/30 天真实账单花费(仅 API Key 模式;不可用返回 available:false) */
   getSpendUsage: (window: UsageWindow) => Promise<SpendUsage>
+  /** 胶囊窗口按内容自适应尺寸(渲染层量内容后调用;主进程 setSize) */
+  setCapsuleSize: (size: { width: number; height: number }) => Promise<void>
   /** 下载已检测到的新版本安装包 */
   downloadUpdate: () => Promise<void>
   /** 退出并运行安装程序,覆盖升级 */

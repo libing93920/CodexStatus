@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import {
   DEFAULT_IQ_THRESHOLD,
   DEFAULT_SETTINGS,
@@ -245,6 +245,7 @@ function App(): React.JSX.Element {
   // 详情面板里长窗口(周重置)倒计时需要秒级刷新;只在面板可见且有长窗口时 tick
   const [nowTick, setNowTick] = useState(() => Date.now())
   const capsulePointerRef = useRef<CapsulePointerState | null>(null)
+  const capsuleRef = useRef<HTMLElement | null>(null)
   const manualRefreshTimerRef = useRef<number | undefined>(undefined)
   const justRefreshedTimerRef = useRef<number | undefined>(undefined)
   // "已是最新"提示停留几秒后自动回 idle
@@ -480,6 +481,29 @@ function App(): React.JSX.Element {
       <span>{capsuleWeeklyText}</span>
     </div>
   )
+
+  // API Key 模式胶囊:按内容实际尺寸自适应窗口大小(信息多则大,少则小)。
+  // 临时把胶囊设为 max-content 量出自然尺寸,再让主进程 setSize 贴合。
+  useLayoutEffect(() => {
+    if (!isApiMode || windowRole !== 'capsule') {
+      return
+    }
+    const section = capsuleRef.current
+    if (!section) {
+      return
+    }
+    const prevWidth = section.style.width
+    const prevHeight = section.style.height
+    section.style.width = 'max-content'
+    section.style.height = 'max-content'
+    const width = section.offsetWidth
+    const height = section.offsetHeight
+    section.style.width = prevWidth
+    section.style.height = prevHeight
+    if (width > 0 && height > 0) {
+      void window.codexStatus.setCapsuleSize({ width, height })
+    }
+  }, [isApiMode, windowRole, apiTokenText, apiHitText, capsulePickText, capsuleViewMode])
   // 团队排行榜:按剩余额度降序(undefined 视为 0,排末尾)
   const teamPeers = [...(snapshot.teamPeers ?? [])].sort((a, b) => {
     const ar = a.remainingPercent ?? -1
@@ -863,6 +887,7 @@ function App(): React.JSX.Element {
       <div className="app-shell app-shell--capsule">
         <main className="widget">
           <section
+            ref={capsuleRef}
             aria-label={copy.details}
             className={capsuleClassName}
             style={capsuleProgressStyle}
