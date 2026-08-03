@@ -20,6 +20,10 @@
 |---|---|---|
 | ![panel](docs/panel.png) | ![capsule](docs/capsule.png) | ![orb](docs/orb.png) |
 
+| API Key 竖版胶囊 | API Key 横板胶囊 | 用量统计卡片 |
+|---|---|---|
+| ![api-orb](docs/3.png) | ![api-capsule](docs/4.png) | ![usage-card](docs/5.png) |
+
 ## 为什么需要这个工具？
 
 在日常使用 Codex 的过程中，经常会遇到以下痛点：
@@ -41,6 +45,9 @@ CodexStatus 可以帮你：
 - **双窗口额度卡片**：5h 和 7d 分别展示百分比、进度条、重置倒计时和到期时间
 - **胶囊常驻悬浮**：水平胶囊 / 迷你球两种形态，可吸附屏幕边缘，支持拖拽
 - **团队排行榜**：局域网内同事互见，按剩余额度降序排名，展示 5h + 7d 双行数据
+- **Token 消耗排行榜**：团队页可切换 Token 消耗榜，按 1/7/30 天窗口统计同事消耗
+- **用量统计**：详情面板 1/7/30 天 token 用量（输入/输出/缓存/花费）与每日柱状图
+- **API Key 登录**：支持 Codex API Key 模式，胶囊与详情展示今日 token 与缓存命中率
 - **雷达推荐模型**：从 codex-reset-radar 拉取 IQ 评分，按阈值筛选后取最实惠的
 - **在线自动更新**：启动自动检查 + 定时检查，胶囊右上角红点提醒，一键下载静默安装
 - **双口径切换**：剩余百分比 / 已使用百分比，满足不同习惯
@@ -72,19 +79,21 @@ CodexStatus 可以帮你：
 - **中间**：当前额度百分比 + 进度条（颜色从绿色渐变到红色）
 - **右列**：重置卡到期倒计时 + 雷达推荐模型名称
 
+> API Key 模式：胶囊显示今日 token 用量与缓存命中率，支持竖版 / 横板两种布局。
+
 右键胶囊或托盘图标可唤出菜单：刷新 / 显示隐藏 / 详情 / 团队 / 设置 / 退出。
 
 ### 详情面板
 
-- **详情**：5h + 7d 双卡片，重置卡信息，雷达推荐模型，额度重置监测入口
-- **团队**：加入相同口令的同事排行榜，每行显示 5h + 1周双窗口数据
+- **详情**：5h + 7d 双卡片，1/7/30 天用量统计，重置卡信息，雷达推荐模型，额度重置监测入口
+- **团队**：加入相同口令的同事排行榜，额度 / Token 消耗两种模式
 - **设置**：刷新模式 / 间隔 / 百分比口径 / IQ 阈值 / 开机自启 / 语言 / 团队口令 / 检查更新
 
 ### 团队功能
 
 1. 设置相同的团队口令
 2. 同一局域网内自动发现成员
-3. 排行榜显示每位成员的 5h 和 1周剩余额度
+3. 排行榜显示每位成员的 5h 和 1周剩余额度，可切换为 Token 消耗榜（1/7/30 天）
 
 > 注意：全局代理 / TUN 模式会劫持内网多播，导致互不可见。
 
@@ -94,6 +103,7 @@ CodexStatus 可以帮你：
 | --- | --- | --- |
 | 官方额度 | `chatgpt.com` API | 需要有效 OAuth 凭据 |
 | 重置卡 | `chatgpt.com` API | |
+| 用量统计 | 本地 sessions JSONL | 估算 token 与花费 |
 | 雷达模型 | `codex-reset-radar.pages.dev` | 公开数据 |
 | 团队数据 | 局域网 mDNS + WebSocket | 内网直连 |
 
@@ -156,6 +166,10 @@ python scripts/publish.py --notes "说明"  # 自定义 Release 备注
 |---|---|---|
 | ![panel](docs/panel.png) | ![capsule](docs/capsule.png) | ![orb](docs/orb.png) |
 
+| API Key Orb | API Key Capsule | Usage Stats Card |
+|---|---|---|
+| ![api-orb](docs/3.png) | ![api-capsule](docs/4.png) | ![usage-card](docs/5.png) |
+
 ## Why CodexStatus?
 
 When using Codex daily, you often face:
@@ -177,6 +191,9 @@ CodexStatus helps you:
 - **Dual-window quota cards**: 5h and 7d each with percentage, progress bar, countdown, and expiry time
 - **Always-on capsule**: Horizontal capsule or orb mode, snap-to-edge, draggable
 - **Team leaderboard**: LAN peer discovery, ranked by remaining quota, dual-row 5h + 7d display
+- **Token leaderboard**: switch the team board to token consumption, ranked by 1d / 7d / 30d windows
+- **Usage stats**: 1/7/30-day token usage (input / output / cache / cost) with a daily bar chart
+- **API Key login**: supports Codex API Key mode; capsule & panel show today's tokens and cache-hit rate
 - **Radar model recommendation**: IQ scores from codex-reset-radar, filtered by threshold, cheapest wins
 - **Auto-update**: Startup check + periodic check, red dot badge on capsule, silent install & auto-restart
 - **Dual metric mode**: Remaining % or Used %, switch anytime
@@ -206,6 +223,7 @@ Go to [Releases](https://github.com/libing93920/CodexStatus/releases) for the la
 | --- | --- | --- |
 | Official quota | `chatgpt.com` API | Requires valid OAuth credentials |
 | Reset credits | `chatgpt.com` API | |
+| Usage stats | Local sessions JSONL | Estimated tokens & cost |
 | Radar models | `codex-reset-radar.pages.dev` | Public data |
 | Team data | LAN mDNS + WebSocket | Local network only |
 
