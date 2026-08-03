@@ -361,6 +361,9 @@ function App(): React.JSX.Element {
 
   // API Key 模式胶囊:随快照刷新(每 30s)拉取今日 token,驱动缓存命中率进度条与今日用量
   useEffect(() => {
+    void window.codexStatus.debugLog(
+      `capsule effect: windowRole=${windowRole}, authMode=${snapshot.authMode}, isApi=${snapshot.authMode === 'api'}`
+    )
     if (windowRole !== 'capsule' || snapshot.authMode !== 'api') {
       return
     }
@@ -368,12 +371,17 @@ function App(): React.JSX.Element {
     window.codexStatus
       .getTokenUsage('1d')
       .then((result) => {
+        void window.codexStatus.debugLog(
+          `capsule today: available=${result.available}, total=${result.totals.total}, input=${result.totals.input}, cached=${result.totals.cachedInput}`
+        )
         if (!cancelled) {
           setCapsuleToday(result)
         }
       })
-      .catch(() => {
-        // 拉取失败:胶囊回退显示 '--'
+      .catch((error) => {
+        void window.codexStatus.debugLog(
+          `capsule today fetch error: ${error instanceof Error ? error.message : String(error)}`
+        )
       })
     return () => {
       cancelled = true

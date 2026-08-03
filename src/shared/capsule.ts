@@ -214,6 +214,8 @@ export interface CodexStatusApi {
   getTokenUsage: (window: UsageWindow) => Promise<TokenUsageOverview>
   /** 获取 1/7/30 天真实账单花费(仅 API Key 模式;不可用返回 available:false) */
   getSpendUsage: (window: UsageWindow) => Promise<SpendUsage>
+  /** 临时诊断:追加到 ~/.codex-status-debug.log(排查定位用,完成后移除) */
+  debugLog: (message: string) => Promise<void>
   /** 下载已检测到的新版本安装包 */
   downloadUpdate: () => Promise<void>
   /** 退出并运行安装程序,覆盖升级 */

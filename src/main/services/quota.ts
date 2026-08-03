@@ -3,6 +3,7 @@ import type { Dirent } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { AuthMode, RateLimitSource, RateLimitWindowSnapshot, UsageSnapshot } from '../../shared/capsule'
+import { debugLog } from './debug'
 
 interface RawRateLimit {
   windowMinutes?: number
@@ -116,6 +117,7 @@ export async function collectUsageSnapshot(
   } else {
     officialIssue = credentialLookup.issue ?? '未找到 Codex 凭据'
   }
+  void debugLog(`collectUsageSnapshot: authMode=${authMode}, rateLimitSource=${rateLimitSource}`)
 
   bestModelPick = options.bestModelPick
 
@@ -349,6 +351,11 @@ export async function readOfficialCodexCredentials(): Promise<CredentialLookup> 
 
     const mode = getString(auth.auth_mode ?? auth.authMode)
     const tokens = getRecord(auth.tokens)
+    void debugLog(
+      `readCredentials: auth_mode=${mode ?? 'MISSING'}, ` +
+        `OPENAI_API_KEY=${getString(auth.OPENAI_API_KEY) !== undefined}, ` +
+        `tokens.api_key=${getString(tokens?.api_key) !== undefined}, tokens=${tokens ? 'yes' : 'no'}`
+    )
 
     // Codex auth_mode 序列化:ApiKey 变体经 #[serde(rename_all = "lowercase")] → "apikey";
     // key 存顶层 OPENAI_API_KEY(大写),非 tokens 下。'api' 仅为兼容历史/测试。
@@ -357,12 +364,15 @@ export async function readOfficialCodexCredentials(): Promise<CredentialLookup> 
         auth.OPENAI_API_KEY ?? tokens?.api_key ?? tokens?.apiKey ?? auth.api_key ?? auth.apiKey
       )
       if (!apiKey) {
+        void debugLog('readCredentials: api mode but no key found -> none')
         return { canRefresh: false, mode: 'none', issue: 'Codex auth.json 缺少 API Key' }
       }
+      void debugLog('readCredentials: -> api mode')
       return { canRefresh: true, mode: 'api', apiKey }
     }
 
     if (mode !== 'chatgpt') {
+      void debugLog(`readCredentials: unknown mode "${mode ?? 'MISSING'}" -> none`)
       return { canRefresh: false, mode: 'none', issue: 'Codex 未识别登录模式' }
     }
 

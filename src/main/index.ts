@@ -49,6 +49,7 @@ import { refreshRadarNow, startRadarTimer, stopRadarTimer } from './services/rad
 import { getTokenUsage, setRateLookup } from './services/usage'
 import { fetchModelsDevRates, getPricingRate } from './services/pricing'
 import { getSpendUsage } from './services/billing'
+import { debugLog } from './services/debug'
 import { loadPersistedState, savePersistedState } from './services/state'
 import { LanService, type PeerSnapshot } from './services/lan'
 import {
@@ -77,6 +78,7 @@ const CHANNELS = {
   installUpdate: 'codex-status:install-update',
   tokenUsage: 'codex-status:token-usage',
   spendUsage: 'codex-status:spend-usage',
+  debugLog: 'codex-status:debug-log',
   updateProgress: 'codex-status:update-progress'
 } as const
 
@@ -510,6 +512,11 @@ function registerIpcHandlers(): void {
     return getSpendUsage(window)
   })
 
+  // 临时诊断:渲染层转发日志到 debug 文件
+  ipcMain.handle(CHANNELS.debugLog, async (_event, message: string) => {
+    await debugLog(`[renderer] ${message}`)
+  })
+
   // 下载已检测到的新版本安装包;进度经 updateProgress 通道推送
   ipcMain.handle(CHANNELS.downloadUpdate, async () => {
     await downloadUpdate()
@@ -898,6 +905,7 @@ function syncCapsuleWindowBounds(): void {
 }
 
 function broadcastSnapshot(): void {
+  void debugLog(`broadcastSnapshot: authMode=${currentSnapshot.authMode}`)
   sendToRenderers(CHANNELS.snapshotUpdated, currentSnapshot)
 }
 
