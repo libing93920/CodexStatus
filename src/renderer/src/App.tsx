@@ -913,7 +913,10 @@ function App(): React.JSX.Element {
                 )}
               </div>
             ) : (
-              <div className="capsule__layout capsule__layout--h" aria-hidden="true">
+              <div
+                className={`capsule__layout capsule__layout--h${isApiMode ? ' capsule__layout--h-api' : ''}`}
+                aria-hidden="true"
+              >
                 {isApiMode ? (
                   <>
                     {/* API 模式横版:今日 token → 缓存命中率(含进度) → 推荐模型 */}

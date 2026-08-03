@@ -168,10 +168,16 @@ body {
   padding: 6px 4px;
 }
 
-/* API 模式竖版:内容仅 3 块(雷达/命中率/今日消耗),均布填满 165px 高度,避免上下大片留白 */
+/* API 模式横版:三列按内容宽度居中排列,不设 1fr 拉伸列,避免 token 值短时中列被拉宽产生大片空白 */
+.capsule__layout--h-api {
+  grid-template-columns: auto auto auto;
+  justify-content: center;
+}
+
+/* API 模式竖版:三块居中紧凑排列,间距固定;不用 space-evenly 以免内容短时块间空隙过大 */
 .capsule__layout--v-api {
-  justify-content: space-evenly;
-  gap: 2px;
+  justify-content: center;
+  gap: 6px;
   padding: 8px 4px;
 }
 
