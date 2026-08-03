@@ -82,6 +82,9 @@ const COPY = {
     team: '团队',
     teamBoard: '额度排行榜',
     teamBoardHint: '同组成员按剩余额度降序排名',
+    teamModeQuota: '额度',
+    teamModeTokens: 'Token消耗',
+    teamTokenBoard: 'Token 消耗排行榜',
     teamEmpty: '暂无在线同事,加入团队后会显示同组成员',
     teamSummaryOnline: '在线',
     teamSummaryOnlineUnit: '人',
@@ -167,6 +170,9 @@ const COPY = {
     team: 'Team',
     teamBoard: 'Quota leaderboard',
     teamBoardHint: 'Sorted by remaining quota, descending',
+    teamModeQuota: 'Quota',
+    teamModeTokens: 'Tokens',
+    teamTokenBoard: 'Token usage',
     teamEmpty: 'No peers online. Join a team to see members.',
     teamSummaryOnline: 'Online',
     teamSummaryOnlineUnit: '',
@@ -228,6 +234,9 @@ function App(): React.JSX.Element {
   )
   const [teamNicknameInput, setTeamNicknameInput] = useState(DEFAULT_SETTINGS.teamNickname ?? '')
   const [teamGroupInput, setTeamGroupInput] = useState(DEFAULT_SETTINGS.teamGroup ?? '')
+  // 团队页排行榜模式:quota=额度, tokens=Token 消耗;消耗模式再选 1d/7d/30d 窗口
+  const [teamBoardMode, setTeamBoardMode] = useState<'quota' | 'tokens'>('quota')
+  const [teamTokenWindow, setTeamTokenWindow] = useState<UsageWindow>('1d')
   const [capsulePointerActive, setCapsulePointerActive] = useState(false)
   const [manualRefreshActive, setManualRefreshActive] = useState(false)
   const [appVersion, setAppVersion] = useState('')
@@ -510,6 +519,16 @@ function App(): React.JSX.Element {
     const br = b.remainingPercent ?? -1
     return br - ar
   })
+  // Token 消耗排行榜:按选中窗口 token 总量降序(undefined 排末尾);横条按窗口内最大值归一化
+  const teamTokenPeers = [...(snapshot.teamPeers ?? [])].sort((a, b) => {
+    const at = a.tokenUsage?.[teamTokenWindow] ?? -1
+    const bt = b.tokenUsage?.[teamTokenWindow] ?? -1
+    return bt - at
+  })
+  const teamTokenMax = Math.max(
+    1,
+    ...teamTokenPeers.map((peer) => peer.tokenUsage?.[teamTokenWindow] ?? 0)
+  )
   const capsuleClassName = [
     'capsule',
     `capsule--${capsuleViewMode}`,
@@ -1071,9 +1090,21 @@ function App(): React.JSX.Element {
                 labels={{ details: copy.details, team: copy.team, settings: copy.settings }}
                 onChange={(view) => setPanelView(view)}
               />
+              <div className="team-mode-switch">
+                <SegmentedControl
+                  onChange={(value) => setTeamBoardMode(value as 'quota' | 'tokens')}
+                  options={[
+                    { label: copy.teamModeQuota, value: 'quota' },
+                    { label: copy.teamModeTokens, value: 'tokens' }
+                  ]}
+                  value={teamBoardMode}
+                />
+              </div>
               <div className="panel__header panel__header--team">
                 <div>
-                  <h2 className="panel__title">{copy.teamBoard}</h2>
+                  <h2 className="panel__title">
+                    {teamBoardMode === 'quota' ? copy.teamBoard : copy.teamTokenBoard}
+                  </h2>
                 </div>
                 <button
                   className={`ghost-button ghost-button--accent team__refresh${
@@ -1089,23 +1120,52 @@ function App(): React.JSX.Element {
                 </button>
               </div>
 
-              {teamPeers.length > 0 ? (
+              {teamBoardMode === 'tokens' ? (
                 <>
-                  <div className="team-board">
-                    {teamPeers.map((peer, index) => (
-                      <TeamRow
-                        key={peer.id}
-                        isSelf={peer.isSelf}
-                        rank={index + 1}
-                        nickname={peer.nickname}
-                        remainingPercent={peer.remainingPercent}
-                        shortWindow={peer.shortWindow}
-                        longWindow={peer.longWindow}
-                        resetCreditCount={peer.resetCreditCount}
-                      />
-                    ))}
+                  <div className="team-window-switch">
+                    <SegmentedControl
+                      onChange={(value) => setTeamTokenWindow(value as UsageWindow)}
+                      options={[
+                        { label: copy.usage1d, value: '1d' },
+                        { label: copy.usage7d, value: '7d' },
+                        { label: copy.usage30d, value: '30d' }
+                      ]}
+                      value={teamTokenWindow}
+                    />
                   </div>
+                  {teamTokenPeers.length > 0 ? (
+                    <div className="team-board">
+                      {teamTokenPeers.map((peer, index) => (
+                        <TokenRow
+                          isSelf={peer.isSelf}
+                          key={peer.id}
+                          locale={settings.locale}
+                          maxTokens={teamTokenMax}
+                          nickname={peer.nickname}
+                          rank={index + 1}
+                          tokens={peer.tokenUsage?.[teamTokenWindow]}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="team-empty">{copy.teamEmpty}</p>
+                  )}
                 </>
+              ) : teamPeers.length > 0 ? (
+                <div className="team-board">
+                  {teamPeers.map((peer, index) => (
+                    <TeamRow
+                      key={peer.id}
+                      isSelf={peer.isSelf}
+                      rank={index + 1}
+                      nickname={peer.nickname}
+                      remainingPercent={peer.remainingPercent}
+                      shortWindow={peer.shortWindow}
+                      longWindow={peer.longWindow}
+                      resetCreditCount={peer.resetCreditCount}
+                    />
+                  ))}
+                </div>
               ) : (
                 <p className="team-empty">{copy.teamEmpty}</p>
               )}
@@ -1978,6 +2038,39 @@ function TeamRow({
       <span className="team-row__credit">
         <TicketIcon />
         <span>{resetCreditCount ?? 0}</span>
+      </span>
+    </div>
+  )
+}
+
+// Token 消耗排行榜一行:排名/昵称/按窗口最大值归一化的横条/紧凑 token 值;self 行高亮
+function TokenRow({
+  isSelf,
+  rank,
+  nickname,
+  tokens,
+  maxTokens,
+  locale
+}: {
+  isSelf: boolean
+  rank: number
+  nickname: string
+  tokens?: number
+  maxTokens: number
+  locale: LocaleCode
+}): React.JSX.Element {
+  const percent = tokens !== undefined ? Math.min(100, Math.max(0, (tokens / maxTokens) * 100)) : 0
+  const rankClass =
+    rank === 1 ? ' is-top-1' : rank === 2 ? ' is-top-2' : rank === 3 ? ' is-top-3' : ''
+  return (
+    <div className={`team-row team-row--token${isSelf ? ' is-self' : ''}${rankClass}`}>
+      <span className="team-row__rank">{rank}</span>
+      <span className="team-row__name">{nickname}</span>
+      <span className="team-row__bar">
+        <span className="team-row__bar-fill" style={{ width: `${percent}%` }} />
+      </span>
+      <span className="team-row__value">
+        {tokens === undefined ? '--' : formatCompactTokens(tokens, locale)}
       </span>
     </div>
   )

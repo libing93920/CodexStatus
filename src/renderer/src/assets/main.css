@@ -1375,6 +1375,30 @@ body {
   transition: width 400ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* 团队页排行榜模式切换:额度 | Token消耗,置于顶部 tab 与标题之间 */
+.team-mode-switch {
+  margin-bottom: 12px;
+}
+
+/* Token 消耗模式的窗口切换(1天/7天/30天):紧凑,不与顶部 tab 抢眼 */
+.team-window-switch {
+  margin-bottom: 14px;
+}
+
+.team-window-switch .segmented {
+  width: 210px;
+  min-height: 32px;
+}
+
+.team-window-switch .segmented button {
+  min-height: 24px;
+}
+
+/* Token 消耗行:四列 rank | name | bar | value,去掉额度行的重置卡列,value 加宽容纳紧凑 token */
+.team-row--token {
+  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1.2fr) 68px;
+}
+
 .team-empty {
   margin-top: 18px;
   padding: 28px 18px;

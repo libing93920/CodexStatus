@@ -3,7 +3,7 @@ import { createServer, type Server } from 'node:http'
 import { isIPv4, type AddressInfo } from 'node:net'
 import { WebSocketServer, WebSocket } from 'ws'
 import Bonjour from 'bonjour-service'
-import type { TeamPeer } from '../../shared/capsule'
+import type { TeamPeer, UsageWindow } from '../../shared/capsule'
 
 const SERVICE_TYPE = 'codex-status'
 const SERVICE_PROTOCOL = 'tcp' as const
@@ -21,6 +21,8 @@ export interface PeerSnapshot {
   shortWindow?: { label: string; remainingPercent?: number }
   /** 长窗口(7d/1周)展示用:label + 剩余% */
   longWindow?: { label: string; remainingPercent?: number }
+  /** 各窗口 token 消耗总数(1d/7d/30d) */
+  tokenUsage?: Partial<Record<UsageWindow, number>>
 }
 
 interface PeerEntry {
@@ -32,6 +34,7 @@ interface PeerEntry {
   resetCreditCount?: number
   shortWindow?: { label: string; remainingPercent?: number }
   longWindow?: { label: string; remainingPercent?: number }
+  tokenUsage?: Partial<Record<UsageWindow, number>>
   updatedAt?: string
 }
 
@@ -165,6 +168,7 @@ export class LanService {
       shortWindow: entry.shortWindow,
       longWindow: entry.longWindow,
       resetCreditCount: entry.resetCreditCount,
+      tokenUsage: entry.tokenUsage,
       updatedAt: entry.updatedAt
     }))
   }
@@ -359,6 +363,7 @@ export class LanService {
       resetCreditCount: snapshot?.resetCreditCount ?? existing?.resetCreditCount,
       shortWindow: snapshot?.shortWindow ?? existing?.shortWindow,
       longWindow: snapshot?.longWindow ?? existing?.longWindow,
+      tokenUsage: snapshot?.tokenUsage ?? existing?.tokenUsage,
       updatedAt: new Date().toISOString()
     }
     this.peers.set(peerId, entry)

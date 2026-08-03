@@ -46,7 +46,12 @@ import {
 } from '../shared/capsule'
 import { collectUsageSnapshot, invalidateQuotaCaches, resolveCodexAuthPath } from './services/quota'
 import { refreshRadarNow, startRadarTimer, stopRadarTimer } from './services/radar'
-import { getTokenUsage, setRateLookup } from './services/usage'
+import {
+  getCachedTokenTotals,
+  getTokenUsage,
+  setRateLookup,
+  warmTokenTotals
+} from './services/usage'
 import { fetchModelsDevRates, getPricingRate } from './services/pricing'
 import { getSpendUsage } from './services/billing'
 import { loadPersistedState, savePersistedState } from './services/state'
@@ -772,6 +777,7 @@ function buildTeamPeers(selfRemaining: number | undefined): TeamPeer[] {
       ? { label: long.label, remainingPercent: long.remainingPercent }
       : undefined,
     resetCreditCount: currentSnapshot.resetCredit?.availableCount,
+    tokenUsage: getCachedTokenTotals(),
     updatedAt: new Date().toISOString()
   }
   return [selfPeer, ...lanService.getPeers()]
@@ -818,7 +824,8 @@ function getLanSnapshot(): PeerSnapshot {
       : undefined,
     longWindow: long
       ? { label: long.label, remainingPercent: long.remainingPercent }
-      : undefined
+      : undefined,
+    tokenUsage: getCachedTokenTotals()
   }
 }
 
@@ -868,6 +875,8 @@ async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): 
         iqThreshold: persistedState.settings.iqThreshold,
         bestModelPick: currentSnapshot.bestModelPick
       })
+      // 预热三窗口 token 汇总,供本机排行榜与 LAN 广播同步读取
+      await warmTokenTotals()
       // collect 期间 radar 回调可能已更新 bestModelPick;优先取最新值,旧值仅作兜底
       currentSnapshot = {
         ...collected,

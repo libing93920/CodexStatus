@@ -76,6 +76,8 @@ export interface TeamPeer {
   longWindow?: { label: string; remainingPercent?: number }
   /** 可用重置卡数量 */
   resetCreditCount?: number
+  /** 各窗口 token 消耗总数(1d/7d/30d);无数据的窗口不包含对应键 */
+  tokenUsage?: Partial<Record<UsageWindow, number>>
   /** 该 peer 最后更新时间(留作后续显示,本期 UI 不展示) */
   updatedAt?: string
 }

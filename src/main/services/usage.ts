@@ -121,6 +121,8 @@ interface CacheEntry {
 let cache: CacheEntry | undefined
 // 防止并发调用(如预取 3 个窗口)重复扫描:首次扫描进行中时复用同一 Promise
 let inflightDays: Promise<DayMap> | undefined
+// 最近一次算出的三窗口 token 总数,供 LAN 广播同步读取(peer 排行榜用)
+let lastTotals: Partial<Record<UsageWindow, number>> | undefined
 
 /**
  * 获取 1/7/30 天 token 用量与估算花费。
@@ -130,12 +132,30 @@ export async function getTokenUsage(window: UsageWindow): Promise<TokenUsageOver
   const days = await loadDays()
   const series = buildSeries(days, window)
   const totals = computeTotals(series)
+  lastTotals = { ...lastTotals, [window]: totals.total }
   return {
     available: totals.total > 0,
     generatedAt: new Date().toISOString(),
     days: series,
     totals
   }
+}
+
+/** 同步返回最近一次计算的三窗口 token 总数;从未算过则 undefined */
+export function getCachedTokenTotals(): Partial<Record<UsageWindow, number>> | undefined {
+  return lastTotals
+}
+
+/** 预热三窗口 token 总数并缓存,供主进程同步广播给 LAN peer */
+export async function warmTokenTotals(): Promise<Partial<Record<UsageWindow, number>>> {
+  const days = await loadDays()
+  const totals: Partial<Record<UsageWindow, number>> = {
+    '1d': computeTotals(buildSeries(days, '1d')).total,
+    '7d': computeTotals(buildSeries(days, '7d')).total,
+    '30d': computeTotals(buildSeries(days, '30d')).total
+  }
+  lastTotals = totals
+  return totals
 }
 
 // 带指纹+TTL 的缓存:指纹不变(文件集合+mtime 没变)且未过期时直接复用已解析的日桶,
