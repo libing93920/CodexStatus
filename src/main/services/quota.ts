@@ -3,7 +3,7 @@ import type { Dirent } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { AuthMode, RateLimitSource, RateLimitWindowSnapshot, UsageSnapshot } from '../../shared/capsule'
-import { debugLog } from './debug'
+import { debugLog } from './debug.ts'
 
 interface RawRateLimit {
   windowMinutes?: number
@@ -357,22 +357,18 @@ export async function readOfficialCodexCredentials(): Promise<CredentialLookup> 
         `tokens.api_key=${getString(tokens?.api_key) !== undefined}, tokens=${tokens ? 'yes' : 'no'}`
     )
 
-    // Codex auth_mode 序列化:ApiKey 变体经 #[serde(rename_all = "lowercase")] → "apikey";
-    // key 存顶层 OPENAI_API_KEY(大写),非 tokens 下。'api' 仅为兼容历史/测试。
-    if (mode === 'apikey' || mode === 'api') {
-      const apiKey = getString(
-        auth.OPENAI_API_KEY ?? tokens?.api_key ?? tokens?.apiKey ?? auth.api_key ?? auth.apiKey
-      )
-      if (!apiKey) {
-        void debugLog('readCredentials: api mode but no key found -> none')
-        return { canRefresh: false, mode: 'none', issue: 'Codex auth.json 缺少 API Key' }
-      }
-      void debugLog('readCredentials: -> api mode')
+    // Codex API Key 模式:key 存顶层 OPENAI_API_KEY(大写),auth_mode 可能缺失未标注。
+    // 只要找到 API Key 就判为 api 模式;无 key 时按 auth_mode 判 chatgpt。
+    const apiKey = getString(
+      auth.OPENAI_API_KEY ?? tokens?.api_key ?? tokens?.apiKey ?? auth.api_key ?? auth.apiKey
+    )
+    if (apiKey) {
+      void debugLog(`readCredentials: api key found (auth_mode=${mode ?? 'MISSING'}) -> api mode`)
       return { canRefresh: true, mode: 'api', apiKey }
     }
 
     if (mode !== 'chatgpt') {
-      void debugLog(`readCredentials: unknown mode "${mode ?? 'MISSING'}" -> none`)
+      void debugLog(`readCredentials: unknown mode "${mode ?? 'MISSING'}", no api key -> none`)
       return { canRefresh: false, mode: 'none', issue: 'Codex 未识别登录模式' }
     }
 
