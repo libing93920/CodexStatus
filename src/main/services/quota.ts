@@ -29,6 +29,8 @@ type CredentialLookup =
   | { canRefresh: false; mode: 'none'; issue?: string }
 
 const SESSION_SUBDIR = 'sessions'
+// Codex 归档会话的独立目录(与 sessions 平级,不在其子目录内);不扫会丢 token
+const SESSION_ARCHIVE_SUBDIR = 'archived_sessions'
 const OFFICIAL_CODEX_USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage'
 const OFFICIAL_RESET_CREDITS_URL =
   'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits'
@@ -499,10 +501,13 @@ export function resolveSessionPaths(): string[] {
   const codexHome = process.env.CODEX_HOME?.trim()
 
   if (codexHome) {
-    paths.push(path.join(path.resolve(expandHome(codexHome)), SESSION_SUBDIR))
+    const home = path.resolve(expandHome(codexHome))
+    paths.push(path.join(home, SESSION_SUBDIR))
+    paths.push(path.join(home, SESSION_ARCHIVE_SUBDIR))
   }
 
   paths.push(path.join(os.homedir(), '.codex', SESSION_SUBDIR))
+  paths.push(path.join(os.homedir(), '.codex', SESSION_ARCHIVE_SUBDIR))
   return Array.from(new Set(paths))
 }
 
