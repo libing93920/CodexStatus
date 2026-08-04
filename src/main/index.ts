@@ -815,6 +815,7 @@ function getLanSnapshot(): PeerSnapshot {
   const short = getShortWindow()
   const long = getLongWindow()
   return {
+    nickname: persistedState.settings.teamNickname ?? '我',
     remainingPercent: getSelfRemaining(),
     weeklyResetsAt: long?.resetsAt,
     bestModelLabel: currentSnapshot.bestModelPick?.shortLabel,

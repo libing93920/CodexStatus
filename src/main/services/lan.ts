@@ -13,6 +13,8 @@ const HELLO_RETRY_DELAY_MS = 3000
 
 /** peer 间互发的派生展示数据:绝不包含 Codex 凭据 */
 export interface PeerSnapshot {
+  /** 昵称:每次快照随带,避免只随 hello 传导致竞态显示兜底 'peer' */
+  nickname?: string
   remainingPercent?: number
   weeklyResetsAt?: string
   bestModelLabel?: string
@@ -356,7 +358,7 @@ export class LanService {
     const existing = this.peers.get(peerId)
     const entry: PeerEntry = {
       id: peerId,
-      nickname: nickname ?? existing?.nickname ?? 'peer',
+      nickname: snapshot?.nickname ?? nickname ?? existing?.nickname ?? 'peer',
       remainingPercent: snapshot?.remainingPercent ?? existing?.remainingPercent,
       weeklyResetsAt: snapshot?.weeklyResetsAt ?? existing?.weeklyResetsAt,
       bestModelLabel: snapshot?.bestModelLabel ?? existing?.bestModelLabel,
