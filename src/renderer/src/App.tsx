@@ -237,6 +237,8 @@ function App(): React.JSX.Element {
   // 团队页排行榜模式:quota=额度, tokens=Token 消耗;消耗模式再选 1d/7d/30d 窗口
   const [teamBoardMode, setTeamBoardMode] = useState<'quota' | 'tokens'>('quota')
   const [teamTokenWindow, setTeamTokenWindow] = useState<UsageWindow>('1d')
+  // 用量统计卡片选中窗口:提升到 App 级,详情/团队/设置 切换时保持选择不重置
+  const [usageWindowKey, setUsageWindowKey] = useState<UsageWindow>('7d')
   const [capsulePointerActive, setCapsulePointerActive] = useState(false)
   const [manualRefreshActive, setManualRefreshActive] = useState(false)
   const [appVersion, setAppVersion] = useState('')
@@ -1053,7 +1055,12 @@ function App(): React.JSX.Element {
                 </div>
               ) : null}
 
-              <UsageCard locale={settings.locale} authMode={snapshot.authMode} />
+              <UsageCard
+                authMode={snapshot.authMode}
+                locale={settings.locale}
+                onWindowKeyChange={setUsageWindowKey}
+                windowKey={usageWindowKey}
+              />
 
               <div className="panel__rows">
                 {detailRows.map((row) => (
@@ -1566,13 +1573,16 @@ const EMPTY_USAGE_OVERVIEW: TokenUsageOverview = {
 
 function UsageCard({
   locale,
-  authMode
+  authMode,
+  windowKey,
+  onWindowKeyChange
 }: {
   locale: LocaleCode
   authMode: AuthMode
+  windowKey: UsageWindow
+  onWindowKeyChange: (window: UsageWindow) => void
 }): React.JSX.Element {
   const copy = COPY[locale]
-  const [windowKey, setWindowKey] = useState<UsageWindow>('7d')
   // 三个窗口一次性预取,切换按钮即时显示,避免每次切换重新拉取导致的闪烁
   const [usageByWindow, setUsageByWindow] = useState<
     Partial<Record<UsageWindow, TokenUsageOverview>>
@@ -1645,7 +1655,7 @@ function UsageCard({
         <div className="usage-card__seg">
           <SegmentedControl
             value={windowKey}
-            onChange={(value) => setWindowKey(value as UsageWindow)}
+            onChange={(value) => onWindowKeyChange(value as UsageWindow)}
             options={[
               { label: copy.usage1d, value: '1d' },
               { label: copy.usage7d, value: '7d' },
