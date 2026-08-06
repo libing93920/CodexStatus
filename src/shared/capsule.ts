@@ -68,6 +68,8 @@ export interface TeamPeer {
   nickname: string
   /** 是否本机 */
   isSelf: boolean
+  /** 登录方式:api=API Key(无订阅额度,额度榜不展示) */
+  authMode?: AuthMode
   /** 剩余额度百分比(短窗口优先,排行主依据) */
   remainingPercent?: number
   /** 短窗口(5h):标签 + 剩余百分比 */

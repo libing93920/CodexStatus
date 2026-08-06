@@ -517,12 +517,14 @@ function App(): React.JSX.Element {
       void window.codexStatus.setCapsuleSize({ width, height })
     }
   }, [isApiMode, windowRole, apiTokenText, apiHitText, capsulePickText, capsuleViewMode])
-  // 团队排行榜:按剩余额度降序(undefined 视为 0,排末尾)
-  const teamPeers = [...(snapshot.teamPeers ?? [])].sort((a, b) => {
-    const ar = a.remainingPercent ?? -1
-    const br = b.remainingPercent ?? -1
-    return br - ar
-  })
+  // 团队额度排行榜:按剩余额度降序(undefined 视为 0,排末尾);API Key 登录无订阅额度(恒 0),不参与额度排行
+  const teamPeers = [...(snapshot.teamPeers ?? [])]
+    .filter((peer) => peer.authMode !== 'api')
+    .sort((a, b) => {
+      const ar = a.remainingPercent ?? -1
+      const br = b.remainingPercent ?? -1
+      return br - ar
+    })
   // Token 消耗排行榜:按选中窗口 token 总量降序(undefined 排末尾);横条按窗口内最大值归一化
   const teamTokenPeers = [...(snapshot.teamPeers ?? [])].sort((a, b) => {
     const at = a.tokenUsage?.[teamTokenWindow] ?? -1

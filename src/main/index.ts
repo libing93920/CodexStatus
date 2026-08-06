@@ -769,6 +769,7 @@ function buildTeamPeers(selfRemaining: number | undefined): TeamPeer[] {
     id: persistedState.peerId ?? 'self',
     nickname: selfName,
     isSelf: true,
+    authMode: currentSnapshot.authMode,
     remainingPercent: selfRemaining,
     shortWindow: short
       ? { label: short.label, remainingPercent: short.remainingPercent }
@@ -816,6 +817,7 @@ function getLanSnapshot(): PeerSnapshot {
   const long = getLongWindow()
   return {
     nickname: persistedState.settings.teamNickname ?? '我',
+    authMode: currentSnapshot.authMode,
     remainingPercent: getSelfRemaining(),
     weeklyResetsAt: long?.resetsAt,
     bestModelLabel: currentSnapshot.bestModelPick?.shortLabel,

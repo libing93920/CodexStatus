@@ -3,7 +3,7 @@ import { createServer, type Server } from 'node:http'
 import { isIPv4, type AddressInfo } from 'node:net'
 import { WebSocketServer, WebSocket } from 'ws'
 import Bonjour from 'bonjour-service'
-import type { TeamPeer, UsageWindow } from '../../shared/capsule'
+import type { AuthMode, TeamPeer, UsageWindow } from '../../shared/capsule'
 
 const SERVICE_TYPE = 'codex-status'
 const SERVICE_PROTOCOL = 'tcp' as const
@@ -15,6 +15,8 @@ const HELLO_RETRY_DELAY_MS = 3000
 export interface PeerSnapshot {
   /** 昵称:每次快照随带,避免只随 hello 传导致竞态显示兜底 'peer' */
   nickname?: string
+  /** 登录方式:api=API Key(无订阅额度,额度榜不展示) */
+  authMode?: AuthMode
   remainingPercent?: number
   weeklyResetsAt?: string
   bestModelLabel?: string
@@ -30,6 +32,7 @@ export interface PeerSnapshot {
 interface PeerEntry {
   id: string
   nickname: string
+  authMode?: AuthMode
   remainingPercent?: number
   weeklyResetsAt?: string
   bestModelLabel?: string
@@ -166,6 +169,7 @@ export class LanService {
       id: entry.id,
       nickname: entry.nickname,
       isSelf: false,
+      authMode: entry.authMode,
       remainingPercent: entry.remainingPercent,
       shortWindow: entry.shortWindow,
       longWindow: entry.longWindow,
@@ -363,6 +367,7 @@ export class LanService {
     const entry: PeerEntry = {
       id: peerId,
       nickname: resolvedNickname,
+      authMode: snapshot?.authMode ?? existing?.authMode,
       remainingPercent: snapshot?.remainingPercent ?? existing?.remainingPercent,
       weeklyResetsAt: snapshot?.weeklyResetsAt ?? existing?.weeklyResetsAt,
       bestModelLabel: snapshot?.bestModelLabel ?? existing?.bestModelLabel,
