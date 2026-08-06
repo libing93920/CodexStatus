@@ -95,6 +95,7 @@ const COPY = {
     teamNicknameHint: '仅作展示,不涉及凭据',
     teamGroup: '团队口令',
     teamGroupHint: '同口令的成员才互见',
+    teamAnonymous: '未命名成员',
     author: '作者',
     version: '版本',
     groupAbout: '关于',
@@ -183,6 +184,7 @@ const COPY = {
     teamNicknameHint: 'Display only, no credentials shared',
     teamGroup: 'Team passphrase',
     teamGroupHint: 'Only peers with the same passphrase can see each other',
+    teamAnonymous: 'Unnamed member',
     author: 'Author',
     version: 'Version',
     groupAbout: 'About',
@@ -1148,7 +1150,7 @@ function App(): React.JSX.Element {
                           key={peer.id}
                           locale={settings.locale}
                           maxTokens={teamTokenMax}
-                          nickname={peer.nickname}
+                          nickname={peer.nickname || copy.teamAnonymous}
                           rank={index + 1}
                           tokens={peer.tokenUsage?.[teamTokenWindow]}
                         />
@@ -1165,7 +1167,7 @@ function App(): React.JSX.Element {
                       key={peer.id}
                       isSelf={peer.isSelf}
                       rank={index + 1}
-                      nickname={peer.nickname}
+                      nickname={peer.nickname || copy.teamAnonymous}
                       remainingPercent={peer.remainingPercent}
                       shortWindow={peer.shortWindow}
                       longWindow={peer.longWindow}

@@ -356,9 +356,13 @@ export class LanService {
     snapshot?: PeerSnapshot
   ): void {
     const existing = this.peers.get(peerId)
+    // 昵称缺省时留空串,前端按 locale 显示本地化占位名;绝不用 'peer' 之类的字面量兜底,
+    // 那会冒充真名出现在排行榜里,无法与成员实际设置的昵称区分
+    const resolvedNickname =
+      snapshot?.nickname ?? nickname ?? existing?.nickname ?? ''
     const entry: PeerEntry = {
       id: peerId,
-      nickname: snapshot?.nickname ?? nickname ?? existing?.nickname ?? 'peer',
+      nickname: resolvedNickname,
       remainingPercent: snapshot?.remainingPercent ?? existing?.remainingPercent,
       weeklyResetsAt: snapshot?.weeklyResetsAt ?? existing?.weeklyResetsAt,
       bestModelLabel: snapshot?.bestModelLabel ?? existing?.bestModelLabel,
