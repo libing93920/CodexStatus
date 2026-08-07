@@ -33,6 +33,7 @@ const CHANNELS = {
   installUpdate: 'codex-status:install-update',
   tokenUsage: 'codex-status:token-usage',
   spendUsage: 'codex-status:spend-usage',
+  tokenUsageRange: 'codex-status:token-usage-range',
   setCapsuleSize: 'codex-status:set-capsule-size',
   updateProgress: 'codex-status:update-progress'
 } as const
@@ -53,6 +54,8 @@ const api: CodexStatusApi = {
   checkForUpdate: () => ipcRenderer.invoke(CHANNELS.checkUpdate) as Promise<UpdateCheckResult>,
   getTokenUsage: (window: UsageWindow) =>
     ipcRenderer.invoke(CHANNELS.tokenUsage, window) as Promise<TokenUsageOverview>,
+  getTokenUsageRange: (startMs: number, endMs: number) =>
+    ipcRenderer.invoke(CHANNELS.tokenUsageRange, startMs, endMs) as Promise<TokenUsageOverview>,
   getSpendUsage: (window: UsageWindow) =>
     ipcRenderer.invoke(CHANNELS.spendUsage, window) as Promise<SpendUsage>,
   setCapsuleSize: (size: { width: number; height: number }) =>

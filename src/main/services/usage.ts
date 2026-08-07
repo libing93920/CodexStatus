@@ -116,11 +116,25 @@ interface CacheEntry {
   fingerprint: string
   fetchedAtMs: number
   days: DayMap
+  events: EventItem[]
+}
+
+// 单条去重后的有效事件(时间戳 + 增量 + 模型),供自定义区间按起止时间切片聚合
+interface EventItem {
+  ts: number
+  delta: TokenDelta
+  model: string | undefined
+}
+
+/** 一次扫描的产物:按天聚合 + 事件级明细 */
+interface ScannedData {
+  days: DayMap
+  events: EventItem[]
 }
 
 let cache: CacheEntry | undefined
 // 防止并发调用(如预取 3 个窗口)重复扫描:首次扫描进行中时复用同一 Promise
-let inflightDays: Promise<DayMap> | undefined
+let inflight: Promise<ScannedData> | undefined
 // 最近一次算出的三窗口 token 总数,供 LAN 广播同步读取(peer 排行榜用)
 let lastTotals: Partial<Record<UsageWindow, number>> | undefined
 
@@ -138,6 +152,51 @@ export async function getTokenUsage(window: UsageWindow): Promise<TokenUsageOver
     generatedAt: new Date().toISOString(),
     days: series,
     totals
+  }
+}
+
+/**
+ * 自定义起止时间(毫秒)区间内的 token 用量与估算花费。
+ * 在去重后的事件级明细上按 [startMs, endMs) 切片累加,边界精确到毫秒;
+ * 区间超出扫描窗口(30 天)的部分自然取不到数据。
+ */
+export async function getTokenUsageRange(
+  startMs: number,
+  endMs: number
+): Promise<TokenUsageOverview> {
+  const { events } = await loadScanned()
+  const acc: Accum = { input: 0, cachedInput: 0, output: 0, reasoning: 0, total: 0, cost: 0 }
+  for (const event of events) {
+    if (event.ts >= startMs && event.ts < endMs) {
+      acc.input += event.delta.input
+      acc.cachedInput += event.delta.cachedInput
+      acc.output += event.delta.output
+      acc.reasoning += event.delta.reasoning
+      acc.total += event.delta.input + event.delta.output
+      acc.cost += computeCost(event.delta, event.model)
+    }
+  }
+  acc.cost = Math.round(acc.cost * 10000) / 10000
+  const day: TokenUsageDay = {
+    date: toLocalDayKey(new Date(startMs)),
+    input: acc.input,
+    cachedInput: acc.cachedInput,
+    output: acc.output,
+    reasoning: acc.reasoning,
+    cost: acc.cost
+  }
+  return {
+    available: acc.total > 0,
+    generatedAt: new Date().toISOString(),
+    days: [day],
+    totals: {
+      input: acc.input,
+      cachedInput: acc.cachedInput,
+      output: acc.output,
+      reasoning: acc.reasoning,
+      total: acc.total,
+      cost: acc.cost
+    }
   }
 }
 
@@ -160,31 +219,36 @@ export async function warmTokenTotals(): Promise<Partial<Record<UsageWindow, num
 
 // 带指纹+TTL 的缓存:指纹不变(文件集合+mtime 没变)且未过期时直接复用已解析的日桶,
 // 避免每 30s 快照刷新后 UI 拉取时重复读+解析全部文件
-async function loadDays(): Promise<DayMap> {
+async function loadScanned(): Promise<ScannedData> {
   const now = Date.now()
   if (cache && now - cache.fetchedAtMs < CACHE_TTL_MS) {
-    return cache.days
+    return cache
   }
-  if (!inflightDays) {
+  if (!inflight) {
     const { fingerprint } = await collectRecentFiles(now)
     if (cache && cache.fingerprint === fingerprint) {
       cache.fetchedAtMs = now
-      return cache.days
+      return cache
     }
-    inflightDays = scanRecentDays().then((days) => {
-      cache = { fingerprint, fetchedAtMs: now, days }
-      inflightDays = undefined
-      return days
+    inflight = scanRecentDays().then((data) => {
+      cache = { fingerprint, fetchedAtMs: now, ...data }
+      inflight = undefined
+      return data
     })
   }
-  return inflightDays
+  return inflight
+}
+
+async function loadDays(): Promise<DayMap> {
+  const data = await loadScanned()
+  return data.days
 }
 
 // —— 用量聚合:两遍扫描 ——
 // 第一遍:解析每个 session 文件(session_meta 父子关系 + turn_context 模型 + token_count 差值)。
 // 第二遍:带 parent 的子会话与父会话做 token 签名匹配,跳过重放前缀,只累计各自的新工作。
 // 背景:Codex 子代理线程会重放父会话的累计上下文,直接求和会把同一份 token 重复计入(实测最高 9.5 倍)。
-async function scanRecentDays(): Promise<DayMap> {
+async function scanRecentDays(): Promise<ScannedData> {
   const { entries } = await collectRecentFiles(Date.now())
 
   const byThread = new Map<string, ParsedFile>()
@@ -205,6 +269,7 @@ async function scanRecentDays(): Promise<DayMap> {
   }
 
   const days: DayMap = new Map()
+  const events: EventItem[] = []
   for (const { threadId, file } of parsed) {
     let skipPrefix = 0
     if (threadId && file.parent && !file.deferred && file.rootTs !== undefined) {
@@ -227,9 +292,10 @@ async function scanRecentDays(): Promise<DayMap> {
       acc.reasoning += event.delta.reasoning
       acc.total += event.delta.total
       acc.cost += computeCost(event.delta, event.model)
+      events.push({ ts: event.ts, delta: event.delta, model: event.model })
     }
   }
-  return days
+  return { days, events }
 }
 
 // 收集近 30 天窗口内的 JSONL 文件,并算出指纹(路径:mtime,按路径排序保证确定)

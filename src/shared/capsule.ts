@@ -216,6 +216,8 @@ export interface CodexStatusApi {
   checkForUpdate: () => Promise<UpdateCheckResult>
   /** 获取 1/7/30 天 token 用量与估算花费(按需拉取,不走快照广播) */
   getTokenUsage: (window: UsageWindow) => Promise<TokenUsageOverview>
+  /** 获取自定义起止时间(毫秒)区间内的 token 用量与估算花费(本地扫描,边界精确到毫秒) */
+  getTokenUsageRange: (startMs: number, endMs: number) => Promise<TokenUsageOverview>
   /** 获取 1/7/30 天真实账单花费(仅 API Key 模式;不可用返回 available:false) */
   getSpendUsage: (window: UsageWindow) => Promise<SpendUsage>
   /** 胶囊窗口按内容自适应尺寸(渲染层量内容后调用;主进程 setSize) */

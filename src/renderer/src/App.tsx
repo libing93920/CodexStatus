@@ -125,7 +125,11 @@ const COPY = {
     spendReal: '真实账单',
     usage1d: '1天',
     usage7d: '7天',
-    usage30d: '30天'
+    usage30d: '30天',
+    rangeStart: '开始',
+    rangeEnd: '结束',
+    rangeApply: '应用',
+    usageEstimated: '本地估算'
   },
   'en-US': {
     noData: 'No data',
@@ -214,7 +218,11 @@ const COPY = {
     spendReal: 'Real billing',
     usage1d: '1d',
     usage7d: '7d',
-    usage30d: '30d'
+    usage30d: '30d',
+    rangeStart: 'Start',
+    rangeEnd: 'End',
+    rangeApply: 'Apply',
+    usageEstimated: 'Estimated'
   }
 } as const
 
@@ -239,8 +247,6 @@ function App(): React.JSX.Element {
   // 团队页排行榜模式:quota=额度, tokens=Token 消耗;消耗模式再选 1d/7d/30d 窗口
   const [teamBoardMode, setTeamBoardMode] = useState<'quota' | 'tokens'>('quota')
   const [teamTokenWindow, setTeamTokenWindow] = useState<UsageWindow>('1d')
-  // 用量统计卡片选中窗口:提升到 App 级,详情/团队/设置 切换时保持选择不重置
-  const [usageWindowKey, setUsageWindowKey] = useState<UsageWindow>('7d')
   const [capsulePointerActive, setCapsulePointerActive] = useState(false)
   const [manualRefreshActive, setManualRefreshActive] = useState(false)
   const [appVersion, setAppVersion] = useState('')
@@ -1062,8 +1068,6 @@ function App(): React.JSX.Element {
               <UsageCard
                 authMode={snapshot.authMode}
                 locale={settings.locale}
-                onWindowKeyChange={setUsageWindowKey}
-                windowKey={usageWindowKey}
               />
 
               <div className="panel__rows">
@@ -1568,6 +1572,10 @@ function ApiCapsuleStat({
   )
 }
 
+// 自定义用量区间的上限(天),与主进程扫描窗口一致;超出部分取不到数据
+const MAX_RANGE_DAYS = 30
+const DAY_MS = 24 * 60 * 60 * 1000
+
 const EMPTY_USAGE_OVERVIEW: TokenUsageOverview = {
   available: false,
   generatedAt: '',
@@ -1577,14 +1585,10 @@ const EMPTY_USAGE_OVERVIEW: TokenUsageOverview = {
 
 function UsageCard({
   locale,
-  authMode,
-  windowKey,
-  onWindowKeyChange
+  authMode
 }: {
   locale: LocaleCode
   authMode: AuthMode
-  windowKey: UsageWindow
-  onWindowKeyChange: (window: UsageWindow) => void
 }): React.JSX.Element {
   const copy = COPY[locale]
   // 三个窗口一次性预取,切换按钮即时显示,避免每次切换重新拉取导致的闪烁
@@ -1594,6 +1598,15 @@ function UsageCard({
   // API Key 模式真实账单花费(窗口维度)
   const [spendByWindow, setSpendByWindow] = useState<Partial<Record<UsageWindow, SpendUsage>>>({})
   const [hoveredIndex, setHoveredIndex] = useState<number | undefined>(undefined)
+
+  // 区间选择:customRange 为空=1/7/30 天预设,有值=自定义起止时间(毫秒)
+  const [presetWindow, setPresetWindow] = useState<UsageWindow>('7d')
+  const [customRange, setCustomRange] = useState<{ startMs: number; endMs: number } | undefined>(
+    undefined
+  )
+  const [rangeOpen, setRangeOpen] = useState(false)
+  const [rangeUsage, setRangeUsage] = useState<TokenUsageOverview | undefined>(undefined)
+  const [rangeLoading, setRangeLoading] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -1639,37 +1652,124 @@ function UsageCard({
     }
   }, [authMode])
 
-  const usage = usageByWindow[windowKey]
+  const isCustom = customRange !== undefined
+  const customStartMs = customRange?.startMs
+  const customEndMs = customRange?.endMs
+
+  const loadCustomRange = (startMs: number, endMs: number): void => {
+    setRangeLoading(true)
+    window.codexStatus
+      .getTokenUsageRange(startMs, endMs)
+      .then((result) => {
+        setRangeUsage(result)
+      })
+      .catch(() => {
+        setRangeUsage(EMPTY_USAGE_OVERVIEW)
+      })
+      .finally(() => {
+        setRangeLoading(false)
+      })
+  }
+
+  const usage = usageByWindow[presetWindow]
   const isLoading = usage === undefined
   const days = usage?.days ?? []
   const totals = usage?.totals
   const hasData = usage?.available === true && totals !== undefined
   const chartMax = Math.max(1, days.reduce((max, day) => Math.max(max, day.input + day.output), 0))
   // API Key 模式:真实账单可用时用账单金额替代 token 估算
-  const spend = spendByWindow[windowKey]
+  const spend = spendByWindow[presetWindow]
   const spendMap =
     spend?.available === true ? new Map(spend.days.map((d) => [d.date, d.cost])) : undefined
   const costIsReal = spendMap !== undefined
   const costValue = costIsReal ? formatUsd(spend?.total ?? 0) : formatUsd(totals?.cost ?? 0)
+
+  // 自定义区间视图数据
+  const rangeTotals = rangeUsage?.totals
+  const rangeDay = rangeUsage?.days[0]
+  const rangeHasData =
+    rangeUsage?.available === true && rangeTotals !== undefined && rangeDay !== undefined
+
+  const triggerLabel = isCustom
+    ? formatRangeLabel(customStartMs ?? 0, customEndMs ?? 0)
+    : presetWindow === '1d'
+      ? copy.usage1d
+      : presetWindow === '7d'
+        ? copy.usage7d
+        : copy.usage30d
 
   return (
     <section className="usage-card">
       <div className="usage-card__head">
         <span className="usage-card__title">{copy.usage}</span>
         <div className="usage-card__seg">
-          <SegmentedControl
-            value={windowKey}
-            onChange={(value) => onWindowKeyChange(value as UsageWindow)}
-            options={[
-              { label: copy.usage1d, value: '1d' },
-              { label: copy.usage7d, value: '7d' },
-              { label: copy.usage30d, value: '30d' }
-            ]}
-          />
+          <button
+            className="usage-range-trigger"
+            type="button"
+            onClick={() => setRangeOpen((open) => !open)}
+          >
+            <span className="usage-range-trigger__label">{triggerLabel}</span>
+            <span className="usage-range-trigger__caret" aria-hidden="true">
+              ▾
+            </span>
+          </button>
         </div>
       </div>
 
-      {isLoading ? (
+      {rangeOpen ? (
+        <RangePanel
+          copy={copy}
+          presetWindow={presetWindow}
+          startMs={customStartMs}
+          endMs={customEndMs}
+          onPreset={(window) => {
+            setPresetWindow(window)
+            setCustomRange(undefined)
+            setRangeOpen(false)
+          }}
+          onCustom={(startMs, endMs) => {
+            setCustomRange({ startMs, endMs })
+            setRangeOpen(false)
+            loadCustomRange(startMs, endMs)
+          }}
+        />
+      ) : null}
+
+      {isCustom ? (
+        rangeLoading ? (
+          <p className="usage-card__empty">{copy.refreshing}</p>
+        ) : !rangeHasData ? (
+          <p className="usage-card__empty">{copy.usageEmpty}</p>
+        ) : (
+          <>
+            <div className="usage-summary">
+              <UsageSummaryItem
+                label={copy.usageTotal}
+                value={formatCompactTokens(rangeTotals.total, locale)}
+              />
+              <UsageSummaryItem
+                label={copy.usageInput}
+                value={formatCompactTokens(rangeTotals.input, locale)}
+                tone="input"
+              />
+              <UsageSummaryItem
+                label={copy.usageOutput}
+                value={formatCompactTokens(rangeTotals.output, locale)}
+                tone="output"
+              />
+              <UsageSummaryItem
+                label={copy.usageCacheHit}
+                value={formatCacheHit(rangeTotals.input, rangeTotals.cachedInput)}
+                tone="cached"
+              />
+              <UsageSummaryItem label={copy.usageCost} value={formatUsd(rangeTotals.cost)} tone="cost" />
+            </div>
+            <UsageBar day={rangeDay} locale={locale} />
+            {/* 自定义区间无真实账单口径,始终标注估算 */}
+            <p className="usage-card__spend-hint">{copy.usageEstimated}</p>
+          </>
+        )
+      ) : isLoading ? (
         <p className="usage-card__empty">{copy.refreshing}</p>
       ) : !hasData ? (
         <p className="usage-card__empty">{copy.usageEmpty}</p>
@@ -1744,6 +1844,139 @@ function UsageCard({
       )}
     </section>
   )
+}
+
+// 自定义区间选择面板:预设窗口 + 起止「日期+时分」输入,点「应用」生效
+function RangePanel({
+  copy,
+  presetWindow,
+  startMs,
+  endMs,
+  onPreset,
+  onCustom
+}: {
+  copy: (typeof COPY)[LocaleCode]
+  presetWindow: UsageWindow
+  startMs: number | undefined
+  endMs: number | undefined
+  onPreset: (window: UsageWindow) => void
+  onCustom: (startMs: number, endMs: number) => void
+}): React.JSX.Element {
+  // mount 时取一次当前时间,作为区间回填与日期输入范围的基准(render 期间不调用不纯的 Date.now)
+  const [now] = useState(() => Date.now())
+  const fallbackEnd = endMs ?? now
+  // 默认回填 7 个自然日(今天 00:00 往前 6 天 → 当前时刻),与预设「7天」口径一致;
+  // 若按滚动 7×24h(now-7 天)回填,会因多含前一日尾巴时段而与预设数字明显不同
+  const todayStartMs = (() => {
+    const day = new Date(now)
+    return new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime()
+  })()
+  const fallbackStart = startMs ?? todayStartMs - 6 * DAY_MS
+  const [startDate, setStartDate] = useState(() => toDateInput(fallbackStart))
+  const [startTime, setStartTime] = useState(() => toTimeInput(fallbackStart))
+  const [endDate, setEndDate] = useState(() => toDateInput(fallbackEnd))
+  const [endTime, setEndTime] = useState(() => toTimeInput(fallbackEnd))
+
+  const minDate = toDateInput(now - (MAX_RANGE_DAYS - 1) * DAY_MS)
+  const maxDate = toDateInput(now)
+
+  const toMs = (date: string, time: string): number | undefined => {
+    if (!date || !time) {
+      return undefined
+    }
+    const ms = new Date(`${date}T${time}`).getTime()
+    return Number.isFinite(ms) ? ms : undefined
+  }
+  const startMsValue = toMs(startDate, startTime)
+  const endMsValue = toMs(endDate, endTime)
+  const valid = startMsValue !== undefined && endMsValue !== undefined && endMsValue > startMsValue
+
+  return (
+    <div className="usage-range-panel">
+      <div className="usage-range-presets">
+        {(['1d', '7d', '30d'] as UsageWindow[]).map((window) => (
+          <button
+            className={`usage-range-presets__btn${
+              window === presetWindow && startMs === undefined ? ' is-active' : ''
+            }`}
+            key={window}
+            type="button"
+            onClick={() => onPreset(window)}
+          >
+            {window === '1d' ? copy.usage1d : window === '7d' ? copy.usage7d : copy.usage30d}
+          </button>
+        ))}
+      </div>
+      <div className="usage-range-fields">
+        <div className="usage-range-field">
+          <span className="usage-range-field__label">{copy.rangeStart}</span>
+          <input
+            type="date"
+            value={startDate}
+            min={minDate}
+            max={maxDate}
+            onChange={(event) => setStartDate(event.target.value)}
+          />
+          <input
+            type="time"
+            value={startTime}
+            onChange={(event) => setStartTime(event.target.value)}
+          />
+        </div>
+        <div className="usage-range-field">
+          <span className="usage-range-field__label">{copy.rangeEnd}</span>
+          <input
+            type="date"
+            value={endDate}
+            min={minDate}
+            max={maxDate}
+            onChange={(event) => setEndDate(event.target.value)}
+          />
+          <input
+            type="time"
+            value={endTime}
+            onChange={(event) => setEndTime(event.target.value)}
+          />
+        </div>
+      </div>
+      <button
+        className="usage-range-apply"
+        disabled={!valid}
+        type="button"
+        onClick={() => {
+          if (startMsValue !== undefined && endMsValue !== undefined) {
+            onCustom(startMsValue, endMsValue)
+          }
+        }}
+      >
+        {copy.rangeApply}
+      </button>
+    </div>
+  )
+}
+
+// 触发器文本:同日内折叠为「MM-DD HH:mm – HH:mm」,跨天显示完整起止
+function formatRangeLabel(startMs: number, endMs: number): string {
+  const start = new Date(startMs)
+  const end = new Date(endMs)
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  const date = (dt: Date): string => `${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`
+  const time = (dt: Date): string => `${pad(dt.getHours())}:${pad(dt.getMinutes())}`
+  return start.toDateString() === end.toDateString()
+    ? `${date(start)} ${time(start)} – ${time(end)}`
+    : `${date(start)} ${time(start)} – ${date(end)} ${time(end)}`
+}
+
+function toDateInput(ms: number): string {
+  const dt = new Date(ms)
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`
+}
+
+function toTimeInput(ms: number): string {
+  const dt = new Date(ms)
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${pad(dt.getHours())}:${pad(dt.getMinutes())}`
 }
 
 // 柱状图 hover 浮层:单日完整明细

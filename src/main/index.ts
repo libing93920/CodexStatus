@@ -49,6 +49,7 @@ import { refreshRadarNow, startRadarTimer, stopRadarTimer } from './services/rad
 import {
   getCachedTokenTotals,
   getTokenUsage,
+  getTokenUsageRange,
   setRateLookup,
   warmTokenTotals
 } from './services/usage'
@@ -82,6 +83,7 @@ const CHANNELS = {
   installUpdate: 'codex-status:install-update',
   tokenUsage: 'codex-status:token-usage',
   spendUsage: 'codex-status:spend-usage',
+  tokenUsageRange: 'codex-status:token-usage-range',
   setCapsuleSize: 'codex-status:set-capsule-size',
   updateProgress: 'codex-status:update-progress'
 } as const
@@ -509,6 +511,11 @@ function registerIpcHandlers(): void {
   // 按需拉取 1/7/30 天 token 用量统计(独立 IPC,不进快照广播)
   ipcMain.handle(CHANNELS.tokenUsage, async (_event, window: UsageWindow) => {
     return getTokenUsage(window)
+  })
+
+  // 自定义起止时间区间内的 token 用量统计(本地扫描,边界精确到毫秒,上限 30 天)
+  ipcMain.handle(CHANNELS.tokenUsageRange, async (_event, startMs: number, endMs: number) => {
+    return getTokenUsageRange(startMs, endMs)
   })
 
   // 按需拉取 1/7/30 天真实账单花费(仅 API Key 模式;不可用返回 available:false)
