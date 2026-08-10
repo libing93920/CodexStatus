@@ -544,6 +544,22 @@ body {
   color: rgba(240, 245, 250, 0.96);
 }
 
+/* 横版消息进入:文字从左侧滑入展示 */
+.capsule__message--capsule .capsule__message-copy {
+  animation: capsule-message-enter-x 0.35s ease-out both;
+}
+
+@keyframes capsule-message-enter-x {
+  from {
+    opacity: 0;
+    transform: translateX(-46%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 /* 竖版 orb:轨道改纵向、文字竖排;静态居中显示,滚动时改回顶部锚定从顶往下 */
 .capsule__message--orb {
   align-items: center;
@@ -568,6 +584,20 @@ body {
   padding-right: 0;
   padding-bottom: 14px;
   writing-mode: vertical-rl;
+  /* 收到消息:文字从胶囊底部向上滑入展示 */
+  animation: capsule-message-enter-y 0.35s ease-out both;
+}
+
+/* 竖版消息进入:从底部(向下偏移)滑入到展示位 */
+@keyframes capsule-message-enter-y {
+  from {
+    opacity: 0;
+    transform: translateY(46%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* 横版:文字从左侧进入,向右滚动 */
@@ -580,10 +610,10 @@ body {
   }
 }
 
-/* 竖版:文字从顶部进入,向下滚动 */
+/* 竖版:文字从底部进入,向上滚动 */
 @keyframes capsule-marquee-y {
   from {
-    transform: translateY(-50%);
+    transform: translateY(50%);
   }
   to {
     transform: translateY(0);

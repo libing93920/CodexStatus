@@ -1183,6 +1183,7 @@ function App(): React.JSX.Element {
             {heartEffect ? <HeartEffect key={heartEffect.id} kind={heartEffect.kind} /> : null}
             {capsuleMessage ? (
               <div
+                key={capsuleMessage.id}
                 className={`capsule__message capsule__message--${capsuleViewMode}${
                   capsuleMessageOverflow ? ' is-marquee' : ''
                 }`}

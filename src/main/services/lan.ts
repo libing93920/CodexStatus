@@ -364,13 +364,16 @@ export class LanService {
     this.scheduleHelloRetry(peerId, socket)
   }
 
-  // 出站连接关闭:若从未收到对方 hello(双向未建立),试下一个地址或清理
+  // 出站连接关闭:若记录已被其他连接替换(说明该 peer 另有活连接),只清定时器,不算掉线
   private handleOutgoingClose(peerId: string, socket: WebSocket, fromIndex: number): void {
-    // 仅当 connections 仍指向当前 socket 才清理,避免误清新发起的连接
-    if (this.connections.get(peerId) === socket) {
+    const isCurrent = this.connections.get(peerId) === socket
+    if (isCurrent) {
       this.connections.delete(peerId)
     }
     this.clearHelloTimer(peerId)
+    if (!isCurrent) {
+      return
+    }
     if (this.peers.has(peerId)) {
       // 已建立过双向连接,按正常掉线处理
       if (this.peers.delete(peerId)) {
@@ -383,6 +386,8 @@ export class LanService {
   }
 
   private handleIncoming(socket: WebSocket): void {
+    // hello 有重发机制,入站可能收到多次 hello:只在第一次完整绑定,后续只更新快照
+    let bound = false
     socket.on('message', (raw) => {
       const message = parseMessage(raw.toString())
       if (!message || message.type !== 'hello') return
@@ -391,12 +396,28 @@ export class LanService {
         socket.close()
         return
       }
+      if (bound) {
+        // 重发的 hello:走统一处理,更新快照并刷新记录,不重复绑定
+        this.handleMessage(socket, message.peerId, raw.toString())
+        return
+      }
+      bound = true
       this.connections.set(message.peerId, socket)
       this.applyPeerSnapshot(message.peerId, message.nickname, message.snapshot)
       this.sendHello(socket)
       // 被动方也补发保险:防止我方 hello 丢失导致对端单向
       this.scheduleHelloRetry(message.peerId, socket)
-      socket.on('close', () => this.handleSocketClose(message.peerId))
+      // 后续消息(snapshot/广播/点赞)统一走 handleMessage,记录在活跃连接间切换;
+      // 入站也处理消息,避免"对方消息走我入站连接时被忽略"
+      socket.on('message', (later) => {
+        this.handleMessage(socket, message.peerId, later.toString())
+      })
+      // 仅当记录仍指向当前 socket 才清理,防止影子连接断开误删有效记录
+      socket.on('close', () => {
+        if (this.connections.get(message.peerId) === socket) {
+          this.handleSocketClose(message.peerId)
+        }
+      })
     })
   }
 
@@ -415,6 +436,9 @@ export class LanService {
   }
 
   private handleMessage(socket: WebSocket, peerId: string, raw: string): void {
+    // 收到对方数据说明这条连接活跃,记录刷新指向它;断开的另一条会被数据流自然淘汰,
+    // 避免"记录指向已断连接导致我发不出、对方仍能发给我"的单向失效
+    this.connections.set(peerId, socket)
     const message = parseMessage(raw)
     if (!message) return
     if (message.type === 'hello') {
