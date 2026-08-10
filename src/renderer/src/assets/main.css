@@ -181,6 +181,83 @@ body {
   padding: 8px 4px;
 }
 
+/* 广播消息态:整窗跑马灯覆盖额度布局;方向随形态(横版左往右,竖版上往下)。
+   双副本轨道 width:max-content,translate -50%→0 恰好移动一个副本宽度,无缝循环 */
+.capsule__message {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.capsule__message-track {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  height: 100%;
+}
+
+/* 仅文本溢出胶囊时才滚动,放得下则静态显示全文(不空跑) */
+.capsule__message-track.is-marquee {
+  animation: capsule-marquee-x var(--capsule-marquee-duration) linear infinite;
+  will-change: transform;
+}
+
+.capsule__message-copy {
+  flex-shrink: 0;
+  padding-right: 28px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: rgba(240, 245, 250, 0.96);
+}
+
+/* 竖版 orb:轨道改纵向、文字竖排,顶部锚定,向下滚动 */
+.capsule__message--orb {
+  align-items: flex-start;
+}
+
+.capsule__message--orb .capsule__message-track {
+  flex-direction: column;
+  align-items: flex-start;
+  width: max-content;
+  height: max-content;
+}
+
+.capsule__message--orb .capsule__message-track.is-marquee {
+  animation-name: capsule-marquee-y;
+}
+
+.capsule__message--orb .capsule__message-copy {
+  padding-right: 0;
+  padding-bottom: 14px;
+  writing-mode: vertical-rl;
+}
+
+/* 横版:文字从左侧进入,向右滚动 */
+@keyframes capsule-marquee-x {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* 竖版:文字从顶部进入,向下滚动 */
+@keyframes capsule-marquee-y {
+  from {
+    transform: translateY(-50%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
 .capsule__col {
   display: flex;
   flex-direction: column;
@@ -825,6 +902,8 @@ body {
   color: var(--panel-text);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  /* 面板是深色主题:让原生日期/时间控件的图标与弹出的日历按深色渲染,否则图标纯黑看不清 */
+  color-scheme: dark;
 }
 
 .usage-range-field input:focus-visible {
@@ -1554,6 +1633,108 @@ body {
   text-align: center;
 }
 
+/* 广播消息流:会话内仅实时,最新在底;与排行榜用分隔线+间距分离 */
+.team-broadcast {
+  margin-top: var(--panel-space-section);
+  padding: var(--panel-space-section) 0;
+  border-top: 1px solid var(--panel-line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.team-broadcast__feed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.team-broadcast__feed::-webkit-scrollbar {
+  width: 6px;
+}
+
+.team-broadcast__feed::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.team-broadcast__item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: var(--panel-radius-sm);
+  border: 1px solid var(--panel-line);
+  background: var(--panel-card);
+}
+
+.team-broadcast__name {
+  flex-shrink: 0;
+  color: var(--panel-accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.team-broadcast__text {
+  min-width: 0;
+  color: var(--panel-text);
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.team-broadcast__empty {
+  padding: 12px 8px;
+  color: var(--panel-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.team-broadcast__composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.team-broadcast__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-line);
+  background: var(--panel-card);
+  color: var(--panel-text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 200ms ease;
+}
+
+.team-broadcast__input::placeholder {
+  color: var(--panel-muted);
+}
+
+.team-broadcast__input:focus {
+  border-color: var(--panel-accent);
+}
+
+.team-broadcast__send {
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 0 18px;
+  font-size: 13px;
+}
+
+.team-broadcast__error {
+  margin: 0;
+  padding: 0 4px;
+  color: var(--panel-danger);
+  font-size: 12px;
+}
+
 /* 统一底栏:左侧副信息 + 右侧收起按钮,去掉孤立感 */
 .panel__footer {
   margin-top: 0;
@@ -2066,6 +2247,7 @@ body {
 .panel__body--team > .panel__content > .team-board,
 .panel__body--team > .panel__content > .team-empty,
 .panel__body--team > .panel__content > .team-board__hint,
+.panel__body--team > .panel__content > .team-broadcast,
 .quota-grid,
 .usage-card,
 .panel__rows,
@@ -2084,6 +2266,10 @@ body {
 }
 
 .panel__body--team > .panel__content > .team-board__hint {
+  animation-delay: 90ms;
+}
+
+.panel__body--team > .panel__content > .team-broadcast {
   animation-delay: 90ms;
 }
 

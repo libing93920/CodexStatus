@@ -85,7 +85,9 @@ const CHANNELS = {
   spendUsage: 'codex-status:spend-usage',
   tokenUsageRange: 'codex-status:token-usage-range',
   setCapsuleSize: 'codex-status:set-capsule-size',
-  updateProgress: 'codex-status:update-progress'
+  updateProgress: 'codex-status:update-progress',
+  sendBroadcast: 'codex-status:send-broadcast',
+  broadcastMessage: 'codex-status:broadcast-message'
 } as const
 
 const SINGLE_CAPSULE_WINDOW_WIDTH = 160
@@ -534,6 +536,18 @@ function registerIpcHandlers(): void {
     )
   })
 
+  // 发送局域网广播消息:校验失败返回原因(渲染层据此区分提示);成功后回显给自己
+  ipcMain.handle(CHANNELS.sendBroadcast, async (_event, text: unknown) => {
+    if (typeof text !== 'string') {
+      return { ok: false, reason: 'too-long' }
+    }
+    const result = lanService.broadcastMessage(text)
+    if (result.ok) {
+      sendToRenderers(CHANNELS.broadcastMessage, result.message)
+    }
+    return result
+  })
+
   // 下载已检测到的新版本安装包;进度经 updateProgress 通道推送
   ipcMain.handle(CHANNELS.downloadUpdate, async () => {
     await downloadUpdate()
@@ -858,6 +872,9 @@ function syncLanService(): void {
         teamPeers: buildTeamPeers(getSelfRemaining())
       }
       broadcastSnapshot()
+    },
+    onMessage: (message) => {
+      sendToRenderers(CHANNELS.broadcastMessage, message)
     }
   })
 }

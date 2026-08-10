@@ -1,15 +1,24 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import { isIPv4, type AddressInfo } from 'node:net'
 import { WebSocketServer, WebSocket } from 'ws'
 import Bonjour from 'bonjour-service'
-import type { AuthMode, TeamPeer, UsageWindow } from '../../shared/capsule'
+import type {
+  AuthMode,
+  BroadcastMessage,
+  BroadcastSendResult,
+  TeamPeer,
+  UsageWindow
+} from '../../shared/capsule'
 
 const SERVICE_TYPE = 'codex-status'
 const SERVICE_PROTOCOL = 'tcp' as const
 const GROUP_HASH_LENGTH = 12
 // hello 重发等待:连接 open 后发 hello,若此时间内未收到对方 hello 则补发一次
 const HELLO_RETRY_DELAY_MS = 3000
+// 广播消息约束:超长拒绝、过频丢弃(局域网无鉴权,防刷屏底线)
+const BROADCAST_MAX_TEXT_LENGTH = 200
+const BROADCAST_MIN_INTERVAL_MS = 2000
 
 /** peer 间互发的派生展示数据:绝不包含 Codex 凭据 */
 export interface PeerSnapshot {
@@ -51,6 +60,8 @@ interface StartOptions {
   getSnapshot: () => PeerSnapshot
   /** peer 列表变化时回调,主进程据此刷新团队页 */
   onPeersChange: (peers: TeamPeer[]) => void
+  /** 收到同组广播消息时回调,主进程据此推给渲染层 */
+  onMessage: (message: BroadcastMessage) => void
 }
 
 interface HelloMessage {
@@ -66,7 +77,7 @@ interface SnapshotMessage {
   snapshot?: PeerSnapshot
 }
 
-type PeerMessage = HelloMessage | SnapshotMessage
+type PeerMessage = HelloMessage | SnapshotMessage | BroadcastMessage
 
 // mDNS 发现的远程服务信息
 interface DiscoveredService {
@@ -96,6 +107,8 @@ export class LanService {
   private options: StartOptions | undefined
   private groupHash: string | undefined
   private stopped = false
+  /** 上次广播时间戳,用于间隔限频 */
+  private lastBroadcastAt = 0
 
   start(options: StartOptions): void {
     if (this.options) {
@@ -161,6 +174,37 @@ export class LanService {
         socket.send(payload)
       }
     }
+  }
+
+  /** 校验后向所有已连 peer 广播一条消息;未启动/超长/过频分别返回失败原因 */
+  broadcastMessage(text: string): BroadcastSendResult {
+    if (!this.options) {
+      return { ok: false, reason: 'not-in-team' }
+    }
+    const trimmed = text.trim()
+    if (trimmed.length === 0 || trimmed.length > BROADCAST_MAX_TEXT_LENGTH) {
+      return { ok: false, reason: 'too-long' }
+    }
+    const now = Date.now()
+    if (now - this.lastBroadcastAt < BROADCAST_MIN_INTERVAL_MS) {
+      return { ok: false, reason: 'rate-limited' }
+    }
+    this.lastBroadcastAt = now
+    const message: BroadcastMessage = {
+      type: 'message',
+      id: randomUUID(),
+      senderPeerId: this.options.peerId,
+      senderNickname: this.options.nickname,
+      sentAt: now,
+      text: trimmed
+    }
+    const payload = JSON.stringify(message)
+    for (const socket of this.connections.values()) {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(payload)
+      }
+    }
+    return { ok: true, message }
   }
 
   /** 当前 peer 列表(不含 self),供主进程合并 self 生成 teamPeers */
@@ -351,6 +395,8 @@ export class LanService {
       this.applyPeerSnapshot(message.peerId, message.nickname, message.snapshot)
     } else if (message.type === 'snapshot') {
       this.applyPeerSnapshot(peerId, undefined, message.snapshot)
+    } else if (message.type === 'message') {
+      this.options?.onMessage(message)
     }
   }
 

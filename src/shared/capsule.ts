@@ -84,6 +84,23 @@ export interface TeamPeer {
   updatedAt?: string
 }
 
+/** 局域网广播消息:同组单向事件,发一次是一次;无历史、仅实时 */
+export interface BroadcastMessage {
+  type: 'message'
+  /** randomUUID,去重/未来升级聊天的锚点 */
+  id: string
+  senderPeerId: string
+  senderNickname: string
+  /** 发送时刻(ms epoch) */
+  sentAt: number
+  text: string
+}
+
+/** 发送广播的结果:ok=已广播;失败按原因区分,渲染层据此提示不同文案 */
+export type BroadcastSendResult =
+  | { ok: true; message: BroadcastMessage }
+  | { ok: false; reason: 'not-in-team' | 'too-long' | 'rate-limited' }
+
 export type UsageWindow = '1d' | '7d' | '30d'
 
 /** 单日 token 用量与估算花费 */
@@ -231,6 +248,10 @@ export interface CodexStatusApi {
   onCommand: (listener: (payload: RendererCommandPayload) => void) => () => void
   /** 订阅更新进度/状态变化(checking/downloading/downloaded/error) */
   onUpdateProgress: (listener: (payload: UpdateProgress) => void) => () => void
+  /** 发送一条局域网广播消息(同组可见);失败时返回原因供渲染层区分提示 */
+  sendBroadcast: (text: string) => Promise<BroadcastSendResult>
+  /** 订阅收到同组广播消息(含自己发出的回显,由 senderPeerId 区分) */
+  onBroadcastMessage: (listener: (message: BroadcastMessage) => void) => () => void
 }
 
 /** 检查更新的结果;available=false 表示已是最新或不可用(如 dev 环境) */

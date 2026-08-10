@@ -3,6 +3,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type {
   AppSettings,
   BootstrapPayload,
+  BroadcastSendResult,
   CapsuleDragMovePayload,
   CodexStatusApi,
   PanelView,
@@ -35,7 +36,9 @@ const CHANNELS = {
   spendUsage: 'codex-status:spend-usage',
   tokenUsageRange: 'codex-status:token-usage-range',
   setCapsuleSize: 'codex-status:set-capsule-size',
-  updateProgress: 'codex-status:update-progress'
+  updateProgress: 'codex-status:update-progress',
+  sendBroadcast: 'codex-status:send-broadcast',
+  broadcastMessage: 'codex-status:broadcast-message'
 } as const
 
 const api: CodexStatusApi = {
@@ -60,12 +63,15 @@ const api: CodexStatusApi = {
     ipcRenderer.invoke(CHANNELS.spendUsage, window) as Promise<SpendUsage>,
   setCapsuleSize: (size: { width: number; height: number }) =>
     ipcRenderer.invoke(CHANNELS.setCapsuleSize, size) as Promise<void>,
+  sendBroadcast: (text: string) =>
+    ipcRenderer.invoke(CHANNELS.sendBroadcast, text) as Promise<BroadcastSendResult>,
   downloadUpdate: () => ipcRenderer.invoke(CHANNELS.downloadUpdate) as Promise<void>,
   installUpdate: () => ipcRenderer.invoke(CHANNELS.installUpdate) as Promise<void>,
   onSnapshotUpdated: listener => subscribe(CHANNELS.snapshotUpdated, listener),
   onPreferencesUpdated: listener => subscribe(CHANNELS.preferencesUpdated, listener),
   onCommand: listener => subscribe(CHANNELS.command, listener),
-  onUpdateProgress: listener => subscribe(CHANNELS.updateProgress, listener)
+  onUpdateProgress: listener => subscribe(CHANNELS.updateProgress, listener),
+  onBroadcastMessage: listener => subscribe(CHANNELS.broadcastMessage, listener)
 }
 
 if (process.contextIsolated) {

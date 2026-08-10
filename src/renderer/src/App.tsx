@@ -11,6 +11,7 @@ import {
   createEmptySnapshot,
   type AppSettings,
   type AuthMode,
+  type BroadcastMessage,
   type LocaleCode,
   type PanelView,
   type PercentageMode,
@@ -27,6 +28,13 @@ import {
 const DEFAULT_CUSTOM_REFRESH_INTERVAL_SECONDS = 40
 const CAPSULE_CLICK_DRAG_DISTANCE = 5
 const MANUAL_REFRESH_FEEDBACK_MS = 680
+// 广播消息:胶囊进入消息态后无操作 N 毫秒自动回额度;panel 会话内消息流上限
+const BROADCAST_REVERT_MS = 15000
+const BROADCAST_FEED_LIMIT = 20
+// 跑马灯时长随文本长度线性,夹在 6s~20s 之间
+const CAPSULE_MARQUEE_MIN_MS = 6000
+const CAPSULE_MARQUEE_MAX_MS = 20000
+const CAPSULE_MARQUEE_PER_CHAR_MS = 80
 
 interface CapsulePointerState {
   pointerId: number
@@ -96,6 +104,12 @@ const COPY = {
     teamGroup: '团队口令',
     teamGroupHint: '同口令的成员才互见',
     teamAnonymous: '未命名成员',
+    broadcastEmpty: '暂无消息,发一条让同组同事看到吧',
+    broadcastPlaceholder: '发送一条消息,同组成员可见…',
+    broadcastSend: '发送',
+    broadcastNotInTeam: '未加入团队,设置口令后才能广播',
+    broadcastRateLimited: '发送过快,请 2 秒后再试',
+    capsuleMessageAria: '广播消息,点击返回额度',
     author: '作者',
     version: '版本',
     groupAbout: '关于',
@@ -189,6 +203,12 @@ const COPY = {
     teamGroup: 'Team passphrase',
     teamGroupHint: 'Only peers with the same passphrase can see each other',
     teamAnonymous: 'Unnamed member',
+    broadcastEmpty: 'No messages yet — send one to your team',
+    broadcastPlaceholder: 'Send a message visible to your team…',
+    broadcastSend: 'Send',
+    broadcastNotInTeam: 'Not in a team — set a passphrase to broadcast',
+    broadcastRateLimited: 'Sending too fast — wait 2s and retry',
+    capsuleMessageAria: 'Broadcast message, click to return',
     author: 'Author',
     version: 'Version',
     groupAbout: 'About',
@@ -269,6 +289,21 @@ function App(): React.JSX.Element {
   const justRefreshedTimerRef = useRef<number | undefined>(undefined)
   // "已是最新"提示停留几秒后自动回 idle
   const upToDateTimerRef = useRef<number | undefined>(undefined)
+  // 局域网广播消息:panel 会话内消息流 + 胶囊当前展示消息(到达即切,无操作自动回)
+  const [broadcastMessages, setBroadcastMessages] = useState<BroadcastMessage[]>([])
+  const [capsuleMessage, setCapsuleMessage] = useState<BroadcastMessage | null>(null)
+  const capsuleMessageTimerRef = useRef<number | undefined>(undefined)
+  // 消息文本是否溢出胶囊:放得下就静态显示全文,溢出才启用跑马灯(方案C)
+  const [capsuleMessageOverflow, setCapsuleMessageOverflow] = useState(false)
+  const capsuleMessageCopyRef = useRef<HTMLSpanElement | null>(null)
+  // self peerId 在 bootstrap 后才知道,订阅回调里用 ref 读取避免闭包过期
+  const selfPeerIdRef = useRef<string | undefined>(undefined)
+  // 广播发送:输入、发送中、失败提示(区分未加入团队/发送过快)
+  const [broadcastInput, setBroadcastInput] = useState('')
+  const [broadcastSending, setBroadcastSending] = useState(false)
+  const [broadcastSendError, setBroadcastSendError] = useState('')
+  // 消息流容器:新消息到达时滚到底,保证最新可见
+  const broadcastFeedRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     let active = true
@@ -361,6 +396,22 @@ function App(): React.JSX.Element {
       }
     })
 
+    // 订阅局域网广播消息:进会话流;非自己发的再驱动胶囊消息态(到达即切,重置回退定时器)
+    const disposeBroadcast = window.codexStatus.onBroadcastMessage((message) => {
+      setBroadcastMessages((previous) => [...previous, message].slice(-BROADCAST_FEED_LIMIT))
+      if (message.senderPeerId === selfPeerIdRef.current) {
+        return
+      }
+      setCapsuleMessage(message)
+      if (capsuleMessageTimerRef.current !== undefined) {
+        window.clearTimeout(capsuleMessageTimerRef.current)
+      }
+      capsuleMessageTimerRef.current = window.setTimeout(() => {
+        setCapsuleMessage(null)
+        capsuleMessageTimerRef.current = undefined
+      }, BROADCAST_REVERT_MS)
+    })
+
     return () => {
       active = false
       if (manualRefreshTimerRef.current !== undefined) {
@@ -372,10 +423,14 @@ function App(): React.JSX.Element {
       if (upToDateTimerRef.current !== undefined) {
         window.clearTimeout(upToDateTimerRef.current)
       }
+      if (capsuleMessageTimerRef.current !== undefined) {
+        window.clearTimeout(capsuleMessageTimerRef.current)
+      }
       disposeSnapshot()
       disposePreferences()
       disposeCommand()
       disposeUpdateProgress()
+      disposeBroadcast()
     }
   }, [])
 
@@ -541,6 +596,42 @@ function App(): React.JSX.Element {
     1,
     ...teamTokenPeers.map((peer) => peer.tokenUsage?.[teamTokenWindow] ?? 0)
   )
+  // 本机 peer 标识:供回声过滤(自己发的消息只进 panel 流,不驱动胶囊切换)
+  const selfPeerId = snapshot.teamPeers?.find((peer) => peer.isSelf)?.id
+  useEffect(() => {
+    selfPeerIdRef.current = selfPeerId
+  }, [selfPeerId])
+  // 新消息入流后把 feed 滚到底,最新可见
+  useEffect(() => {
+    const feed = broadcastFeedRef.current
+    if (feed) {
+      feed.scrollTop = feed.scrollHeight
+    }
+  }, [broadcastMessages.length])
+  // 胶囊消息态跑马灯:文本越长滚动越慢,夹在 6s~20s
+  const capsuleMarqueeDuration = capsuleMessage
+    ? Math.max(
+        CAPSULE_MARQUEE_MIN_MS,
+        Math.min(CAPSULE_MARQUEE_MAX_MS, capsuleMessage.text.length * CAPSULE_MARQUEE_PER_CHAR_MS)
+      )
+    : CAPSULE_MARQUEE_MIN_MS
+  const capsuleMessageLabel = capsuleMessage
+    ? capsuleMessage.senderNickname || copy.teamAnonymous
+    : ''
+  // 测量单份文本是否超过胶囊可视区:横版比宽度,竖版比高度;超了才滚动
+  useEffect(() => {
+    const copy = capsuleMessageCopyRef.current
+    const container = copy?.closest<HTMLDivElement>('.capsule__message')
+    if (!capsuleMessage || !copy || !container) {
+      setCapsuleMessageOverflow(false)
+      return
+    }
+    const overflows =
+      capsuleViewMode === 'orb'
+        ? copy.offsetHeight > container.clientHeight
+        : copy.offsetWidth > container.clientWidth
+    setCapsuleMessageOverflow(overflows)
+  }, [capsuleMessage, capsuleViewMode])
   const capsuleClassName = [
     'capsule',
     `capsule--${capsuleViewMode}`,
@@ -796,6 +887,16 @@ function App(): React.JSX.Element {
       return
     }
 
+    // 消息态下点击 = 回到额度态,不打开面板;消息不落历史,点回即丢弃
+    if (capsuleMessage) {
+      setCapsuleMessage(null)
+      if (capsuleMessageTimerRef.current !== undefined) {
+        window.clearTimeout(capsuleMessageTimerRef.current)
+        capsuleMessageTimerRef.current = undefined
+      }
+      return
+    }
+
     // 点击胶囊(无拖拽)直接打开详情面板,不再触发刷新;刷新入口移至右键菜单和面板内按钮
     if (shouldRefreshOnClick) {
       void window.codexStatus.showPanel('details')
@@ -808,6 +909,15 @@ function App(): React.JSX.Element {
     }
 
     event.preventDefault()
+    // 消息态下回车/空格 = 回额度态,不打开面板
+    if (capsuleMessage) {
+      setCapsuleMessage(null)
+      if (capsuleMessageTimerRef.current !== undefined) {
+        window.clearTimeout(capsuleMessageTimerRef.current)
+        capsuleMessageTimerRef.current = undefined
+      }
+      return
+    }
     void window.codexStatus.showPanel('details')
   }
 
@@ -818,6 +928,30 @@ function App(): React.JSX.Element {
       isRefreshing: false,
       issues: Array.from(new Set([message, ...previous.issues])).slice(0, 6)
     }))
+  }
+
+  // 发送广播:成功清输入(自己消息经主进程回显进 feed);失败按原因提示,保留输入
+  async function handleBroadcastSend(): Promise<void> {
+    const text = broadcastInput.trim()
+    if (!text || broadcastSending) {
+      return
+    }
+    setBroadcastSending(true)
+    setBroadcastSendError('')
+    try {
+      const result = await window.codexStatus.sendBroadcast(text)
+      if (result.ok) {
+        setBroadcastInput('')
+      } else {
+        setBroadcastSendError(
+          result.reason === 'not-in-team' ? copy.broadcastNotInTeam : copy.broadcastRateLimited
+        )
+      }
+    } catch {
+      // IPC 异常:静默保留输入,不误导用户
+    } finally {
+      setBroadcastSending(false)
+    }
   }
 
   async function handleSettingsPatch(patch: Partial<AppSettings>): Promise<void> {
@@ -919,7 +1053,7 @@ function App(): React.JSX.Element {
         <main className="widget">
           <section
             ref={capsuleRef}
-            aria-label={copy.details}
+            aria-label={capsuleMessage ? copy.capsuleMessageAria : copy.details}
             className={capsuleClassName}
             style={capsuleProgressStyle}
             onKeyDown={handleCapsuleKeyDown}
@@ -930,7 +1064,25 @@ function App(): React.JSX.Element {
             role="button"
             tabIndex={0}
           >
-            {capsuleViewMode === 'orb' ? (
+            {capsuleMessage ? (
+              <div className={`capsule__message capsule__message--${capsuleViewMode}`}>
+                <div
+                  className={`capsule__message-track${capsuleMessageOverflow ? ' is-marquee' : ''}`}
+                  style={
+                    { '--capsule-marquee-duration': `${capsuleMarqueeDuration}ms` } as CSSProperties
+                  }
+                >
+                  <span ref={capsuleMessageCopyRef} className="capsule__message-copy">
+                    {capsuleMessageLabel}: {capsuleMessage.text}
+                  </span>
+                  {capsuleMessageOverflow ? (
+                    <span aria-hidden="true" className="capsule__message-copy">
+                      {capsuleMessageLabel}: {capsuleMessage.text}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ) : capsuleViewMode === 'orb' ? (
               <div
                 className={`capsule__layout capsule__layout--v${isApiMode ? ' capsule__layout--v-api' : ''}`}
                 aria-hidden="true"
@@ -1184,6 +1336,56 @@ function App(): React.JSX.Element {
               ) : (
                 <p className="team-empty">{copy.teamEmpty}</p>
               )}
+
+              {/* 广播消息流:会话内仅实时,最新在底;发送经主进程校验与回显 */}
+              <div className="team-broadcast">
+                <div className="team-broadcast__feed" ref={broadcastFeedRef}>
+                  {broadcastMessages.length > 0 ? (
+                    broadcastMessages.map((message) => (
+                      <div className="team-broadcast__item" key={message.id}>
+                        <span className="team-broadcast__name">
+                          {message.senderNickname || copy.teamAnonymous}
+                        </span>
+                        <span className="team-broadcast__text">{message.text}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="team-broadcast__empty">{copy.broadcastEmpty}</p>
+                  )}
+                </div>
+                <div className="team-broadcast__composer">
+                  <input
+                    className="team-broadcast__input"
+                    disabled={broadcastSending}
+                    maxLength={200}
+                    onChange={(event) => {
+                      setBroadcastInput(event.target.value)
+                      if (broadcastSendError) {
+                        setBroadcastSendError('')
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        void handleBroadcastSend()
+                      }
+                    }}
+                    placeholder={copy.broadcastPlaceholder}
+                    type="text"
+                    value={broadcastInput}
+                  />
+                  <button
+                    className="ghost-button ghost-button--accent team-broadcast__send"
+                    disabled={broadcastSending || broadcastInput.trim().length === 0}
+                    onClick={() => void handleBroadcastSend()}
+                    type="button"
+                  >
+                    {copy.broadcastSend}
+                  </button>
+                </div>
+                {broadcastSendError ? (
+                  <p className="team-broadcast__error">{broadcastSendError}</p>
+                ) : null}
+              </div>
             </div>
 
             <div className="panel__footer">
