@@ -305,7 +305,7 @@ function App(): React.JSX.Element {
   const capsuleMessageTimerRef = useRef<number | undefined>(undefined)
   // 消息文本是否溢出胶囊:放得下就静态显示全文,溢出才启用跑马灯(方案C)
   const [capsuleMessageOverflow, setCapsuleMessageOverflow] = useState(false)
-  const capsuleMessageCopyRef = useRef<HTMLSpanElement | null>(null)
+  const capsuleMessageTextRef = useRef<HTMLSpanElement | null>(null)
   // self peerId 在 bootstrap 后才知道,订阅回调里用 ref 读取避免闭包过期
   const selfPeerIdRef = useRef<string | undefined>(undefined)
   // 广播发送:输入、发送中、失败提示(区分未加入团队/发送过快)
@@ -688,19 +688,19 @@ function App(): React.JSX.Element {
     ? capsuleMessage.senderNickname || copy.teamAnonymous
     : ''
   // 测量单份文本是否超过胶囊可视区:横版比宽度,竖版比高度;超了才滚动
-  useEffect(() => {
-    const copy = capsuleMessageCopyRef.current
-    const container = copy?.closest<HTMLDivElement>('.capsule__message')
-    if (!capsuleMessage || !copy || !container) {
+  useLayoutEffect(() => {
+    const text = capsuleMessageTextRef.current
+    const container = text?.closest<HTMLDivElement>('.capsule__message')
+    if (!capsuleMessage || !text || !container) {
       setCapsuleMessageOverflow(false)
       return
     }
     const overflows =
       capsuleViewMode === 'orb'
-        ? copy.offsetHeight > container.clientHeight
-        : copy.offsetWidth > container.clientWidth
+        ? text.offsetHeight > container.clientHeight
+        : text.offsetWidth > container.clientWidth
     setCapsuleMessageOverflow(overflows)
-  }, [capsuleMessage, capsuleViewMode])
+  }, [capsuleMessage, capsuleMessageLabel, capsuleViewMode])
   const hasUpdate =
     updateState === 'available' || updateState === 'downloading' || updateState === 'downloaded'
   // P2P 版本落后:组内广播的最高版本高于本地即提示;与 GitHub 红点角标不叠加
@@ -1194,12 +1194,16 @@ function App(): React.JSX.Element {
                     { '--capsule-marquee-duration': `${capsuleMarqueeDuration}ms` } as CSSProperties
                   }
                 >
-                  <span ref={capsuleMessageCopyRef} className="capsule__message-copy">
-                    {capsuleMessageLabel}: {capsuleMessage.text}
+                  <span className="capsule__message-copy">
+                    <span ref={capsuleMessageTextRef} className="capsule__message-text">
+                      {capsuleMessageLabel}: {capsuleMessage.text}
+                    </span>
                   </span>
                   {capsuleMessageOverflow ? (
                     <span aria-hidden="true" className="capsule__message-copy">
-                      {capsuleMessageLabel}: {capsuleMessage.text}
+                      <span className="capsule__message-text">
+                        {capsuleMessageLabel}: {capsuleMessage.text}
+                      </span>
                     </span>
                   ) : null}
                 </div>
