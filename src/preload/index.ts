@@ -8,6 +8,7 @@ import type {
   CodexStatusApi,
   PanelView,
   PreferencesPayload,
+  ReactionSendResult,
   SpendUsage,
   TokenUsageOverview,
   UpdateCheckResult,
@@ -38,7 +39,9 @@ const CHANNELS = {
   setCapsuleSize: 'codex-status:set-capsule-size',
   updateProgress: 'codex-status:update-progress',
   sendBroadcast: 'codex-status:send-broadcast',
-  broadcastMessage: 'codex-status:broadcast-message'
+  broadcastMessage: 'codex-status:broadcast-message',
+  sendReaction: 'codex-status:send-reaction',
+  reaction: 'codex-status:reaction'
 } as const
 
 const api: CodexStatusApi = {
@@ -65,13 +68,16 @@ const api: CodexStatusApi = {
     ipcRenderer.invoke(CHANNELS.setCapsuleSize, size) as Promise<void>,
   sendBroadcast: (text: string) =>
     ipcRenderer.invoke(CHANNELS.sendBroadcast, text) as Promise<BroadcastSendResult>,
+  sendReaction: (targetPeerId: string, action: 'add' | 'remove') =>
+    ipcRenderer.invoke(CHANNELS.sendReaction, targetPeerId, action) as Promise<ReactionSendResult>,
   downloadUpdate: () => ipcRenderer.invoke(CHANNELS.downloadUpdate) as Promise<void>,
   installUpdate: () => ipcRenderer.invoke(CHANNELS.installUpdate) as Promise<void>,
   onSnapshotUpdated: listener => subscribe(CHANNELS.snapshotUpdated, listener),
   onPreferencesUpdated: listener => subscribe(CHANNELS.preferencesUpdated, listener),
   onCommand: listener => subscribe(CHANNELS.command, listener),
   onUpdateProgress: listener => subscribe(CHANNELS.updateProgress, listener),
-  onBroadcastMessage: listener => subscribe(CHANNELS.broadcastMessage, listener)
+  onBroadcastMessage: listener => subscribe(CHANNELS.broadcastMessage, listener),
+  onReaction: listener => subscribe(CHANNELS.reaction, listener)
 }
 
 if (process.contextIsolated) {

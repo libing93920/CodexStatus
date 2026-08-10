@@ -80,6 +80,8 @@ export interface TeamPeer {
   resetCreditCount?: number
   /** 各窗口 token 消耗总数(1d/7d/30d);无数据的窗口不包含对应键 */
   tokenUsage?: Partial<Record<UsageWindow, number>>
+  /** 应用版本:排行榜以组内最高版本为基准标绿/黄点 */
+  appVersion?: string
   /** 该 peer 最后更新时间(留作后续显示,本期 UI 不展示) */
   updatedAt?: string
 }
@@ -95,6 +97,24 @@ export interface BroadcastMessage {
   sentAt: number
   text: string
 }
+
+/** 排行榜成员点赞事件:同组广播;接收端按目标成员聚合,同一发送者对同一成员以最后一次动作生效 */
+export interface ReactionMessage {
+  type: 'reaction'
+  /** randomUUID */
+  id: string
+  senderPeerId: string
+  targetPeerId: string
+  /** add=点赞, remove=取消(toggle) */
+  action: 'add' | 'remove'
+  /** 事件时刻(ms epoch);超过 24h 自动过期,不参与计数 */
+  sentAt: number
+}
+
+/** 发送点赞的结果:唯一失败场景是未加入团队 */
+export type ReactionSendResult =
+  | { ok: true; reaction: ReactionMessage }
+  | { ok: false; reason: 'not-in-team' }
 
 /** 发送广播的结果:ok=已广播;失败按原因区分,渲染层据此提示不同文案 */
 export type BroadcastSendResult =
@@ -252,6 +272,10 @@ export interface CodexStatusApi {
   sendBroadcast: (text: string) => Promise<BroadcastSendResult>
   /** 订阅收到同组广播消息(含自己发出的回显,由 senderPeerId 区分) */
   onBroadcastMessage: (listener: (message: BroadcastMessage) => void) => () => void
+  /** 给某成员点赞/取消(toggle):action 由渲染层按当前已赞状态决定;主进程回显给自己,所有端各自聚合 */
+  sendReaction: (targetPeerId: string, action: 'add' | 'remove') => Promise<ReactionSendResult>
+  /** 订阅收到同组点赞事件(含自己回显,由 senderPeerId 区分) */
+  onReaction: (listener: (reaction: ReactionMessage) => void) => () => void
 }
 
 /** 检查更新的结果;available=false 表示已是最新或不可用(如 dev 环境) */

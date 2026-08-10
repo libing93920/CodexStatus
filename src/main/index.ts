@@ -87,7 +87,9 @@ const CHANNELS = {
   setCapsuleSize: 'codex-status:set-capsule-size',
   updateProgress: 'codex-status:update-progress',
   sendBroadcast: 'codex-status:send-broadcast',
-  broadcastMessage: 'codex-status:broadcast-message'
+  broadcastMessage: 'codex-status:broadcast-message',
+  sendReaction: 'codex-status:send-reaction',
+  reaction: 'codex-status:reaction'
 } as const
 
 const SINGLE_CAPSULE_WINDOW_WIDTH = 160
@@ -548,6 +550,18 @@ function registerIpcHandlers(): void {
     return result
   })
 
+  // 给某成员点赞/取消:校验 targetPeerId 与 action 后广播,成功回显给自己(所有端各自聚合)
+  ipcMain.handle(CHANNELS.sendReaction, async (_event, targetPeerId: unknown, action: unknown) => {
+    if (typeof targetPeerId !== 'string' || (action !== 'add' && action !== 'remove')) {
+      return { ok: false, reason: 'not-in-team' }
+    }
+    const result = lanService.broadcastReaction(targetPeerId, action)
+    if (result.ok) {
+      sendToRenderers(CHANNELS.reaction, result.reaction)
+    }
+    return result
+  })
+
   // 下载已检测到的新版本安装包;进度经 updateProgress 通道推送
   ipcMain.handle(CHANNELS.downloadUpdate, async () => {
     await downloadUpdate()
@@ -800,6 +814,7 @@ function buildTeamPeers(selfRemaining: number | undefined): TeamPeer[] {
       : undefined,
     resetCreditCount: currentSnapshot.resetCredit?.availableCount,
     tokenUsage: getCachedTokenTotals(),
+    appVersion: app.getVersion(),
     updatedAt: new Date().toISOString()
   }
   return [selfPeer, ...lanService.getPeers()]
@@ -849,7 +864,8 @@ function getLanSnapshot(): PeerSnapshot {
     longWindow: long
       ? { label: long.label, remainingPercent: long.remainingPercent }
       : undefined,
-    tokenUsage: getCachedTokenTotals()
+    tokenUsage: getCachedTokenTotals(),
+    appVersion: app.getVersion()
   }
 }
 
@@ -875,6 +891,9 @@ function syncLanService(): void {
     },
     onMessage: (message) => {
       sendToRenderers(CHANNELS.broadcastMessage, message)
+    },
+    onReaction: (reaction) => {
+      sendToRenderers(CHANNELS.reaction, reaction)
     }
   })
 }

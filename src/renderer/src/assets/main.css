@@ -1499,11 +1499,19 @@ body {
 }
 
 .team-row__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
-  overflow: hidden;
   color: var(--panel-text);
   font-size: 14px;
   font-weight: 600;
+}
+
+/* 昵称文本单独承担 ellipsis,让紧跟其后的点赞按钮不被截断 */
+.team-row__name-text {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1615,6 +1623,71 @@ body {
 /* Token 消耗行:四列 rank | name | bar | value,去掉额度行的重置卡列,value 加宽容纳紧凑 token */
 .team-row--token {
   grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1.2fr) 68px;
+}
+
+/* 1d 视图带点赞列:点赞并入昵称列紧跟名字,不再占独立列,避免贴近进度条 */
+.team-row--token.is-like {
+  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1.2fr) 68px;
+}
+
+/* 版本状态点:绿=组内最高版本,黄=落后(基准为广播的最高 appVersion);置于名前,左缘对齐方便扫读 */
+.team-row__dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  vertical-align: 1px;
+}
+
+.team-row__dot.is-latest {
+  background: var(--panel-success);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--panel-success) 20%, transparent);
+}
+
+.team-row__dot.is-outdated {
+  background: #e3b341;
+}
+
+/* 点赞列:数字在上、爱心在下,常显灰色,自己已赞变红 */
+.team-row__like {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 4px 0;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--panel-muted);
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    transform 120ms ease;
+}
+
+.team-row__like:hover {
+  background: rgba(255, 255, 255, 0.05);
+  transform: scale(1.04);
+}
+
+.team-row__like-count {
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.team-row__like svg {
+  width: 15px;
+  height: 15px;
+}
+
+.team-row__like.is-liked {
+  color: #e0696c;
 }
 
 .team-empty {

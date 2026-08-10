@@ -16,6 +16,7 @@ import {
   type PanelView,
   type PercentageMode,
   type RateLimitWindowSnapshot,
+  type ReactionMessage,
   type RendererWindowRole,
   type SpendUsage,
   type TokenUsageDay,
@@ -35,6 +36,8 @@ const BROADCAST_FEED_LIMIT = 3
 const CAPSULE_MARQUEE_MIN_MS = 6000
 const CAPSULE_MARQUEE_MAX_MS = 20000
 const CAPSULE_MARQUEE_PER_CHAR_MS = 80
+// 排行榜点赞:超过 24h 自动过期不计(与 token 榜 1d 视图同步)
+const REACTION_TTL_MS = 24 * 60 * 60 * 1000
 
 interface CapsulePointerState {
   pointerId: number
@@ -302,6 +305,8 @@ function App(): React.JSX.Element {
   const [broadcastInput, setBroadcastInput] = useState('')
   const [broadcastSending, setBroadcastSending] = useState(false)
   const [broadcastSendError, setBroadcastSendError] = useState('')
+  // 排行榜点赞事件:会话内收集,按目标成员聚合;超 24h 自动过期
+  const [reactions, setReactions] = useState<ReactionMessage[]>([])
   // 消息流容器:新消息到达时滚到底,保证最新可见
   const broadcastFeedRef = useRef<HTMLDivElement | null>(null)
 
@@ -412,6 +417,15 @@ function App(): React.JSX.Element {
       }, BROADCAST_REVERT_MS)
     })
 
+    // 订阅点赞事件:追加并裁剪过期(>24h),聚合在渲染时按目标成员计算
+    const disposeReaction = window.codexStatus.onReaction((reaction) => {
+      setReactions((previous) => {
+        const now = Date.now()
+        const pruned = previous.filter((r) => now - r.sentAt <= REACTION_TTL_MS)
+        return [...pruned, reaction]
+      })
+    })
+
     return () => {
       active = false
       if (manualRefreshTimerRef.current !== undefined) {
@@ -431,6 +445,7 @@ function App(): React.JSX.Element {
       disposeCommand()
       disposeUpdateProgress()
       disposeBroadcast()
+      disposeReaction()
     }
   }, [])
 
@@ -601,6 +616,28 @@ function App(): React.JSX.Element {
   useEffect(() => {
     selfPeerIdRef.current = selfPeerId
   }, [selfPeerId])
+  // 组内最高版本(含 self):排行榜"最新"基准,低于它的成员标黄点
+  const maxAppVersion = (snapshot.teamPeers ?? []).reduce<string | undefined>(
+    (max, peer) =>
+      peer.appVersion !== undefined && (max === undefined || compareSemver(peer.appVersion, max) > 0)
+        ? peer.appVersion
+        : max,
+    undefined
+  )
+  // 点赞聚合:同一发送者对同一成员以最后一次动作生效,过期(>24h)不计
+  function aggregateReactions(targetPeerId: string): { count: number; selfLiked: boolean } {
+    const now = Date.now()
+    const likedBy = new Map<string, boolean>()
+    for (const r of reactions) {
+      if (r.targetPeerId !== targetPeerId || now - r.sentAt > REACTION_TTL_MS) continue
+      likedBy.set(r.senderPeerId, r.action === 'add')
+    }
+    let count = 0
+    for (const liked of likedBy.values()) {
+      if (liked) count++
+    }
+    return { count, selfLiked: likedBy.get(selfPeerIdRef.current ?? '') === true }
+  }
   // 新消息入流后把 feed 滚到底,最新可见
   useEffect(() => {
     const feed = broadcastFeedRef.current
@@ -952,6 +989,12 @@ function App(): React.JSX.Element {
     } finally {
       setBroadcastSending(false)
     }
+  }
+
+  // 点赞 toggle:按当前聚合状态决定 add/remove;失败静默(未入组时榜单不显示入口,正常不会触发)
+  async function handleReactionToggle(targetPeerId: string): Promise<void> {
+    const selfLiked = aggregateReactions(targetPeerId).selfLiked
+    await window.codexStatus.sendReaction(targetPeerId, selfLiked ? 'remove' : 'add')
   }
 
   // 消息时间戳:当天只显示 HH:mm,跨天带日期(会话内实时,消息不会太旧)
@@ -1319,17 +1362,30 @@ function App(): React.JSX.Element {
                   </div>
                   {teamTokenPeers.length > 0 ? (
                     <div className="team-board">
-                      {teamTokenPeers.map((peer, index) => (
-                        <TokenRow
-                          isSelf={peer.isSelf}
-                          key={peer.id}
-                          locale={settings.locale}
-                          maxTokens={teamTokenMax}
-                          nickname={peer.nickname || copy.teamAnonymous}
-                          rank={index + 1}
-                          tokens={peer.tokenUsage?.[teamTokenWindow]}
-                        />
-                      ))}
+                      {teamTokenPeers.map((peer, index) => {
+                        const showLikes = teamTokenWindow === '1d'
+                        const like = showLikes ? aggregateReactions(peer.id) : undefined
+                        return (
+                          <TokenRow
+                            appVersion={peer.appVersion}
+                            isLatestVersion={
+                              peer.appVersion !== undefined && maxAppVersion !== undefined
+                                ? compareSemver(peer.appVersion, maxAppVersion) === 0
+                                : undefined
+                            }
+                            isSelf={peer.isSelf}
+                            key={peer.id}
+                            likeCount={like?.count}
+                            locale={settings.locale}
+                            maxTokens={teamTokenMax}
+                            nickname={peer.nickname || copy.teamAnonymous}
+                            onLike={showLikes ? () => void handleReactionToggle(peer.id) : undefined}
+                            rank={index + 1}
+                            selfLiked={like?.selfLiked}
+                            tokens={peer.tokenUsage?.[teamTokenWindow]}
+                          />
+                        )
+                      })}
                     </div>
                   ) : (
                     <p className="team-empty">{copy.teamEmpty}</p>
@@ -1347,6 +1403,12 @@ function App(): React.JSX.Element {
                       shortWindow={peer.shortWindow}
                       longWindow={peer.longWindow}
                       resetCreditCount={peer.resetCreditCount}
+                      appVersion={peer.appVersion}
+                      isLatestVersion={
+                        peer.appVersion !== undefined && maxAppVersion !== undefined
+                          ? compareSemver(peer.appVersion, maxAppVersion) === 0
+                          : undefined
+                      }
                     />
                   ))}
                 </div>
@@ -1822,7 +1884,7 @@ function UsageCard({
   const [hoveredIndex, setHoveredIndex] = useState<number | undefined>(undefined)
 
   // 区间选择:customRange 为空=1/7/30 天预设,有值=自定义起止时间(毫秒)
-  const [presetWindow, setPresetWindow] = useState<UsageWindow>('7d')
+  const [presetWindow, setPresetWindow] = useState<UsageWindow>('1d')
   const [customRange, setCustomRange] = useState<{ startMs: number; endMs: number } | undefined>(
     undefined
   )
@@ -2450,7 +2512,7 @@ function SettingField({
   )
 }
 
-// 团队排行榜一行:排名/昵称/剩余百分比横条+数字/重置卡数量;self 行高亮
+// 团队排行榜一行:排名/昵称(前带版本点)/剩余百分比横条+数字/重置卡数量;self 行高亮
 function TeamRow({
   isSelf,
   rank,
@@ -2458,7 +2520,9 @@ function TeamRow({
   remainingPercent,
   shortWindow,
   longWindow,
-  resetCreditCount
+  resetCreditCount,
+  appVersion,
+  isLatestVersion
 }: {
   isSelf: boolean
   rank: number
@@ -2467,6 +2531,8 @@ function TeamRow({
   shortWindow?: { label: string; remainingPercent?: number }
   longWindow?: { label: string; remainingPercent?: number }
   resetCreditCount?: number
+  appVersion?: string
+  isLatestVersion?: boolean
 }): React.JSX.Element {
   const percent =
     remainingPercent === undefined || !Number.isFinite(remainingPercent)
@@ -2481,7 +2547,17 @@ function TeamRow({
       style={{ '--metric-accent': accent } as CSSProperties}
     >
       <span className="team-row__rank">{rank}</span>
-      <span className="team-row__name">{nickname}</span>
+      <span className="team-row__name">
+        <span className="team-row__name-text">
+          {appVersion !== undefined ? (
+            <span
+              className={`team-row__dot${isLatestVersion ? ' is-latest' : ' is-outdated'}`}
+              title={appVersion}
+            />
+          ) : null}
+          {nickname}
+        </span>
+      </span>
       {hasBoth ? (
         <div className="team-row__windows">
           <WindowLine
@@ -2519,7 +2595,12 @@ function TokenRow({
   nickname,
   tokens,
   maxTokens,
-  locale
+  locale,
+  appVersion,
+  isLatestVersion,
+  likeCount,
+  selfLiked,
+  onLike
 }: {
   isSelf: boolean
   rank: number
@@ -2527,14 +2608,44 @@ function TokenRow({
   tokens?: number
   maxTokens: number
   locale: LocaleCode
+  appVersion?: string
+  isLatestVersion?: boolean
+  likeCount?: number
+  selfLiked?: boolean
+  onLike?: () => void
 }): React.JSX.Element {
   const percent = tokens !== undefined ? Math.min(100, Math.max(0, (tokens / maxTokens) * 100)) : 0
   const rankClass =
     rank === 1 ? ' is-top-1' : rank === 2 ? ' is-top-2' : rank === 3 ? ' is-top-3' : ''
   return (
-    <div className={`team-row team-row--token${isSelf ? ' is-self' : ''}${rankClass}`}>
+    <div
+      className={`team-row team-row--token${isSelf ? ' is-self' : ''}${rankClass}${
+        onLike ? ' is-like' : ''
+      }`}
+    >
       <span className="team-row__rank">{rank}</span>
-      <span className="team-row__name">{nickname}</span>
+      <span className="team-row__name">
+        <span className="team-row__name-text">
+          {appVersion !== undefined ? (
+            <span
+              className={`team-row__dot${isLatestVersion ? ' is-latest' : ' is-outdated'}`}
+              title={appVersion}
+            />
+          ) : null}
+          {nickname}
+        </span>
+        {onLike ? (
+          <button
+            aria-label="点赞"
+            className={`team-row__like${selfLiked ? ' is-liked' : ''}`}
+            onClick={onLike}
+            type="button"
+          >
+            <span className="team-row__like-count">{likeCount ?? 0}</span>
+            <HeartIcon />
+          </button>
+        ) : null}
+      </span>
       <span className="team-row__bar">
         <span className="team-row__bar-fill" style={{ width: `${percent}%` }} />
       </span>
@@ -2791,6 +2902,18 @@ function formatRelativeDuration(
   return parts.slice(0, 2).join(' ')
 }
 
+// semver 比较:按 . 分段数字比较(缺段按 0),a>b 返回正数、相等 0
+function compareSemver(a: string, b: string): number {
+  const pa = a.split('.').map((n) => parseInt(n, 10) || 0)
+  const pb = b.split('.').map((n) => parseInt(n, 10) || 0)
+  const len = Math.max(pa.length, pb.length)
+  for (let i = 0; i < len; i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
 function formatRelativeDate(value: string | undefined, locale: LocaleCode): string | undefined {
   if (!value) {
     return undefined
@@ -2944,6 +3067,14 @@ function CloseIcon(): React.JSX.Element {
         strokeLinecap="round"
         strokeWidth="1.85"
       />
+    </svg>
+  )
+}
+
+function HeartIcon(): React.JSX.Element {
+  return (
+    <svg fill="currentColor" viewBox="0 0 24 24">
+      <path d="M12 21s-6.5-4.2-9-8.1C1.2 10 2.3 6.1 5.5 5.4c2-.4 4 .5 6.5 2.7 2.5-2.2 4.5-3.1 6.5-2.7 3.2.7 4.3 4.6 2.5 7.5-2.5 3.9-9 8.1-9 8.1Z" />
     </svg>
   )
 }

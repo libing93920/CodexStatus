@@ -7,6 +7,8 @@ import type {
   AuthMode,
   BroadcastMessage,
   BroadcastSendResult,
+  ReactionMessage,
+  ReactionSendResult,
   TeamPeer,
   UsageWindow
 } from '../../shared/capsule'
@@ -36,6 +38,8 @@ export interface PeerSnapshot {
   longWindow?: { label: string; remainingPercent?: number }
   /** 各窗口 token 消耗总数(1d/7d/30d) */
   tokenUsage?: Partial<Record<UsageWindow, number>>
+  /** 应用版本:接收端以组内最高版本为基准判定是否最新 */
+  appVersion?: string
 }
 
 interface PeerEntry {
@@ -49,6 +53,7 @@ interface PeerEntry {
   shortWindow?: { label: string; remainingPercent?: number }
   longWindow?: { label: string; remainingPercent?: number }
   tokenUsage?: Partial<Record<UsageWindow, number>>
+  appVersion?: string
   updatedAt?: string
 }
 
@@ -62,6 +67,8 @@ interface StartOptions {
   onPeersChange: (peers: TeamPeer[]) => void
   /** 收到同组广播消息时回调,主进程据此推给渲染层 */
   onMessage: (message: BroadcastMessage) => void
+  /** 收到同组点赞事件时回调,主进程据此推给渲染层 */
+  onReaction: (reaction: ReactionMessage) => void
 }
 
 interface HelloMessage {
@@ -77,7 +84,7 @@ interface SnapshotMessage {
   snapshot?: PeerSnapshot
 }
 
-type PeerMessage = HelloMessage | SnapshotMessage | BroadcastMessage
+type PeerMessage = HelloMessage | SnapshotMessage | BroadcastMessage | ReactionMessage
 
 // mDNS 发现的远程服务信息
 interface DiscoveredService {
@@ -207,6 +214,28 @@ export class LanService {
     return { ok: true, message }
   }
 
+  /** 校验后向所有已连 peer 广播一条点赞事件;未启动返回失败原因(点赞无长度/限频约束) */
+  broadcastReaction(targetPeerId: string, action: 'add' | 'remove'): ReactionSendResult {
+    if (!this.options) {
+      return { ok: false, reason: 'not-in-team' }
+    }
+    const reaction: ReactionMessage = {
+      type: 'reaction',
+      id: randomUUID(),
+      senderPeerId: this.options.peerId,
+      targetPeerId,
+      action,
+      sentAt: Date.now()
+    }
+    const payload = JSON.stringify(reaction)
+    for (const socket of this.connections.values()) {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(payload)
+      }
+    }
+    return { ok: true, reaction }
+  }
+
   /** 当前 peer 列表(不含 self),供主进程合并 self 生成 teamPeers */
   getPeers(): TeamPeer[] {
     return Array.from(this.peers.values()).map((entry) => ({
@@ -219,6 +248,7 @@ export class LanService {
       longWindow: entry.longWindow,
       resetCreditCount: entry.resetCreditCount,
       tokenUsage: entry.tokenUsage,
+      appVersion: entry.appVersion,
       updatedAt: entry.updatedAt
     }))
   }
@@ -397,6 +427,8 @@ export class LanService {
       this.applyPeerSnapshot(peerId, undefined, message.snapshot)
     } else if (message.type === 'message') {
       this.options?.onMessage(message)
+    } else if (message.type === 'reaction') {
+      this.options?.onReaction(message)
     }
   }
 
@@ -421,6 +453,7 @@ export class LanService {
       shortWindow: snapshot?.shortWindow ?? existing?.shortWindow,
       longWindow: snapshot?.longWindow ?? existing?.longWindow,
       tokenUsage: snapshot?.tokenUsage ?? existing?.tokenUsage,
+      appVersion: snapshot?.appVersion ?? existing?.appVersion,
       updatedAt: new Date().toISOString()
     }
     this.peers.set(peerId, entry)
