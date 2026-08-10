@@ -216,6 +216,8 @@ export interface BootstrapPayload {
   panelView: PanelView
   /** 应用版本号,设置页展示用 */
   version: string
+  /** 打开设置页后定位到检查更新区域(胶囊版本角标跳转用) */
+  focusUpdate?: boolean
 }
 
 export interface PreferencesPayload {
@@ -234,6 +236,8 @@ export interface CapsuleDragMovePayload {
 export interface RendererCommandPayload {
   type: RendererCommandType
   panelView: PanelView
+  /** 打开设置页后定位到检查更新区域(胶囊版本角标跳转用) */
+  focusUpdate?: boolean
 }
 
 export interface CodexStatusApi {
@@ -247,8 +251,8 @@ export interface CodexStatusApi {
   openExternal: (url: string) => Promise<void>
   /** 渲染层 bootstrap 完成后通知主进程显示 panel 窗口(避免空窗先闪) */
   notifyPanelReady: () => Promise<void>
-  /** 胶囊窗口点击打开 panel 指定视图(主进程复用 openPanelWindow) */
-  showPanel: (view: PanelView) => Promise<void>
+  /** 胶囊窗口点击打开 panel 指定视图(主进程复用 openPanelWindow);focusUpdate 定位到检查更新区 */
+  showPanel: (view: PanelView, options?: { focusUpdate?: boolean }) => Promise<void>
   /** 手动检查 GitHub Releases 是否有新版本 */
   checkForUpdate: () => Promise<UpdateCheckResult>
   /** 获取 1/7/30 天 token 用量与估算花费(按需拉取,不走快照广播) */

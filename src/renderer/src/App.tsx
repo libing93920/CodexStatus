@@ -36,8 +36,7 @@ const BROADCAST_FEED_LIMIT = 3
 const CAPSULE_MARQUEE_MIN_MS = 6000
 const CAPSULE_MARQUEE_MAX_MS = 20000
 const CAPSULE_MARQUEE_PER_CHAR_MS = 80
-// 排行榜点赞:超过 24h 自动过期不计(与 token 榜 1d 视图同步)
-const REACTION_TTL_MS = 24 * 60 * 60 * 1000
+// 点赞过期按本地自然日(与 token 榜 1d 窗口同为自然日),跨天即清零,避免滚动24h与榜单错位
 
 interface CapsulePointerState {
   pointerId: number
@@ -284,6 +283,9 @@ function App(): React.JSX.Element {
   // 刷新完成后短暂触发百分比"弹跳"反馈,让用户感知新数据到达
   const [justRefreshed, setJustRefreshed] = useState(false)
   const [ready, setReady] = useState(false)
+  // 胶囊版本角标跳转:打开设置页后需定位到检查更新区(一次性,滚动后清除)
+  const [focusUpdatePending, setFocusUpdatePending] = useState(false)
+  const aboutRowRef = useRef<HTMLDivElement | null>(null)
   // 详情面板里长窗口(周重置)倒计时需要秒级刷新;只在面板可见且有长窗口时 tick
   const [nowTick, setNowTick] = useState(() => Date.now())
   const capsulePointerRef = useRef<CapsulePointerState | null>(null)
@@ -325,6 +327,9 @@ function App(): React.JSX.Element {
         setWindowPreferences(payload.window)
         setWindowRole(payload.role)
         setPanelView(payload.panelView)
+        if (payload.focusUpdate) {
+          setFocusUpdatePending(true)
+        }
         setCustomRefreshInput(String(payload.settings.refreshIntervalSeconds))
         setIqThresholdInput(String(payload.settings.iqThreshold))
         setTeamNicknameInput(payload.settings.teamNickname ?? '')
@@ -363,6 +368,9 @@ function App(): React.JSX.Element {
       }
 
       setPanelView(payload.panelView)
+      if (payload.focusUpdate) {
+        setFocusUpdatePending(true)
+      }
     })
 
     // 订阅更新进度:主进程转发 autoUpdater 事件,据此驱动 UI 状态机
@@ -417,11 +425,11 @@ function App(): React.JSX.Element {
       }, BROADCAST_REVERT_MS)
     })
 
-    // 订阅点赞事件:追加并裁剪过期(>24h),聚合在渲染时按目标成员计算
+    // 订阅点赞事件:追加并裁剪非今日事件,聚合在渲染时按目标成员计算
     const disposeReaction = window.codexStatus.onReaction((reaction) => {
       setReactions((previous) => {
-        const now = Date.now()
-        const pruned = previous.filter((r) => now - r.sentAt <= REACTION_TTL_MS)
+        const todayKey = localDayKey(Date.now())
+        const pruned = previous.filter((r) => localDayKey(r.sentAt) === todayKey)
         return [...pruned, reaction]
       })
     })
@@ -624,12 +632,12 @@ function App(): React.JSX.Element {
         : max,
     undefined
   )
-  // 点赞聚合:同一发送者对同一成员以最后一次动作生效,过期(>24h)不计
+  // 点赞聚合:同一发送者对同一成员以最后一次动作生效,非今日事件不计(与 token 榜 1d 同为自然日)
   function aggregateReactions(targetPeerId: string): { count: number; selfLiked: boolean } {
-    const now = Date.now()
+    const todayKey = localDayKey(Date.now())
     const likedBy = new Map<string, boolean>()
     for (const r of reactions) {
-      if (r.targetPeerId !== targetPeerId || now - r.sentAt > REACTION_TTL_MS) continue
+      if (r.targetPeerId !== targetPeerId || localDayKey(r.sentAt) !== todayKey) continue
       likedBy.set(r.senderPeerId, r.action === 'add')
     }
     let count = 0
@@ -638,6 +646,14 @@ function App(): React.JSX.Element {
     }
     return { count, selfLiked: likedBy.get(selfPeerIdRef.current ?? '') === true }
   }
+  // 版本角标跳转:进设置页后滚动到检查更新区(about-row),完成后清除一次性标志
+  useEffect(() => {
+    if (panelView === 'settings' && focusUpdatePending) {
+      aboutRowRef.current?.scrollIntoView({ block: 'nearest' })
+      setFocusUpdatePending(false)
+    }
+  }, [panelView, focusUpdatePending])
+
   // 新消息入流后把 feed 滚到底,最新可见
   useEffect(() => {
     const feed = broadcastFeedRef.current
@@ -669,12 +685,17 @@ function App(): React.JSX.Element {
         : copy.offsetWidth > container.clientWidth
     setCapsuleMessageOverflow(overflows)
   }, [capsuleMessage, capsuleViewMode])
+  const hasUpdate =
+    updateState === 'available' || updateState === 'downloading' || updateState === 'downloaded'
+  // P2P 版本落后:组内广播的最高版本高于本地即提示;与 GitHub 红点角标不叠加
+  const selfOutdated =
+    appVersion !== '' && maxAppVersion !== undefined && compareSemver(appVersion, maxAppVersion) < 0
+  const showOutdatedBadge = selfOutdated && !hasUpdate
   const capsuleClassName = [
     'capsule',
     `capsule--${capsuleViewMode}`,
-    updateState === 'available' || updateState === 'downloading' || updateState === 'downloaded'
-      ? 'has-update'
-      : '',
+    hasUpdate ? 'has-update' : '',
+    showOutdatedBadge ? 'is-outdated' : '',
     snapshot.isRefreshing ? 'is-refreshing' : '',
     manualRefreshActive ? 'is-manual-refreshing' : '',
     canRefresh ? '' : 'is-static',
@@ -934,9 +955,14 @@ function App(): React.JSX.Element {
       return
     }
 
-    // 点击胶囊(无拖拽)直接打开详情面板,不再触发刷新;刷新入口移至右键菜单和面板内按钮
+    // 点击胶囊(无拖拽)直接打开面板,不再触发刷新;刷新入口移至右键菜单和面板内按钮。
+    // 红/黄版本角标出现时改进设置页并定位到检查更新区
     if (shouldRefreshOnClick) {
-      void window.codexStatus.showPanel('details')
+      const jumpToUpdate = hasUpdate || showOutdatedBadge
+      void window.codexStatus.showPanel(
+        jumpToUpdate ? 'settings' : 'details',
+        jumpToUpdate ? { focusUpdate: true } : undefined
+      )
     }
   }
 
@@ -955,7 +981,11 @@ function App(): React.JSX.Element {
       }
       return
     }
-    void window.codexStatus.showPanel('details')
+    const jumpToUpdate = hasUpdate || showOutdatedBadge
+    void window.codexStatus.showPanel(
+      jumpToUpdate ? 'settings' : 'details',
+      jumpToUpdate ? { focusUpdate: true } : undefined
+    )
   }
 
   function recordSnapshotIssue(error: unknown): void {
@@ -1675,7 +1705,7 @@ function App(): React.JSX.Element {
 
                 <div className="settings-section">
                   <p className="settings-section__title">{copy.groupAbout}</p>
-                  <div className="setting-row about-row">
+                  <div ref={aboutRowRef} className="setting-row about-row">
                     <div className="about-row__info">
                       <span className="about-row__label">{copy.currentVersion}</span>
                       <span className="about-row__version">v{appVersion || '--'}</span>
@@ -2900,6 +2930,14 @@ function formatRelativeDuration(
     parts.push(`${minutes}m`)
   }
   return parts.slice(0, 2).join(' ')
+}
+
+// 本地自然日键(YYYY-MM-DD):点赞过期与 token 榜 1d 窗口都按自然日对齐
+function localDayKey(ms: number): string {
+  const d = new Date(ms)
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${month}-${day}`
 }
 
 // semver 比较:按 . 分段数字比较(缺段按 0),a>b 返回正数、相等 0

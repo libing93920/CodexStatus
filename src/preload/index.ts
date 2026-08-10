@@ -56,7 +56,8 @@ const api: CodexStatusApi = {
     ipcRenderer.invoke(CHANNELS.finishCapsuleWindowDrag) as Promise<WindowPreferences>,
   openExternal: (url) => ipcRenderer.invoke(CHANNELS.openExternal, url) as Promise<void>,
   notifyPanelReady: () => ipcRenderer.invoke(CHANNELS.panelReady) as Promise<void>,
-  showPanel: (view: PanelView) => ipcRenderer.invoke(CHANNELS.showPanel, view) as Promise<void>,
+  showPanel: (view: PanelView, options?: { focusUpdate?: boolean }) =>
+    ipcRenderer.invoke(CHANNELS.showPanel, view, options) as Promise<void>,
   checkForUpdate: () => ipcRenderer.invoke(CHANNELS.checkUpdate) as Promise<UpdateCheckResult>,
   getTokenUsage: (window: UsageWindow) =>
     ipcRenderer.invoke(CHANNELS.tokenUsage, window) as Promise<TokenUsageOverview>,

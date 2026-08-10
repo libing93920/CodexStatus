@@ -92,6 +92,20 @@ body {
   z-index: 1;
 }
 
+/* 版本落后角标(黄):组内广播的最高版本高于本地,弱提示;与红点角标互斥不叠加 */
+.capsule.is-outdated::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e3b341;
+  pointer-events: none;
+  z-index: 1;
+}
+
 .capsule.is-manual-refreshing {
   animation: capsule-manual-refresh 680ms ease-out;
 }

@@ -105,6 +105,8 @@ let watchedCodexAuthPath: string | undefined
 let isQuitting = false
 let userHidCapsule = false
 let currentPanelView: PanelView = 'details'
+// 胶囊版本角标跳转设置页时的一次性定位标志:由 bootstrap 或 command 消费后清除
+let panelFocusUpdate = false
 const lanService = new LanService()
 let persistedState: PersistedState = {
   settings: { ...DEFAULT_SETTINGS },
@@ -403,6 +405,7 @@ function registerIpcHandlers(): void {
       snapshot: currentSnapshot,
       role: resolveRendererRole(event.sender.id),
       panelView: currentPanelView,
+      focusUpdate: consumeFocusUpdate(),
       version: app.getVersion()
     }
   })
@@ -498,8 +501,11 @@ function registerIpcHandlers(): void {
     }
   })
 
-  // 胶囊窗口点击 toggle panel:已显示则关闭,未显示则打开
-  ipcMain.handle(CHANNELS.showPanel, async (_, view: PanelView) => {
+  // 胶囊窗口点击 toggle panel:已显示则关闭,未显示则打开;focusUpdate 让设置页定位到检查更新区
+  ipcMain.handle(CHANNELS.showPanel, async (_, view: PanelView, options?: { focusUpdate?: boolean }) => {
+    if (options?.focusUpdate === true) {
+      panelFocusUpdate = true
+    }
     if (panelWindow && !panelWindow.isDestroyed() && panelWindow.isVisible()) {
       panelWindow.hide()
       return
@@ -1007,19 +1013,28 @@ function isLaunchAtLoginSupported(): boolean {
 function openPanelWindow(view: PanelView): void {
   currentPanelView = view
   if (!panelWindow || panelWindow.isDestroyed()) {
+    // 新窗口页面未加载,command 收不到;focusUpdate 留给 bootstrap 消费
     panelWindow = createPanelWindow()
-  } else {
-    if (!panelWindow.isVisible()) {
-      panelWindow.setBounds(resolvePanelBounds(persistedState.panel.x, persistedState.panel.y))
-    }
-    panelWindow.show()
-    panelWindow.focus()
+    return
   }
+  if (!panelWindow.isVisible()) {
+    panelWindow.setBounds(resolvePanelBounds(persistedState.panel.x, persistedState.panel.y))
+  }
+  panelWindow.show()
+  panelWindow.focus()
 
   panelWindow.webContents.send(CHANNELS.command, {
     type: 'show-panel-view',
-    panelView: currentPanelView
+    panelView: currentPanelView,
+    focusUpdate: consumeFocusUpdate()
   } satisfies RendererCommandPayload)
+}
+
+// 读取并清除一次性定位标志:已存在窗口由 command 消费,新窗口由 bootstrap 消费
+function consumeFocusUpdate(): boolean {
+  const value = panelFocusUpdate
+  panelFocusUpdate = false
+  return value
 }
 
 function moveCapsuleWindow(payload: CapsuleDragMovePayload): WindowPreferences {
