@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import {
   DEFAULT_IQ_THRESHOLD,
   DEFAULT_SETTINGS,
@@ -36,6 +36,11 @@ const BROADCAST_FEED_LIMIT = 3
 const CAPSULE_MARQUEE_MIN_MS = 6000
 const CAPSULE_MARQUEE_MAX_MS = 20000
 const CAPSULE_MARQUEE_PER_CHAR_MS = 80
+// 点赞特效:播放时长(覆盖胶囊后淡出恢复),连赞会刷新计时不打断
+const HEART_EFFECT_DURATION_MS = 2400
+// 特效库:每次收到点赞随机选一种,每种运动骨架不同(雨/绽放/环绕/光环/流星)
+const HEART_EFFECT_KINDS = ['rain', 'bloom', 'orbit', 'wave', 'shooting'] as const
+type HeartEffectKind = (typeof HEART_EFFECT_KINDS)[number]
 // 点赞过期按本地自然日(与 token 榜 1d 窗口同为自然日),跨天即清零,避免滚动24h与榜单错位
 
 interface CapsulePointerState {
@@ -309,6 +314,10 @@ function App(): React.JSX.Element {
   const [broadcastSendError, setBroadcastSendError] = useState('')
   // 排行榜点赞事件:会话内收集,按目标成员聚合;超 24h 自动过期
   const [reactions, setReactions] = useState<ReactionMessage[]>([])
+  // 点赞特效:收到赞后随机播放一种,id 变化强制重播,结束后置空恢复胶囊原样
+  const [heartEffect, setHeartEffect] = useState<{ kind: HeartEffectKind; id: number } | null>(null)
+  const heartEffectIdRef = useRef(0)
+  const heartEffectTimerRef = useRef<number | undefined>(undefined)
   // 消息流容器:新消息到达时滚到底,保证最新可见
   const broadcastFeedRef = useRef<HTMLDivElement | null>(null)
 
@@ -432,6 +441,10 @@ function App(): React.JSX.Element {
         const pruned = previous.filter((r) => localDayKey(r.sentAt) === todayKey)
         return [...pruned, reaction]
       })
+      // 别人给我点赞:胶囊整体播放爱心特效数秒,提供被赞的情绪价值
+      if (reaction.action === 'add' && reaction.targetPeerId === selfPeerIdRef.current) {
+        spawnHeartEffect()
+      }
     })
 
     return () => {
@@ -444,6 +457,9 @@ function App(): React.JSX.Element {
       }
       if (upToDateTimerRef.current !== undefined) {
         window.clearTimeout(upToDateTimerRef.current)
+      }
+      if (heartEffectTimerRef.current !== undefined) {
+        window.clearTimeout(heartEffectTimerRef.current)
       }
       if (capsuleMessageTimerRef.current !== undefined) {
         window.clearTimeout(capsuleMessageTimerRef.current)
@@ -919,6 +935,20 @@ function App(): React.JSX.Element {
     void finishCapsulePointer(event, false)
   }
 
+  // 收到点赞:随机选一种特效播放数秒,连赞刷新计时不打断;结束后恢复胶囊原样
+  function spawnHeartEffect(): void {
+    const kind = HEART_EFFECT_KINDS[Math.floor(Math.random() * HEART_EFFECT_KINDS.length)]
+    const id = ++heartEffectIdRef.current
+    setHeartEffect({ kind, id })
+    if (heartEffectTimerRef.current !== undefined) {
+      window.clearTimeout(heartEffectTimerRef.current)
+    }
+    heartEffectTimerRef.current = window.setTimeout(() => {
+      heartEffectTimerRef.current = undefined
+      setHeartEffect(null)
+    }, HEART_EFFECT_DURATION_MS)
+  }
+
   async function finishCapsulePointer(
     event: React.PointerEvent<HTMLElement>,
     shouldRefreshOnClick: boolean
@@ -1150,6 +1180,7 @@ function App(): React.JSX.Element {
             role="button"
             tabIndex={0}
           >
+            {heartEffect ? <HeartEffect key={heartEffect.id} kind={heartEffect.kind} /> : null}
             {capsuleMessage ? (
               <div
                 className={`capsule__message capsule__message--${capsuleViewMode}${
@@ -3107,6 +3138,208 @@ function CloseIcon(): React.JSX.Element {
       />
     </svg>
   )
+}
+
+// 点赞特效:整个胶囊被爱心动画覆盖,kind 决定形态;key 变化重挂载后参数重新随机
+function HeartEffect({ kind }: { kind: HeartEffectKind }): React.JSX.Element {
+  const params = useMemo(() => buildHeartParams(kind), [kind])
+  return (
+    <div className={`heart-effect heart-effect--${kind}`} aria-hidden="true">
+      {params.glow ? <span className="heart-effect__glow" /> : null}
+      {params.core ? (
+        <span className="heart-effect__core">
+          <HeartIcon />
+        </span>
+      ) : null}
+      {params.rise.map((heart) => (
+        <span
+          key={heart.key}
+          className="heart-effect__rise"
+          style={
+            {
+              left: heart.left,
+              width: heart.size,
+              height: heart.size,
+              animationDelay: heart.delay,
+              animationDuration: heart.dur,
+              '--heart-drift': heart.drift,
+              '--heart-scale': heart.scale
+            } as CSSProperties
+          }
+        >
+          <HeartIcon />
+        </span>
+      ))}
+      {params.shards.map((shard) => (
+        <span
+          key={shard.key}
+          className="heart-effect__shard"
+          style={
+            {
+              '--shard-x': shard.x,
+              '--shard-y': shard.y,
+              width: shard.size,
+              height: shard.size,
+              animationDelay: shard.delay
+            } as CSSProperties
+          }
+        >
+          <HeartIcon />
+        </span>
+      ))}
+      {params.orbit.map((orbit) => (
+        <span
+          key={orbit.key}
+          className="heart-effect__orbit"
+          style={
+            {
+              '--orbit-delay': orbit.delay,
+              width: orbit.size,
+              height: orbit.size
+            } as CSSProperties
+          }
+        >
+          <HeartIcon />
+        </span>
+      ))}
+      {params.wave.map((ring) => (
+        <span key={ring.key} className="heart-effect__wave" style={{ '--wave-delay': ring.delay } as CSSProperties} />
+      ))}
+      {params.shooting.map((shoot) => (
+        <span
+          key={shoot.key}
+          className="heart-effect__shooting"
+          style={
+            {
+              left: shoot.left,
+              top: shoot.top,
+              width: shoot.size,
+              height: shoot.size,
+              animationDelay: shoot.delay,
+              animationDuration: shoot.dur
+            } as CSSProperties
+          }
+        >
+          <HeartIcon />
+        </span>
+      ))}
+      {params.plus ? <span className="heart-effect__plus">+1</span> : null}
+    </div>
+  )
+}
+
+interface HeartEffectParams {
+  glow: boolean
+  core: boolean
+  rise: Array<{
+    key: number
+    left: string
+    size: number
+    delay: string
+    dur: string
+    drift: string
+    scale: number
+  }>
+  shards: Array<{ key: number; x: number; y: number; size: number; delay: string }>
+  orbit: Array<{ key: number; delay: string; size: number }>
+  wave: Array<{ key: number; delay: string }>
+  shooting: Array<{ key: number; left: string; top: string; size: number; delay: string; dur: string }>
+  plus: boolean
+}
+
+function buildHeartParams(kind: HeartEffectKind): HeartEffectParams {
+  const rand = (min: number, max: number): number => min + Math.random() * (max - min)
+  const makeRise = (count: number): HeartEffectParams['rise'] =>
+    Array.from({ length: count }, (_, key) => ({
+      key,
+      left: `${rand(2, 96)}%`,
+      size: rand(10, 20),
+      delay: `${rand(0, 700)}ms`,
+      dur: `${rand(1100, 2100)}ms`,
+      drift: `${rand(-40, 40)}px`,
+      scale: rand(0.7, 1.5)
+    }))
+  const makeShards = (count: number, minR: number, maxR: number): HeartEffectParams['shards'] =>
+    Array.from({ length: count }, (_, key) => {
+      const angle = (key / count) * Math.PI * 2
+      return {
+        key,
+        x: Math.round(Math.cos(angle) * rand(minR, maxR)),
+        y: Math.round(Math.sin(angle) * rand(minR * 0.7, maxR * 0.7)),
+        size: rand(8, 14),
+        delay: `${rand(0, 120)}ms`
+      }
+    })
+  switch (kind) {
+    case 'rain':
+      return {
+        glow: true,
+        core: false,
+        rise: makeRise(20),
+        shards: [],
+        orbit: [],
+        wave: [],
+        shooting: [],
+        plus: true
+      }
+    case 'bloom':
+      return {
+        glow: true,
+        core: true,
+        rise: [],
+        shards: makeShards(8, 40, 90),
+        orbit: [],
+        wave: [],
+        shooting: [],
+        plus: true
+      }
+    case 'orbit':
+      return {
+        glow: true,
+        core: true,
+        rise: [],
+        shards: [],
+        orbit: Array.from({ length: 6 }, (_, key) => ({
+          key,
+          delay: `${key * 0.35}s`,
+          size: rand(9, 13)
+        })),
+        wave: [],
+        shooting: [],
+        plus: true
+      }
+    case 'wave':
+      return {
+        glow: true,
+        core: true,
+        rise: [],
+        shards: [],
+        orbit: [],
+        // 三圈光环依次向外扩散,像声波
+        wave: Array.from({ length: 3 }, (_, key) => ({ key, delay: `${key * 0.45}s` })),
+        shooting: [],
+        plus: true
+      }
+    case 'shooting':
+      return {
+        glow: true,
+        core: false,
+        rise: [],
+        shards: [],
+        orbit: [],
+        wave: [],
+        // 数颗爱心从左上区域斜穿到右下,拖着尾巴,像流星
+        shooting: Array.from({ length: 5 }, (_, key) => ({
+          key,
+          left: `${rand(2, 45)}%`,
+          top: `${rand(10, 65)}%`,
+          size: rand(9, 14),
+          delay: `${key * 0.35 + rand(0, 120)}ms`,
+          dur: `${rand(900, 1400)}ms`
+        })),
+        plus: true
+      }
+  }
 }
 
 function HeartIcon(): React.JSX.Element {

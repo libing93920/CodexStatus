@@ -106,6 +106,320 @@ body {
   z-index: 1;
 }
 
+/* 点赞特效:整个胶囊覆盖爱心动画数秒,pointer-events 穿透不挡拖拽/点击 */
+.heart-effect {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+  color: #ff7ba1;
+}
+
+.heart-effect svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* 柔光铺底:粉色径向光,呼吸式淡入淡出 */
+.heart-effect__glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 60%, rgba(255, 123, 161, 0.3), transparent 70%);
+  animation: heart-glow 2.4s ease-in-out forwards;
+}
+
+@keyframes heart-glow {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 中央大爱心:各特效形态的发光主体 */
+.heart-effect__core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  color: #ff5c8a;
+  filter: drop-shadow(0 0 14px rgba(255, 92, 138, 0.85));
+}
+
+/* 绽放:放大→光晕脉冲→让位给碎裂小爱心 */
+.heart-effect--bloom .heart-effect__core {
+  animation: heart-bloom-core 2.4s ease-out forwards;
+}
+
+@keyframes heart-bloom-core {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  25% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.25);
+  }
+  38% {
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.5);
+  }
+}
+
+/* 环绕:中央爱心呼吸脉动 */
+.heart-effect--orbit .heart-effect__core {
+  width: 44px;
+  height: 44px;
+  animation: heart-orbit-core 2.4s ease-in-out forwards;
+}
+
+@keyframes heart-orbit-core {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7);
+  }
+  20%,
+  80% {
+    opacity: 1;
+  }
+  40% {
+    transform: translate(-50%, -50%) scale(1.18);
+  }
+  60% {
+    transform: translate(-50%, -50%) scale(0.92);
+  }
+}
+
+/* 光环:中央爱心呼吸脉动,配合向外扩散的光圈 */
+.heart-effect--wave .heart-effect__core {
+  width: 44px;
+  height: 44px;
+  animation: heart-wave-core 2.4s ease-in-out forwards;
+}
+
+@keyframes heart-wave-core {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+  25%,
+  75% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(0.92);
+  }
+}
+
+/* 碎裂/爆开碎片:从中心向随机方向飞出 */
+.heart-effect__shard {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  opacity: 0;
+  color: #ff6b98;
+  animation: heart-shard 2.4s ease-out forwards;
+}
+
+@keyframes heart-shard {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2) rotate(0deg);
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--shard-x, 0px)), calc(-50% + var(--shard-y, 0px))) scale(1)
+      rotate(120deg);
+  }
+}
+
+/* 绽放碎片:大爱心放大后才碎裂散开 */
+.heart-effect--bloom .heart-effect__shard {
+  animation-name: heart-bloom-shard;
+}
+
+@keyframes heart-bloom-shard {
+  0%,
+  40% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.3);
+  }
+  52% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.9) rotate(20deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--shard-x, 0px)), calc(-50% + var(--shard-y, 0px))) scale(0.7)
+      rotate(140deg);
+  }
+}
+
+/* 环绕粒子:绕中央旋转一圈 */
+.heart-effect__orbit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  opacity: 0;
+  color: #ff7ba1;
+  animation: heart-orbit 2.4s linear forwards;
+  animation-delay: var(--orbit-delay, 0s);
+}
+
+@keyframes heart-orbit {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(0deg) translateX(42px) rotate(0deg) scale(0.6);
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(360deg) translateX(42px) rotate(-360deg) scale(1);
+  }
+}
+
+/* 爱心雨:从底部升起向上飘散 */
+.heart-effect__rise {
+  position: absolute;
+  bottom: -24px;
+  animation: heart-rise ease-out forwards;
+}
+
+@keyframes heart-rise {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.4);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(0, 4px) scale(var(--heart-scale, 1));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--heart-drift, 0), -150px) scale(var(--heart-scale, 1));
+  }
+}
+
+/* 光环:三圈光圈依次向外扩散,像声波 */
+.heart-effect__wave {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 64px;
+  height: 64px;
+  border: 2px solid rgba(255, 123, 161, 0.75);
+  border-radius: 50%;
+  animation: heart-wave 2.4s ease-out forwards;
+  animation-delay: var(--wave-delay, 0s);
+}
+
+@keyframes heart-wave {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.25);
+  }
+  18% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(3.2);
+  }
+}
+
+/* 流星:爱心斜穿胶囊,拖一条渐变尾巴 */
+.heart-effect__shooting {
+  position: absolute;
+  opacity: 0;
+  color: #ff8fae;
+  animation: heart-shooting linear forwards;
+}
+
+.heart-effect__shooting::before {
+  content: '';
+  position: absolute;
+  right: 82%;
+  top: 50%;
+  width: 72px;
+  height: 2px;
+  transform: rotate(34deg);
+  transform-origin: right center;
+  background: linear-gradient(to left, rgba(255, 123, 161, 0.9), transparent);
+  border-radius: 999px;
+}
+
+@keyframes heart-shooting {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.5);
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(150px, 100px) scale(1);
+  }
+}
+
+/* 顶部 +1:淡入放大后上飘消失 */
+.heart-effect__plus {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 8px rgba(255, 92, 138, 0.95);
+  animation: heart-plus 2.4s ease-out forwards;
+}
+
+@keyframes heart-plus {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.6);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.12);
+  }
+  70% {
+    opacity: 0.9;
+    transform: translate(-50%, -6px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -12px) scale(0.9);
+  }
+}
+
 .capsule.is-manual-refreshing {
   animation: capsule-manual-refresh 680ms ease-out;
 }
