@@ -30,7 +30,7 @@ const CAPSULE_CLICK_DRAG_DISTANCE = 5
 const MANUAL_REFRESH_FEEDBACK_MS = 680
 // 广播消息:胶囊进入消息态后无操作 N 毫秒自动回额度;panel 会话内消息流上限
 const BROADCAST_REVERT_MS = 15000
-const BROADCAST_FEED_LIMIT = 20
+const BROADCAST_FEED_LIMIT = 3
 // 跑马灯时长随文本长度线性,夹在 6s~20s 之间
 const CAPSULE_MARQUEE_MIN_MS = 6000
 const CAPSULE_MARQUEE_MAX_MS = 20000
@@ -954,6 +954,19 @@ function App(): React.JSX.Element {
     }
   }
 
+  // 消息时间戳:当天只显示 HH:mm,跨天带日期(会话内实时,消息不会太旧)
+  function formatMessageTime(sentAt: number): string {
+    const date = new Date(sentAt)
+    const today = new Date()
+    const sameDay = date.toDateString() === today.toDateString()
+    const time = date.toLocaleTimeString(settings.locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    })
+    return sameDay ? time : `${date.getMonth() + 1}/${date.getDate()} ${time}`
+  }
+
   async function handleSettingsPatch(patch: Partial<AppSettings>): Promise<void> {
     const previousSettings = settings
     setSettings({
@@ -1065,7 +1078,11 @@ function App(): React.JSX.Element {
             tabIndex={0}
           >
             {capsuleMessage ? (
-              <div className={`capsule__message capsule__message--${capsuleViewMode}`}>
+              <div
+                className={`capsule__message capsule__message--${capsuleViewMode}${
+                  capsuleMessageOverflow ? ' is-marquee' : ''
+                }`}
+              >
                 <div
                   className={`capsule__message-track${capsuleMessageOverflow ? ' is-marquee' : ''}`}
                   style={
@@ -1345,6 +1362,9 @@ function App(): React.JSX.Element {
                       <div className="team-broadcast__item" key={message.id}>
                         <span className="team-broadcast__name">
                           {message.senderNickname || copy.teamAnonymous}
+                        </span>
+                        <span className="team-broadcast__time">
+                          {formatMessageTime(message.sentAt)}
                         </span>
                         <span className="team-broadcast__text">{message.text}</span>
                       </div>

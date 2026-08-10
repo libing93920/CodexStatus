@@ -216,16 +216,20 @@ body {
   color: rgba(240, 245, 250, 0.96);
 }
 
-/* 竖版 orb:轨道改纵向、文字竖排,顶部锚定,向下滚动 */
+/* 竖版 orb:轨道改纵向、文字竖排;静态居中显示,滚动时改回顶部锚定从顶往下 */
 .capsule__message--orb {
-  align-items: flex-start;
+  align-items: center;
 }
 
 .capsule__message--orb .capsule__message-track {
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   width: max-content;
   height: max-content;
+}
+
+.capsule__message--orb.is-marquee {
+  align-items: flex-start;
 }
 
 .capsule__message--orb .capsule__message-track.is-marquee {
@@ -1676,6 +1680,14 @@ body {
   color: var(--panel-accent);
   font-size: 12px;
   font-weight: 600;
+}
+
+.team-broadcast__time {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--panel-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .team-broadcast__text {
