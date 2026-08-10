@@ -600,23 +600,23 @@ body {
   }
 }
 
-/* 横版:文字从左侧进入,向右滚动 */
+/* 横版:双副本轨道左移一份,内容从右往左连续滚动(副本相同无缝衔接) */
 @keyframes capsule-marquee-x {
   from {
-    transform: translateX(-50%);
+    transform: translateX(0);
   }
   to {
-    transform: translateX(0);
+    transform: translateX(-50%);
   }
 }
 
-/* 竖版:文字从底部进入,向上滚动 */
+/* 竖版:双副本轨道上移一份,内容从下往上连续滚动 */
 @keyframes capsule-marquee-y {
   from {
-    transform: translateY(50%);
+    transform: translateY(0);
   }
   to {
-    transform: translateY(0);
+    transform: translateY(-50%);
   }
 }
 
