@@ -114,6 +114,19 @@ body {
   pointer-events: none;
   z-index: 3;
   color: #ff7ba1;
+  --heart-rise-y: -72px;
+  --shoot-travel-x: 280px;
+  --shoot-travel-y: 0px;
+  --gift-rise-y: -28px;
+  --balloon-rise-y: -24px;
+}
+
+.capsule--orb .heart-effect {
+  --heart-rise-y: -190px;
+  --shoot-travel-x: 0px;
+  --shoot-travel-y: -200px;
+  --gift-rise-y: -58px;
+  --balloon-rise-y: -74px;
 }
 
 .heart-effect svg {
@@ -122,12 +135,25 @@ body {
   display: block;
 }
 
+/* 减少动态效果时只保留静态反馈,避免粒子位移引发不适 */
+.heart-effect__reduced {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  display: none;
+  color: #ff7ba1;
+  filter: drop-shadow(0 0 8px rgba(255, 92, 138, 0.72));
+  transform: translate(-50%, -50%);
+}
+
 /* 柔光铺底:粉色径向光,呼吸式淡入淡出 */
 .heart-effect__glow {
   position: absolute;
   inset: 0;
   background: radial-gradient(circle at 50% 60%, rgba(255, 123, 161, 0.3), transparent 70%);
-  animation: heart-glow 2.4s ease-in-out forwards;
+  animation: heart-glow 2.3s ease-in-out forwards;
 }
 
 @keyframes heart-glow {
@@ -158,7 +184,7 @@ body {
 
 /* 绽放:放大→光晕脉冲→让位给碎裂小爱心 */
 .heart-effect--bloom .heart-effect__core {
-  animation: heart-bloom-core 2.4s ease-out forwards;
+  animation: heart-bloom-core 2.2s ease-out forwards;
 }
 
 @keyframes heart-bloom-core {
@@ -186,7 +212,7 @@ body {
 .heart-effect--orbit .heart-effect__core {
   width: 44px;
   height: 44px;
-  animation: heart-orbit-core 2.4s ease-in-out forwards;
+  animation: heart-orbit-core 2.2s ease-in-out forwards;
 }
 
 @keyframes heart-orbit-core {
@@ -211,7 +237,7 @@ body {
 .heart-effect--wave .heart-effect__core {
   width: 44px;
   height: 44px;
-  animation: heart-wave-core 2.4s ease-in-out forwards;
+  animation: heart-wave-core 2.2s ease-in-out forwards;
 }
 
 @keyframes heart-wave-core {
@@ -230,6 +256,93 @@ body {
   }
 }
 
+/* 心跳:两次不同力度的收缩,比持续呼吸更接近点赞反馈 */
+.heart-effect--heartbeat .heart-effect__core {
+  width: 50px;
+  height: 50px;
+  animation: heart-heartbeat-core 2.15s cubic-bezier(0.2, 0.78, 0.28, 1) forwards;
+}
+
+@keyframes heart-heartbeat-core {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.35);
+  }
+  16% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.12);
+  }
+  28% {
+    transform: translate(-50%, -50%) scale(0.82);
+  }
+  42% {
+    transform: translate(-50%, -50%) scale(1.25);
+  }
+  56% {
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+  76% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.72);
+  }
+}
+
+/* 烟花:中心闪光只负责起爆,随后让位给放射粒子 */
+.heart-effect--firework .heart-effect__core {
+  width: 38px;
+  height: 38px;
+  animation: heart-firework-core 1.05s ease-out forwards;
+}
+
+@keyframes heart-firework-core {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  28% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.25);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.55);
+  }
+}
+
+/* 拥抱:两颗小爱心相遇后,中央爱心接管视觉焦点 */
+.heart-effect--hug .heart-effect__core {
+  width: 48px;
+  height: 48px;
+  animation: heart-hug-core 2.1s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+
+@keyframes heart-hug-core {
+  0%,
+  38% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.35);
+  }
+  52% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.22);
+  }
+  66% {
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+  82% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.78);
+  }
+}
+
 /* 碎裂/爆开碎片:从中心向随机方向飞出 */
 .heart-effect__shard {
   position: absolute;
@@ -237,7 +350,14 @@ body {
   top: 50%;
   opacity: 0;
   color: #ff6b98;
-  animation: heart-shard 2.4s ease-out forwards;
+  animation: heart-shard 1.95s ease-out forwards;
+  --shard-motion-x: var(--shard-x, 0px);
+  --shard-motion-y: var(--shard-y, 0px);
+}
+
+.capsule--orb .heart-effect__shard {
+  --shard-motion-x: var(--shard-y, 0px);
+  --shard-motion-y: var(--shard-x, 0px);
 }
 
 @keyframes heart-shard {
@@ -250,8 +370,8 @@ body {
   }
   100% {
     opacity: 0;
-    transform: translate(calc(-50% + var(--shard-x, 0px)), calc(-50% + var(--shard-y, 0px))) scale(1)
-      rotate(120deg);
+    transform: translate(calc(-50% + var(--shard-motion-x)), calc(-50% + var(--shard-motion-y)))
+      scale(1) rotate(120deg);
   }
 }
 
@@ -272,8 +392,56 @@ body {
   }
   100% {
     opacity: 0;
-    transform: translate(calc(-50% + var(--shard-x, 0px)), calc(-50% + var(--shard-y, 0px))) scale(0.7)
-      rotate(140deg);
+    transform: translate(calc(-50% + var(--shard-motion-x)), calc(-50% + var(--shard-motion-y)))
+      scale(0.7) rotate(140deg);
+  }
+}
+
+.heart-effect--firework .heart-effect__shard {
+  animation-name: heart-firework-shard;
+}
+
+@keyframes heart-firework-shard {
+  0%,
+  18% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  28% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.15);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--shard-motion-x)), calc(-50% + var(--shard-motion-y)))
+      scale(0.62) rotate(110deg);
+  }
+}
+
+.heart-effect--hug .heart-effect__shard {
+  animation: heart-hug-pair 1.55s cubic-bezier(0.2, 0.82, 0.3, 1) forwards;
+}
+
+@keyframes heart-hug-pair {
+  0% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--shard-motion-x)), calc(-50% + var(--shard-motion-y)))
+      scale(0.55);
+  }
+  14% {
+    opacity: 1;
+  }
+  58% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.22);
+  }
+  72% {
+    opacity: 0.75;
+    transform: translate(-50%, -50%) scale(0.78);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
   }
 }
 
@@ -284,24 +452,79 @@ body {
   top: 50%;
   opacity: 0;
   color: #ff7ba1;
-  animation: heart-orbit 2.4s linear forwards;
+  animation: heart-orbit-capsule 1.8s linear forwards;
   animation-delay: var(--orbit-delay, 0s);
 }
 
-@keyframes heart-orbit {
+.capsule--orb .heart-effect__orbit {
+  animation-name: heart-orbit-orb;
+}
+
+@keyframes heart-orbit-capsule {
   0% {
     opacity: 0;
-    transform: translate(-50%, -50%) rotate(0deg) translateX(42px) rotate(0deg) scale(0.6);
+    transform: translate(calc(-50% + 88px), -50%) scale(0.6);
   }
   12% {
     opacity: 1;
+    transform: translate(calc(-50% + 62px), calc(-50% + 10px)) scale(0.74);
+  }
+  25% {
+    transform: translate(-50%, calc(-50% + 14px)) scale(0.82);
+  }
+  37% {
+    transform: translate(calc(-50% - 62px), calc(-50% + 10px)) scale(0.9);
+  }
+  50% {
+    transform: translate(calc(-50% - 88px), -50%) scale(1);
+  }
+  62% {
+    transform: translate(calc(-50% - 62px), calc(-50% - 10px)) scale(0.9);
+  }
+  75% {
+    transform: translate(-50%, calc(-50% - 14px)) scale(0.82);
   }
   88% {
     opacity: 0.8;
+    transform: translate(calc(-50% + 62px), calc(-50% - 10px)) scale(0.74);
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -50%) rotate(360deg) translateX(42px) rotate(-360deg) scale(1);
+    transform: translate(calc(-50% + 88px), -50%) scale(0.6);
+  }
+}
+
+@keyframes heart-orbit-orb {
+  0% {
+    opacity: 0;
+    transform: translate(calc(-50% + 14px), -50%) scale(0.6);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(calc(-50% + 10px), calc(-50% + 41px)) scale(0.74);
+  }
+  25% {
+    transform: translate(-50%, calc(-50% + 58px)) scale(0.82);
+  }
+  37% {
+    transform: translate(calc(-50% - 10px), calc(-50% + 41px)) scale(0.9);
+  }
+  50% {
+    transform: translate(calc(-50% - 14px), -50%) scale(1);
+  }
+  62% {
+    transform: translate(calc(-50% - 10px), calc(-50% - 41px)) scale(0.9);
+  }
+  75% {
+    transform: translate(-50%, calc(-50% - 58px)) scale(0.82);
+  }
+  88% {
+    opacity: 0.8;
+    transform: translate(calc(-50% + 10px), calc(-50% - 41px)) scale(0.74);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + 14px), -50%) scale(0.6);
   }
 }
 
@@ -323,7 +546,7 @@ body {
   }
   100% {
     opacity: 0;
-    transform: translate(var(--heart-drift, 0), -150px) scale(var(--heart-scale, 1));
+    transform: translate(var(--heart-drift, 0), var(--heart-rise-y)) scale(var(--heart-scale, 1));
   }
 }
 
@@ -336,7 +559,7 @@ body {
   height: 64px;
   border: 2px solid rgba(255, 123, 161, 0.75);
   border-radius: 50%;
-  animation: heart-wave 2.4s ease-out forwards;
+  animation: heart-wave 1.7s ease-out forwards;
   animation-delay: var(--wave-delay, 0s);
 }
 
@@ -354,25 +577,69 @@ body {
   }
 }
 
-/* 流星:爱心斜穿胶囊,拖一条渐变尾巴 */
-.heart-effect__shooting {
-  position: absolute;
-  opacity: 0;
-  color: #ff8fae;
-  animation: heart-shooting linear forwards;
+.heart-effect--heartbeat .heart-effect__wave {
+  animation: heart-heartbeat-ring 1.2s ease-out forwards;
+  animation-delay: var(--wave-delay, 0s);
 }
 
-.heart-effect__shooting::before {
+@keyframes heart-heartbeat-ring {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.35);
+  }
+  22% {
+    opacity: 0.72;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.55);
+  }
+}
+
+/* 流星:横版从左向右、竖版从下向上,爱心尖端与拖尾始终对齐飞行方向 */
+.heart-effect__shooting {
+  position: absolute;
+  left: var(--shoot-left, 0%);
+  top: var(--shoot-top, 0%);
+  opacity: 0;
+  color: #ff8fae;
+  animation: heart-shooting cubic-bezier(0.18, 0.72, 0.32, 1) forwards;
+}
+
+.capsule--orb .heart-effect--shooting .heart-effect__shooting {
+  left: var(--shoot-top, 0%);
+  top: calc(100% + 16px);
+}
+
+.heart-effect--shooting .heart-effect__shooting svg {
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+
+.capsule--orb .heart-effect--shooting .heart-effect__shooting svg {
+  transform: rotate(180deg);
+}
+
+.heart-effect--shooting .heart-effect__shooting::before {
   content: '';
   position: absolute;
   right: 82%;
   top: 50%;
   width: 72px;
   height: 2px;
-  transform: rotate(34deg);
-  transform-origin: right center;
+  transform: translateY(-50%);
   background: linear-gradient(to left, rgba(255, 123, 161, 0.9), transparent);
   border-radius: 999px;
+}
+
+.capsule--orb .heart-effect--shooting .heart-effect__shooting::before {
+  right: auto;
+  left: 50%;
+  top: 82%;
+  width: 2px;
+  height: 72px;
+  transform: translateX(-50%);
+  background: linear-gradient(to bottom, rgba(255, 123, 161, 0.9), transparent);
 }
 
 @keyframes heart-shooting {
@@ -385,7 +652,484 @@ body {
   }
   100% {
     opacity: 0;
-    transform: translate(150px, 100px) scale(1);
+    transform: translate(var(--shoot-travel-x), var(--shoot-travel-y)) scale(1);
+  }
+}
+
+/* 飘带:横版从右向左,竖版从下向上,方向与胶囊阅读轴一致 */
+.heart-effect--ribbon .heart-effect__shooting {
+  animation-name: heart-ribbon-capsule;
+}
+
+.heart-effect--ribbon .heart-effect__shooting::before {
+  display: none;
+}
+
+.capsule--orb .heart-effect--ribbon .heart-effect__shooting {
+  left: var(--shoot-top, 50%);
+  top: var(--shoot-left, 102%);
+  animation-name: heart-ribbon-orb;
+}
+
+@keyframes heart-ribbon-capsule {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(-8deg) scale(0.55);
+  }
+  12% {
+    opacity: 1;
+  }
+  42% {
+    transform: translate3d(-105px, var(--ribbon-wave), 0) rotate(5deg) scale(1);
+  }
+  74% {
+    opacity: 0.9;
+    transform: translate3d(-205px, 0, 0) rotate(-4deg) scale(0.86);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-285px, 0, 0) rotate(7deg) scale(0.62);
+  }
+}
+
+@keyframes heart-ribbon-orb {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(-8deg) scale(0.55);
+  }
+  12% {
+    opacity: 1;
+  }
+  42% {
+    transform: translate3d(var(--ribbon-wave), -70px, 0) rotate(5deg) scale(1);
+  }
+  74% {
+    opacity: 0.9;
+    transform: translate3d(0, -135px, 0) rotate(-4deg) scale(0.86);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, -190px, 0) rotate(7deg) scale(0.62);
+  }
+}
+
+/* 礼物盒:先落稳再开盖,爱心从盒内弹出,表达收到心意 */
+.heart-effect__gift {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 42px;
+  transform: translate(-50%, -50%);
+}
+
+.heart-effect__gift-box,
+.heart-effect__gift-lid {
+  position: absolute;
+  left: 50%;
+  border-radius: 4px;
+  background: linear-gradient(145deg, #ff8cab, #e94f7b);
+  box-shadow: 0 4px 12px rgba(233, 79, 123, 0.36);
+}
+
+.heart-effect__gift-box {
+  bottom: 1px;
+  width: 32px;
+  height: 22px;
+  animation: heart-gift-box 2.1s cubic-bezier(0.2, 0.78, 0.3, 1) forwards;
+}
+
+.heart-effect__gift-box::before,
+.heart-effect__gift-lid::before {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  content: '';
+  background: linear-gradient(180deg, #ffe09a, #f5aa42);
+  transform: translateX(-50%);
+}
+
+.heart-effect__gift-lid {
+  bottom: 20px;
+  width: 38px;
+  height: 8px;
+  animation: heart-gift-lid 2.1s cubic-bezier(0.2, 0.78, 0.3, 1) forwards;
+  transform-origin: 12% 100%;
+}
+
+.heart-effect__gift-heart {
+  position: absolute;
+  left: 50%;
+  bottom: 13px;
+  width: 26px;
+  height: 26px;
+  z-index: 2;
+  color: #ff5c8a;
+  filter: drop-shadow(0 0 10px rgba(255, 92, 138, 0.82));
+  animation: heart-gift-rise 1.65s 360ms cubic-bezier(0.18, 0.86, 0.28, 1) both;
+}
+
+@keyframes heart-gift-box {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.45);
+  }
+  16% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.12);
+  }
+  28%,
+  78% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.88);
+  }
+}
+
+@keyframes heart-gift-lid {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.45);
+  }
+  16% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.08);
+  }
+  30% {
+    opacity: 1;
+    transform: translateX(-50%) rotate(0deg);
+  }
+  46%,
+  78% {
+    opacity: 1;
+    transform: translate(-58%, -10px) rotate(-14deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-58%, -10px) rotate(-14deg);
+  }
+}
+
+@keyframes heart-gift-rise {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 8px) scale(0.25) rotate(-8deg);
+  }
+  28% {
+    opacity: 1;
+    transform: translate(-50%, -2px) scale(1.16) rotate(5deg);
+  }
+  48% {
+    transform: translate(-50%, var(--gift-rise-y)) scale(0.94) rotate(-3deg);
+  }
+  78% {
+    opacity: 1;
+    transform: translate(-50%, var(--gift-rise-y)) scale(1.05) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, var(--gift-rise-y)) scale(0.78);
+  }
+}
+
+/* 丘比特箭:粉色单箭头先入场,命中心时爱心弹震,表达俏皮喜欢 */
+.heart-effect__cupid {
+  position: absolute;
+  inset: 0;
+}
+
+.heart-effect__cupid-heart {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  color: #ff5c8a;
+  filter: drop-shadow(0 0 12px rgba(255, 92, 138, 0.82));
+  animation: heart-cupid-impact 2.1s cubic-bezier(0.18, 0.82, 0.3, 1) forwards;
+}
+
+.heart-effect__cupid-arrow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 92px;
+  height: 3px;
+  z-index: 2;
+  opacity: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 218, 231, 0.7), #ff91b3 58%, #ff6f9d);
+  box-shadow: 0 0 8px rgba(255, 111, 157, 0.58);
+  animation: heart-cupid-arrow-capsule 1.65s 180ms cubic-bezier(0.18, 0.78, 0.28, 1) both;
+}
+
+.heart-effect__cupid-arrow::before {
+  position: absolute;
+  right: -2px;
+  top: 50%;
+  width: 0;
+  height: 0;
+  content: '';
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 9px solid #ff7ca5;
+  transform: translateY(-50%);
+}
+
+.capsule--orb .heart-effect__cupid-arrow {
+  width: 3px;
+  height: 92px;
+  background: linear-gradient(0deg, rgba(255, 218, 231, 0.7), #ff91b3 58%, #ff6f9d);
+  animation-name: heart-cupid-arrow-orb;
+}
+
+.capsule--orb .heart-effect__cupid-arrow::before {
+  right: auto;
+  top: -2px;
+  left: 50%;
+  border: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 9px solid #ff7ca5;
+  transform: translateX(-50%);
+}
+
+@keyframes heart-cupid-impact {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.35);
+  }
+  18%,
+  36% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  46% {
+    transform: translate(-50%, -50%) scale(1.24) rotate(7deg);
+  }
+  58% {
+    transform: translate(-50%, -50%) scale(0.9) rotate(-4deg);
+  }
+  76% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.76);
+  }
+}
+
+@keyframes heart-cupid-arrow-capsule {
+  0% {
+    opacity: 0;
+    transform: translate(-220%, -50%);
+  }
+  15% {
+    opacity: 1;
+  }
+  45% {
+    opacity: 1;
+    transform: translate(-100%, -50%);
+  }
+  68% {
+    opacity: 1;
+    transform: translate(-76%, -50%);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-62%, -50%);
+  }
+}
+
+@keyframes heart-cupid-arrow-orb {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 160%);
+  }
+  15% {
+    opacity: 1;
+  }
+  45% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  68% {
+    opacity: 1;
+    transform: translate(-50%, -18%);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -34%);
+  }
+}
+
+/* 爱心气球:先充盈再缓慢升起,表达轻盈和被鼓励后的开心 */
+.heart-effect__balloon {
+  position: absolute;
+  left: 50%;
+  bottom: -28px;
+  width: 46px;
+  height: 78px;
+  transform-origin: 50% 20%;
+  animation: heart-balloon-rise 2.2s cubic-bezier(0.2, 0.78, 0.3, 1) forwards;
+}
+
+.capsule--orb .heart-effect__balloon {
+  bottom: 10px;
+}
+
+.heart-effect__balloon-heart {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 44px;
+  height: 44px;
+  z-index: 1;
+  color: #ff6b98;
+  filter: drop-shadow(0 0 12px rgba(255, 107, 152, 0.76));
+  transform: translateX(-50%);
+  transform-origin: 50% 88%;
+  animation: heart-balloon-wobble 2.05s ease-in-out forwards;
+}
+
+.heart-effect__balloon-string {
+  position: absolute;
+  left: 50%;
+  top: 39px;
+  width: 13px;
+  height: 32px;
+  border-left: 1px solid rgba(255, 224, 234, 0.72);
+  border-radius: 50%;
+  transform: translateX(-1px) rotate(-7deg);
+}
+
+@keyframes heart-balloon-rise {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 14px) scale(0.42);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.1);
+  }
+  34% {
+    transform: translate(-50%, 0) scale(0.96);
+  }
+  74% {
+    opacity: 1;
+    transform: translate(-50%, var(--balloon-rise-y)) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, var(--balloon-rise-y)) scale(0.88);
+  }
+}
+
+@keyframes heart-balloon-wobble {
+  0%,
+  22% {
+    transform: translateX(-50%) rotate(0deg);
+  }
+  42% {
+    transform: translateX(-50%) rotate(6deg);
+  }
+  62% {
+    transform: translateX(-50%) rotate(-5deg);
+  }
+  82%,
+  100% {
+    transform: translateX(-50%) rotate(2deg);
+  }
+}
+
+/* 超级赞:暖金圆形软章轻弹授予,中央爱心弹出,表达高于普通点赞的认可 */
+.heart-effect__superlike {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 58px;
+  transform: translate(-50%, -50%);
+}
+
+.heart-effect__superlike-star {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #fff8df 0%, #ffe2a8 42%, #f2b85f 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.34),
+    0 0 13px rgba(255, 157, 190, 0.34);
+  animation: heart-superlike-star 1.9s cubic-bezier(0.18, 0.84, 0.3, 1) forwards;
+}
+
+.heart-effect__superlike-star::before {
+  position: absolute;
+  inset: 7px;
+  content: '';
+  border: 1px solid rgba(255, 255, 255, 0.52);
+  border-radius: 50%;
+}
+
+.heart-effect__superlike-heart {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 29px;
+  height: 29px;
+  z-index: 1;
+  color: #ff4f82;
+  filter: drop-shadow(0 0 7px rgba(255, 79, 130, 0.78));
+  animation: heart-superlike-heart 1.7s 180ms cubic-bezier(0.18, 0.86, 0.28, 1) both;
+}
+
+@keyframes heart-superlike-star {
+  0% {
+    opacity: 0;
+    transform: rotate(-8deg) scale(0.2);
+  }
+  24% {
+    opacity: 1;
+    transform: rotate(4deg) scale(1.12);
+  }
+  40%,
+  76% {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(6deg) scale(0.8);
+  }
+}
+
+@keyframes heart-superlike-heart {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  24% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.3);
+  }
+  42% {
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  62%,
+  78% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.76);
   }
 }
 
@@ -398,7 +1142,7 @@ body {
   font-weight: 800;
   color: #fff;
   text-shadow: 0 1px 8px rgba(255, 92, 138, 0.95);
-  animation: heart-plus 2.4s ease-out forwards;
+  animation: heart-plus 2.2s ease-out forwards;
 }
 
 @keyframes heart-plus {
@@ -2865,5 +3609,13 @@ body {
   .settings-section,
   .inline-input {
     animation: none;
+  }
+
+  .heart-effect > * {
+    display: none;
+  }
+
+  .heart-effect__reduced {
+    display: block;
   }
 }
