@@ -92,6 +92,21 @@ body {
   z-index: 1;
 }
 
+/* 未读公告角标(蓝):颜色只作辅助，胶囊 aria-label 同步说明目标。 */
+.capsule.has-announcement::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #58a6ff;
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+  pointer-events: none;
+  z-index: 1;
+}
+
 /* 版本落后角标(黄):组内广播的最高版本高于本地,弱提示;与红点角标互斥不叠加 */
 .capsule.is-outdated::after {
   content: '';
@@ -1559,8 +1574,6 @@ body {
   font-size: 9px;
   padding: 2px 5px;
 }
-
-
 .panel {
   width: 100%;
   height: 100%;
@@ -2703,6 +2716,147 @@ body {
   min-height: 24px;
 }
 
+/* 公告:本次运行期只保留最新一条，置于团队信息区最上方。 */
+.team-announcement {
+  position: relative;
+  margin-bottom: var(--panel-space-section);
+  overflow: hidden;
+  padding: 16px 96px 16px 20px;
+  border: 1px solid rgba(88, 166, 255, 0.74);
+  border-radius: var(--panel-radius-lg);
+  background:
+    linear-gradient(
+      115deg,
+      rgba(24, 91, 163, 0.52),
+      rgba(13, 31, 53, 0.9) 55%,
+      rgba(10, 20, 35, 0.98)
+    ),
+    var(--panel-card);
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(121, 192, 255, 0.1) inset,
+    0 0 26px rgba(31, 111, 235, 0.16);
+}
+
+.team-announcement::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 5px;
+  background: linear-gradient(180deg, #8bd5ff, #2f81f7 55%, #1f6feb);
+  box-shadow: 2px 0 14px rgba(88, 166, 255, 0.72);
+  content: '';
+}
+
+.team-announcement.is-unread {
+  border-color: #79c0ff;
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(121, 192, 255, 0.2) inset,
+    0 0 34px rgba(56, 139, 253, 0.32);
+}
+
+.team-announcement:focus-visible {
+  outline: 2px solid #a5d6ff;
+  outline-offset: 2px;
+}
+
+.team-announcement__topline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.team-announcement__label {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid rgba(201, 235, 255, 0.42);
+  border-radius: 5px;
+  background: linear-gradient(135deg, #79c0ff, #388bfd);
+  color: #061523;
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+.team-announcement.is-unread .team-announcement__label::before {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: #061523;
+  content: '';
+  vertical-align: 1px;
+}
+
+.team-announcement__meta {
+  min-width: 0;
+  overflow: hidden;
+  color: #c9e9ff;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-announcement__text {
+  margin: 11px 0 0;
+  color: #f0f8ff;
+  font-size: 13.5px;
+  font-weight: 580;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.team-announcement__acknowledge {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  min-width: 66px;
+  min-height: 36px;
+  padding: 0 14px;
+  transform: translateY(-50%);
+  border: 1px solid rgba(216, 241, 255, 0.52);
+  border-radius: 999px;
+  background: rgba(5, 20, 36, 0.72);
+  color: #e3f3ff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 620;
+  cursor: pointer;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease;
+}
+
+.team-announcement__acknowledge:hover {
+  border-color: #b6e3ff;
+  background: #d8f1ff;
+  color: #08203a;
+}
+
+.team-announcement__acknowledge:focus-visible {
+  outline: 2px solid #d8f1ff;
+  outline-offset: 2px;
+}
+
+@media (max-width: 420px) {
+  .team-announcement {
+    padding-right: 16px;
+  }
+
+  .team-announcement__acknowledge {
+    position: static;
+    margin-top: 12px;
+    transform: none;
+  }
+}
+
 /* Token 消耗行:四列 rank | name | bar | value,去掉额度行的重置卡列,value 加宽容纳紧凑 token */
 .team-row--token {
   grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1.2fr) 68px;
@@ -3411,6 +3565,7 @@ body {
 }
 
 .panel__header--details,
+.panel__body--team > .panel__content > .team-announcement,
 .panel__body--team > .panel__content > .panel__header,
 .panel__body--team > .panel__content > .team-board,
 .panel__body--team > .panel__content > .team-empty,
@@ -3425,6 +3580,10 @@ body {
 }
 
 .panel__body--team > .panel__content > .panel__header {
+  animation-delay: 0ms;
+}
+
+.panel__body--team > .panel__content > .team-announcement {
   animation-delay: 0ms;
 }
 

@@ -8,6 +8,7 @@ export type RendererWindowRole = 'capsule' | 'panel'
 export type CapsuleViewMode = 'capsule' | 'orb'
 export type DockEdge = 'left' | 'right'
 export type RendererCommandType = 'show-panel-view'
+export type PanelFocusTarget = 'announcement' | 'messages'
 
 export interface RateLimitWindowSnapshot {
   id: string
@@ -96,6 +97,15 @@ export interface BroadcastMessage {
   /** 发送时刻(ms epoch) */
   sentAt: number
   text: string
+}
+
+/** 当前运行期最新公告:沿用广播消息字段,text 已移除 #gg 标识 */
+export type AnnouncementMessage = BroadcastMessage
+
+/** 公告只存主进程内存;unread=false 表示已读,卡片仍保留到用户点击“已知” */
+export interface AnnouncementState {
+  message: AnnouncementMessage
+  unread: boolean
 }
 
 /** 排行榜成员点赞事件:同组广播;接收端按目标成员聚合,同一发送者对同一成员以最后一次动作生效 */
@@ -218,6 +228,10 @@ export interface BootstrapPayload {
   version: string
   /** 打开设置页后定位到检查更新区域(胶囊版本角标跳转用) */
   focusUpdate?: boolean
+  /** 胶囊提醒点击后在目标 panel 内定位到具体区域 */
+  focusTarget?: PanelFocusTarget
+  /** 当前运行期最新公告;进程退出后自然清空 */
+  announcement: AnnouncementState | null
 }
 
 export interface PreferencesPayload {
@@ -238,6 +252,14 @@ export interface RendererCommandPayload {
   panelView: PanelView
   /** 打开设置页后定位到检查更新区域(胶囊版本角标跳转用) */
   focusUpdate?: boolean
+  focusTarget?: PanelFocusTarget
+}
+
+export interface ShowPanelOptions {
+  focusUpdate?: boolean
+  focusTarget?: PanelFocusTarget
+  /** 提醒跳转必须显示并聚焦 panel,不能沿用普通点击的显隐切换 */
+  forceOpen?: boolean
 }
 
 export interface CodexStatusApi {
@@ -252,7 +274,7 @@ export interface CodexStatusApi {
   /** 渲染层 bootstrap 完成后通知主进程显示 panel 窗口(避免空窗先闪) */
   notifyPanelReady: () => Promise<void>
   /** 胶囊窗口点击打开 panel 指定视图(主进程复用 openPanelWindow);focusUpdate 定位到检查更新区 */
-  showPanel: (view: PanelView, options?: { focusUpdate?: boolean }) => Promise<void>
+  showPanel: (view: PanelView, options?: ShowPanelOptions) => Promise<void>
   /** 手动检查 GitHub Releases 是否有新版本 */
   checkForUpdate: () => Promise<UpdateCheckResult>
   /** 获取 1/7/30 天 token 用量与估算花费(按需拉取,不走快照广播) */
@@ -276,6 +298,11 @@ export interface CodexStatusApi {
   sendBroadcast: (text: string) => Promise<BroadcastSendResult>
   /** 订阅收到同组广播消息(含自己发出的回显,由 senderPeerId 区分) */
   onBroadcastMessage: (listener: (message: BroadcastMessage) => void) => () => void
+  /** 公告卡片进入前台可视区后按 id 标记已读 */
+  markAnnouncementRead: (id: string) => Promise<void>
+  /** 用户主动确认“已知”;仅清除 id 匹配的当前公告 */
+  acknowledgeAnnouncement: (id: string) => Promise<void>
+  onAnnouncementUpdated: (listener: (state: AnnouncementState | null) => void) => () => void
   /** 给某成员点赞/取消(toggle):action 由渲染层按当前已赞状态决定;主进程回显给自己,所有端各自聚合 */
   sendReaction: (targetPeerId: string, action: 'add' | 'remove') => Promise<ReactionSendResult>
   /** 订阅收到同组点赞事件(含自己回显,由 senderPeerId 区分) */

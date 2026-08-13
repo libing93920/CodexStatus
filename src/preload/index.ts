@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
+  AnnouncementState,
   AppSettings,
   BootstrapPayload,
   BroadcastSendResult,
@@ -9,6 +10,7 @@ import type {
   PanelView,
   PreferencesPayload,
   ReactionSendResult,
+  ShowPanelOptions,
   SpendUsage,
   TokenUsageOverview,
   UpdateCheckResult,
@@ -40,6 +42,9 @@ const CHANNELS = {
   updateProgress: 'codex-status:update-progress',
   sendBroadcast: 'codex-status:send-broadcast',
   broadcastMessage: 'codex-status:broadcast-message',
+  announcementUpdated: 'codex-status:announcement-updated',
+  markAnnouncementRead: 'codex-status:mark-announcement-read',
+  acknowledgeAnnouncement: 'codex-status:acknowledge-announcement',
   sendReaction: 'codex-status:send-reaction',
   reaction: 'codex-status:reaction'
 } as const
@@ -56,7 +61,7 @@ const api: CodexStatusApi = {
     ipcRenderer.invoke(CHANNELS.finishCapsuleWindowDrag) as Promise<WindowPreferences>,
   openExternal: (url) => ipcRenderer.invoke(CHANNELS.openExternal, url) as Promise<void>,
   notifyPanelReady: () => ipcRenderer.invoke(CHANNELS.panelReady) as Promise<void>,
-  showPanel: (view: PanelView, options?: { focusUpdate?: boolean }) =>
+  showPanel: (view: PanelView, options?: ShowPanelOptions) =>
     ipcRenderer.invoke(CHANNELS.showPanel, view, options) as Promise<void>,
   checkForUpdate: () => ipcRenderer.invoke(CHANNELS.checkUpdate) as Promise<UpdateCheckResult>,
   getTokenUsage: (window: UsageWindow) =>
@@ -69,6 +74,10 @@ const api: CodexStatusApi = {
     ipcRenderer.invoke(CHANNELS.setCapsuleSize, size) as Promise<void>,
   sendBroadcast: (text: string) =>
     ipcRenderer.invoke(CHANNELS.sendBroadcast, text) as Promise<BroadcastSendResult>,
+  markAnnouncementRead: (id: string) =>
+    ipcRenderer.invoke(CHANNELS.markAnnouncementRead, id) as Promise<void>,
+  acknowledgeAnnouncement: (id: string) =>
+    ipcRenderer.invoke(CHANNELS.acknowledgeAnnouncement, id) as Promise<void>,
   sendReaction: (targetPeerId: string, action: 'add' | 'remove') =>
     ipcRenderer.invoke(CHANNELS.sendReaction, targetPeerId, action) as Promise<ReactionSendResult>,
   downloadUpdate: () => ipcRenderer.invoke(CHANNELS.downloadUpdate) as Promise<void>,
@@ -78,6 +87,8 @@ const api: CodexStatusApi = {
   onCommand: listener => subscribe(CHANNELS.command, listener),
   onUpdateProgress: listener => subscribe(CHANNELS.updateProgress, listener),
   onBroadcastMessage: listener => subscribe(CHANNELS.broadcastMessage, listener),
+  onAnnouncementUpdated: (listener: (state: AnnouncementState | null) => void) =>
+    subscribe(CHANNELS.announcementUpdated, listener),
   onReaction: listener => subscribe(CHANNELS.reaction, listener)
 }
 

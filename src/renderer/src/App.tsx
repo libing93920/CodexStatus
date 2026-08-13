@@ -9,10 +9,12 @@ import {
   MAX_REFRESH_INTERVAL_SECONDS,
   MIN_REFRESH_INTERVAL_SECONDS,
   createEmptySnapshot,
+  type AnnouncementState,
   type AppSettings,
   type AuthMode,
   type BroadcastMessage,
   type LocaleCode,
+  type PanelFocusTarget,
   type PanelView,
   type PercentageMode,
   type RateLimitWindowSnapshot,
@@ -25,6 +27,7 @@ import {
   type UsageWindow,
   type WindowPreferences
 } from '../../shared/capsule'
+import { formatAnnouncementTime, resolveCapsuleAlert } from '../../shared/announcement'
 
 const DEFAULT_CUSTOM_REFRESH_INTERVAL_SECONDS = 40
 const CAPSULE_CLICK_DRAG_DISTANCE = 5
@@ -130,7 +133,11 @@ const COPY = {
     broadcastSend: '发送',
     broadcastNotInTeam: '未加入团队,设置口令后才能广播',
     broadcastRateLimited: '发送过快,请 2 秒后再试',
-    capsuleMessageAria: '广播消息,点击返回额度',
+    broadcastInvalid: '消息为空或超过 200 字',
+    capsuleMessageAria: '广播消息,点击查看消息',
+    announcement: '公告',
+    announcementAcknowledge: '已知',
+    announcementUnread: '未读公告',
     author: '作者',
     version: '版本',
     groupAbout: '关于',
@@ -229,7 +236,11 @@ const COPY = {
     broadcastSend: 'Send',
     broadcastNotInTeam: 'Not in a team — set a passphrase to broadcast',
     broadcastRateLimited: 'Sending too fast — wait 2s and retry',
-    capsuleMessageAria: 'Broadcast message, click to return',
+    broadcastInvalid: 'Message is empty or exceeds 200 characters',
+    capsuleMessageAria: 'Broadcast message, click to view',
+    announcement: 'Announcement',
+    announcementAcknowledge: 'Got it',
+    announcementUnread: 'Unread announcement',
     author: 'Author',
     version: 'Version',
     groupAbout: 'About',
@@ -304,6 +315,7 @@ function App(): React.JSX.Element {
   const [ready, setReady] = useState(false)
   // 胶囊版本角标跳转:打开设置页后需定位到检查更新区(一次性,滚动后清除)
   const [focusUpdatePending, setFocusUpdatePending] = useState(false)
+  const [focusTargetPending, setFocusTargetPending] = useState<PanelFocusTarget | null>(null)
   const aboutRowRef = useRef<HTMLDivElement | null>(null)
   // 详情面板里长窗口(周重置)倒计时需要秒级刷新;只在面板可见且有长窗口时 tick
   const [nowTick, setNowTick] = useState(() => Date.now())
@@ -335,6 +347,9 @@ function App(): React.JSX.Element {
   const lastHeartEffectKindRef = useRef<HeartEffectKind | undefined>(undefined)
   // 消息流容器:新消息到达时滚到底,保证最新可见
   const broadcastFeedRef = useRef<HTMLDivElement | null>(null)
+  const announcementRef = useRef<HTMLElement | null>(null)
+  const announcementVisibleRef = useRef(false)
+  const [announcement, setAnnouncement] = useState<AnnouncementState | null>(null)
 
   useEffect(() => {
     let active = true
@@ -351,8 +366,12 @@ function App(): React.JSX.Element {
         setWindowPreferences(payload.window)
         setWindowRole(payload.role)
         setPanelView(payload.panelView)
+        setAnnouncement(payload.announcement)
         if (payload.focusUpdate) {
           setFocusUpdatePending(true)
+        }
+        if (payload.focusTarget) {
+          setFocusTargetPending(payload.focusTarget)
         }
         setCustomRefreshInput(String(payload.settings.refreshIntervalSeconds))
         setIqThresholdInput(String(payload.settings.iqThreshold))
@@ -391,9 +410,15 @@ function App(): React.JSX.Element {
         return
       }
 
+      if (payload.panelView !== 'team') {
+        announcementVisibleRef.current = false
+      }
       setPanelView(payload.panelView)
       if (payload.focusUpdate) {
         setFocusUpdatePending(true)
+      }
+      if (payload.focusTarget) {
+        setFocusTargetPending(payload.focusTarget)
       }
     })
 
@@ -449,6 +474,10 @@ function App(): React.JSX.Element {
       }, BROADCAST_REVERT_MS)
     })
 
+    const disposeAnnouncement = window.codexStatus.onAnnouncementUpdated((state) => {
+      setAnnouncement(state)
+    })
+
     // 订阅点赞事件:追加并裁剪非今日事件,聚合在渲染时按目标成员计算
     const disposeReaction = window.codexStatus.onReaction((reaction) => {
       setReactions((previous) => {
@@ -484,6 +513,7 @@ function App(): React.JSX.Element {
       disposeCommand()
       disposeUpdateProgress()
       disposeBroadcast()
+      disposeAnnouncement()
       disposeReaction()
     }
   }, [])
@@ -685,6 +715,59 @@ function App(): React.JSX.Element {
     }
   }, [panelView, focusUpdatePending])
 
+  useEffect(() => {
+    if (panelView !== 'team' || !focusTargetPending) {
+      return
+    }
+
+    const target =
+      focusTargetPending === 'announcement' ? announcementRef.current : broadcastFeedRef.current
+    if (!target) {
+      return
+    }
+    target.scrollIntoView({ block: 'nearest' })
+    if (focusTargetPending === 'announcement') {
+      announcementRef.current?.focus({ preventScroll: true })
+    }
+    setFocusTargetPending(null)
+  }, [panelView, focusTargetPending, announcement?.message.id])
+
+  // 只有当前公告卡片进入前台可视区才自动已读；按 id 上报，旧卡片不能误清新公告。
+  useEffect(() => {
+    if (windowRole !== 'panel' || panelView !== 'team' || !announcement) {
+      return
+    }
+
+    const element = announcementRef.current
+    if (!element) {
+      return
+    }
+
+    const announcementId = announcement.message.id
+    const markIfVisible = (): void => {
+      if (
+        announcementVisibleRef.current &&
+        document.visibilityState === 'visible' &&
+        document.hasFocus()
+      ) {
+        void window.codexStatus.markAnnouncementRead(announcementId)
+      }
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      announcementVisibleRef.current = entry.isIntersecting
+      markIfVisible()
+    })
+    observer.observe(element)
+    window.addEventListener('focus', markIfVisible)
+    document.addEventListener('visibilitychange', markIfVisible)
+    return () => {
+      announcementVisibleRef.current = false
+      observer.disconnect()
+      window.removeEventListener('focus', markIfVisible)
+      document.removeEventListener('visibilitychange', markIfVisible)
+    }
+  }, [windowRole, panelView, announcement?.message.id])
+
   // 新消息入流后把 feed 滚到底,最新可见
   useEffect(() => {
     const feed = broadcastFeedRef.current
@@ -722,11 +805,18 @@ function App(): React.JSX.Element {
   const selfOutdated =
     appVersion !== '' && maxAppVersion !== undefined && compareSemver(appVersion, maxAppVersion) < 0
   const showOutdatedBadge = selfOutdated && !hasUpdate
+  const capsuleAlert = resolveCapsuleAlert(
+    hasUpdate,
+    announcement?.unread === true,
+    showOutdatedBadge,
+    capsuleMessage !== null
+  )
   const capsuleClassName = [
     'capsule',
     `capsule--${capsuleViewMode}`,
-    hasUpdate ? 'has-update' : '',
-    showOutdatedBadge ? 'is-outdated' : '',
+    capsuleAlert === 'red' ? 'has-update' : '',
+    capsuleAlert === 'blue' ? 'has-announcement' : '',
+    capsuleAlert === 'yellow' ? 'is-outdated' : '',
     snapshot.isRefreshing ? 'is-refreshing' : '',
     manualRefreshActive ? 'is-manual-refreshing' : '',
     canRefresh ? '' : 'is-static',
@@ -780,10 +870,11 @@ function App(): React.JSX.Element {
 
   // 有窗口带重置倒计时时每秒 tick 刷新显示
   const hasResetWindow = rateLimitWindows.some((w) => w.resetsAt !== undefined)
+  const hasAnnouncementTime = windowRole === 'panel' && panelView === 'team' && announcement !== null
   useEffect(() => {
     const isPanelWithResetWindow = windowRole === 'panel' && panelView === 'details' && hasResetWindow
     const isCapsuleWithResetWindow = windowRole === 'capsule' && hasResetWindow
-    if (!isPanelWithResetWindow && !isCapsuleWithResetWindow) {
+    if (!isPanelWithResetWindow && !isCapsuleWithResetWindow && !hasAnnouncementTime) {
       return
     }
 
@@ -793,7 +884,7 @@ function App(): React.JSX.Element {
     return () => {
       window.clearInterval(timer)
     }
-  }, [windowRole, panelView, hasResetWindow])
+  }, [windowRole, panelView, hasResetWindow, hasAnnouncementTime])
 
   // panel 窗口显示时机:等 React commit + 浏览器 paint 完成后再通知主进程 show。
   // 用 rAF 推迟到下一帧,确保 DOM 已真正绘制——避免窗口 show 时画面仍空导致闪一下。
@@ -994,25 +1085,38 @@ function App(): React.JSX.Element {
       return
     }
 
-    // 消息态下点击 = 回到额度态,不打开面板;消息不落历史,点回即丢弃
-    if (capsuleMessage) {
-      setCapsuleMessage(null)
-      if (capsuleMessageTimerRef.current !== undefined) {
-        window.clearTimeout(capsuleMessageTimerRef.current)
-        capsuleMessageTimerRef.current = undefined
-      }
+    if (shouldRefreshOnClick) {
+      openCapsuleTarget()
+    }
+  }
+
+  function clearCapsuleMessage(): void {
+    setCapsuleMessage(null)
+    if (capsuleMessageTimerRef.current !== undefined) {
+      window.clearTimeout(capsuleMessageTimerRef.current)
+      capsuleMessageTimerRef.current = undefined
+    }
+  }
+
+  // 单一优先级同时决定角标颜色与跳转目标，避免视觉提示和点击行为分叉。
+  function openCapsuleTarget(): void {
+    if (capsuleAlert === 'red' || capsuleAlert === 'yellow') {
+      void window.codexStatus.showPanel('settings', { focusUpdate: true, forceOpen: true })
       return
     }
-
-    // 点击胶囊(无拖拽)直接打开面板,不再触发刷新;刷新入口移至右键菜单和面板内按钮。
-    // 红/黄版本角标出现时改进设置页并定位到检查更新区
-    if (shouldRefreshOnClick) {
-      const jumpToUpdate = hasUpdate || showOutdatedBadge
-      void window.codexStatus.showPanel(
-        jumpToUpdate ? 'settings' : 'details',
-        jumpToUpdate ? { focusUpdate: true } : undefined
-      )
+    if (capsuleAlert === 'blue') {
+      void window.codexStatus.showPanel('team', {
+        focusTarget: 'announcement',
+        forceOpen: true
+      })
+      return
     }
+    if (capsuleAlert === 'message') {
+      clearCapsuleMessage()
+      void window.codexStatus.showPanel('team', { focusTarget: 'messages', forceOpen: true })
+      return
+    }
+    void window.codexStatus.showPanel('details')
   }
 
   function handleCapsuleKeyDown(event: React.KeyboardEvent<HTMLElement>): void {
@@ -1021,20 +1125,14 @@ function App(): React.JSX.Element {
     }
 
     event.preventDefault()
-    // 消息态下回车/空格 = 回额度态,不打开面板
-    if (capsuleMessage) {
-      setCapsuleMessage(null)
-      if (capsuleMessageTimerRef.current !== undefined) {
-        window.clearTimeout(capsuleMessageTimerRef.current)
-        capsuleMessageTimerRef.current = undefined
-      }
-      return
+    openCapsuleTarget()
+  }
+
+  function handlePanelViewChange(view: PanelView): void {
+    if (view !== 'team') {
+      announcementVisibleRef.current = false
     }
-    const jumpToUpdate = hasUpdate || showOutdatedBadge
-    void window.codexStatus.showPanel(
-      jumpToUpdate ? 'settings' : 'details',
-      jumpToUpdate ? { focusUpdate: true } : undefined
-    )
+    setPanelView(view)
   }
 
   function recordSnapshotIssue(error: unknown): void {
@@ -1060,7 +1158,11 @@ function App(): React.JSX.Element {
         setBroadcastInput('')
       } else {
         setBroadcastSendError(
-          result.reason === 'not-in-team' ? copy.broadcastNotInTeam : copy.broadcastRateLimited
+          result.reason === 'not-in-team'
+            ? copy.broadcastNotInTeam
+            : result.reason === 'too-long'
+              ? copy.broadcastInvalid
+              : copy.broadcastRateLimited
         )
       }
     } catch {
@@ -1188,7 +1290,15 @@ function App(): React.JSX.Element {
         <main className="widget">
           <section
             ref={capsuleRef}
-            aria-label={capsuleMessage ? copy.capsuleMessageAria : copy.details}
+            aria-label={
+              capsuleAlert === 'red' || capsuleAlert === 'yellow'
+                ? copy.checkUpdate
+                : capsuleAlert === 'blue'
+                  ? copy.announcementUnread
+                  : capsuleAlert === 'message'
+                    ? copy.capsuleMessageAria
+                    : copy.details
+            }
             className={capsuleClassName}
             style={capsuleProgressStyle}
             onKeyDown={handleCapsuleKeyDown}
@@ -1337,7 +1447,7 @@ function App(): React.JSX.Element {
               <PanelTabs
                 current={panelView}
                 labels={{ details: copy.details, team: copy.team, settings: copy.settings }}
-                onChange={(view) => setPanelView(view)}
+                onChange={handlePanelViewChange}
               />
               <div className="panel__header panel__header--details">
                 <div className="panel__header-title-group">
@@ -1400,8 +1510,39 @@ function App(): React.JSX.Element {
               <PanelTabs
                 current={panelView}
                 labels={{ details: copy.details, team: copy.team, settings: copy.settings }}
-                onChange={(view) => setPanelView(view)}
+                onChange={handlePanelViewChange}
               />
+              {announcement ? (
+                <section
+                  aria-label={announcement.unread ? copy.announcementUnread : copy.announcement}
+                  aria-live="polite"
+                  className={`team-announcement${announcement.unread ? ' is-unread' : ''}`}
+                  ref={announcementRef}
+                  tabIndex={-1}
+                >
+                  <div className="team-announcement__topline">
+                    <span className="team-announcement__label">{copy.announcement}</span>
+                    <span className="team-announcement__meta">
+                      {announcement.message.senderNickname || copy.teamAnonymous} ·{' '}
+                      {formatAnnouncementTime(
+                        announcement.message.sentAt,
+                        nowTick,
+                        settings.locale
+                      )}
+                    </span>
+                  </div>
+                  <p className="team-announcement__text">{announcement.message.text}</p>
+                  <button
+                    className="team-announcement__acknowledge"
+                    onClick={() =>
+                      void window.codexStatus.acknowledgeAnnouncement(announcement.message.id)
+                    }
+                    type="button"
+                  >
+                    {copy.announcementAcknowledge}
+                  </button>
+                </section>
+              ) : null}
               <div className="team-mode-switch">
                 <SegmentedControl
                   onChange={(value) => setTeamBoardMode(value as 'quota' | 'tokens')}
@@ -1571,7 +1712,7 @@ function App(): React.JSX.Element {
               <PanelTabs
                 current={panelView}
                 labels={{ details: copy.details, team: copy.team, settings: copy.settings }}
-                onChange={(view) => setPanelView(view)}
+                onChange={handlePanelViewChange}
               />
               <div className="panel__header">
                 <div>

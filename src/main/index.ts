@@ -30,8 +30,11 @@ import {
   PANEL_WINDOW_SIZE,
   createEmptySnapshot,
   normalizeSettings,
+  type AnnouncementState,
+  type BroadcastMessage,
   type CapsuleDragMovePayload,
   type DockEdge,
+  type PanelFocusTarget,
   type PanelView,
   type RateLimitWindowSnapshot,
   type AppSettings,
@@ -39,11 +42,19 @@ import {
   type RendererCommandPayload,
   type PersistedState,
   type RendererWindowRole,
+  type ShowPanelOptions,
   type TeamPeer,
   type UsageSnapshot,
   type UsageWindow,
   type WindowPreferences
 } from '../shared/capsule'
+import {
+  ANNOUNCEMENT_PREFIX,
+  acknowledgeAnnouncement,
+  createAnnouncementState,
+  markAnnouncementRead,
+  parseAnnouncementText
+} from '../shared/announcement'
 import { collectUsageSnapshot, invalidateQuotaCaches, resolveCodexAuthPath } from './services/quota'
 import { refreshRadarNow, startRadarTimer, stopRadarTimer } from './services/radar'
 import {
@@ -88,6 +99,9 @@ const CHANNELS = {
   updateProgress: 'codex-status:update-progress',
   sendBroadcast: 'codex-status:send-broadcast',
   broadcastMessage: 'codex-status:broadcast-message',
+  announcementUpdated: 'codex-status:announcement-updated',
+  markAnnouncementRead: 'codex-status:mark-announcement-read',
+  acknowledgeAnnouncement: 'codex-status:acknowledge-announcement',
   sendReaction: 'codex-status:send-reaction',
   reaction: 'codex-status:reaction'
 } as const
@@ -107,6 +121,8 @@ let userHidCapsule = false
 let currentPanelView: PanelView = 'details'
 // 胶囊版本角标跳转设置页时的一次性定位标志:由 bootstrap 或 command 消费后清除
 let panelFocusUpdate = false
+let panelFocusTarget: PanelFocusTarget | undefined
+let currentAnnouncement: AnnouncementState | null = null
 const lanService = new LanService()
 let persistedState: PersistedState = {
   settings: { ...DEFAULT_SETTINGS },
@@ -320,7 +336,7 @@ if (hasSingleInstanceLock) {
     // 启动后自动检查更新 + 后续定时检查(每2小时)
     if (app.isPackaged) {
       let updateCheckTimer: NodeJS.Timeout | undefined
-      const doCheck = async () => {
+      const doCheck = async (): Promise<void> => {
         const result = await checkForUpdates()
         if (result.available && result.version) {
           sendToRenderers(CHANNELS.updateProgress, {
@@ -398,14 +414,17 @@ app.on('before-quit', () => {
 
 function registerIpcHandlers(): void {
   ipcMain.handle(CHANNELS.bootstrap, async (event) => {
+    const role = resolveRendererRole(event.sender.id)
     return {
       settings: persistedState.settings,
       window: persistedState.window,
       panel: persistedState.panel,
       snapshot: currentSnapshot,
-      role: resolveRendererRole(event.sender.id),
+      role,
       panelView: currentPanelView,
-      focusUpdate: consumeFocusUpdate(),
+      focusUpdate: role === 'panel' ? consumeFocusUpdate() : false,
+      focusTarget: role === 'panel' ? consumeFocusTarget() : undefined,
+      announcement: currentAnnouncement,
       version: app.getVersion()
     }
   })
@@ -501,16 +520,26 @@ function registerIpcHandlers(): void {
     }
   })
 
-  // 胶囊窗口点击 toggle panel:已显示则关闭,未显示则打开;focusUpdate 让设置页定位到检查更新区
-  ipcMain.handle(CHANNELS.showPanel, async (_, view: PanelView, options?: { focusUpdate?: boolean }) => {
-    if (options?.focusUpdate === true) {
+  // 普通点击沿用显隐切换;提醒跳转用 forceOpen 保证 panel 显示、聚焦并定位目标区域
+  ipcMain.handle(CHANNELS.showPanel, async (_, rawView: unknown, rawOptions?: unknown) => {
+    if (!isPanelView(rawView)) {
+      return
+    }
+    const options = normalizeShowPanelOptions(rawOptions)
+    if (options.focusUpdate) {
       panelFocusUpdate = true
     }
-    if (panelWindow && !panelWindow.isDestroyed() && panelWindow.isVisible()) {
+    panelFocusTarget = options.focusTarget
+    if (
+      !options.forceOpen &&
+      panelWindow &&
+      !panelWindow.isDestroyed() &&
+      panelWindow.isVisible()
+    ) {
       panelWindow.hide()
       return
     }
-    openPanelWindow(view)
+    openPanelWindow(rawView)
   })
 
   // 手动检查更新:dev 环境返回 available=false,打包后查 GitHub Releases
@@ -549,11 +578,44 @@ function registerIpcHandlers(): void {
     if (typeof text !== 'string') {
       return { ok: false, reason: 'too-long' }
     }
+    if (
+      text.startsWith(ANNOUNCEMENT_PREFIX) &&
+      parseAnnouncementText(text) === undefined
+    ) {
+      return { ok: false, reason: 'too-long' }
+    }
     const result = lanService.broadcastMessage(text)
     if (result.ok) {
-      sendToRenderers(CHANNELS.broadcastMessage, result.message)
+      handleBroadcastMessage(result.message)
     }
     return result
+  })
+
+  ipcMain.handle(CHANNELS.markAnnouncementRead, async (event, id: unknown) => {
+    if (
+      resolveRendererRole(event.sender.id) !== 'panel' ||
+      typeof id !== 'string' ||
+      !panelWindow?.isVisible() ||
+      !panelWindow.isFocused()
+    ) {
+      return
+    }
+    markCurrentAnnouncementRead(id)
+  })
+
+  ipcMain.handle(CHANNELS.acknowledgeAnnouncement, async (event, id: unknown) => {
+    if (
+      resolveRendererRole(event.sender.id) !== 'panel' ||
+      typeof id !== 'string' ||
+      !currentAnnouncement
+    ) {
+      return
+    }
+    const nextAnnouncement = acknowledgeAnnouncement(currentAnnouncement, id)
+    if (nextAnnouncement !== currentAnnouncement) {
+      currentAnnouncement = nextAnnouncement
+      broadcastAnnouncement()
+    }
   })
 
   // 给某成员点赞/取消:校验 targetPeerId 与 action 后广播,成功回显给自己(所有端各自聚合)
@@ -896,12 +958,46 @@ function syncLanService(): void {
       broadcastSnapshot()
     },
     onMessage: (message) => {
-      sendToRenderers(CHANNELS.broadcastMessage, message)
+      handleBroadcastMessage(message)
     },
     onReaction: (reaction) => {
       sendToRenderers(CHANNELS.reaction, reaction)
     }
   })
+}
+
+function handleBroadcastMessage(message: BroadcastMessage): void {
+  if (typeof message.text !== 'string') {
+    return
+  }
+  const announcementText = parseAnnouncementText(message.text)
+  if (announcementText === undefined) {
+    if (message.text.startsWith(ANNOUNCEMENT_PREFIX)) {
+      return
+    }
+    sendToRenderers(CHANNELS.broadcastMessage, message)
+    return
+  }
+
+  const selfPeerId = persistedState.peerId ?? 'self'
+  currentAnnouncement = createAnnouncementState({ ...message, text: announcementText }, selfPeerId)
+  broadcastAnnouncement()
+}
+
+function markCurrentAnnouncementRead(id: string): void {
+  if (!currentAnnouncement) {
+    return
+  }
+  const nextAnnouncement = markAnnouncementRead(currentAnnouncement, id)
+  if (nextAnnouncement === currentAnnouncement) {
+    return
+  }
+  currentAnnouncement = nextAnnouncement
+  broadcastAnnouncement()
+}
+
+function broadcastAnnouncement(): void {
+  sendToRenderers(CHANNELS.announcementUpdated, currentAnnouncement)
 }
 
 async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): Promise<void> {
@@ -1010,6 +1106,26 @@ function isLaunchAtLoginSupported(): boolean {
   return process.platform === 'win32' || process.platform === 'darwin'
 }
 
+function isPanelView(value: unknown): value is PanelView {
+  return value === 'details' || value === 'team' || value === 'settings'
+}
+
+function normalizeShowPanelOptions(value: unknown): ShowPanelOptions {
+  if (!value || typeof value !== 'object') {
+    return {}
+  }
+  const options = value as Record<string, unknown>
+  const focusTarget =
+    options.focusTarget === 'announcement' || options.focusTarget === 'messages'
+      ? options.focusTarget
+      : undefined
+  return {
+    focusUpdate: options.focusUpdate === true,
+    focusTarget,
+    forceOpen: options.forceOpen === true
+  }
+}
+
 function openPanelWindow(view: PanelView): void {
   currentPanelView = view
   if (!panelWindow || panelWindow.isDestroyed()) {
@@ -1026,7 +1142,8 @@ function openPanelWindow(view: PanelView): void {
   panelWindow.webContents.send(CHANNELS.command, {
     type: 'show-panel-view',
     panelView: currentPanelView,
-    focusUpdate: consumeFocusUpdate()
+    focusUpdate: consumeFocusUpdate(),
+    focusTarget: consumeFocusTarget()
   } satisfies RendererCommandPayload)
 }
 
@@ -1034,6 +1151,12 @@ function openPanelWindow(view: PanelView): void {
 function consumeFocusUpdate(): boolean {
   const value = panelFocusUpdate
   panelFocusUpdate = false
+  return value
+}
+
+function consumeFocusTarget(): PanelFocusTarget | undefined {
+  const value = panelFocusTarget
+  panelFocusTarget = undefined
   return value
 }
 
