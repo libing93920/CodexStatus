@@ -3,6 +3,7 @@ export type RefreshMode = 'auto' | 'manual'
 export type LocaleCode = 'zh-CN' | 'en-US'
 export type RateLimitSource = 'official' | 'local' | 'none'
 export type AuthMode = 'chatgpt' | 'api' | 'none'
+export type AgentId = 'codex' | 'claude' | 'opencode'
 export type PanelView = 'details' | 'settings' | 'team'
 export type RendererWindowRole = 'capsule' | 'panel'
 export type CapsuleViewMode = 'capsule' | 'orb'
@@ -81,6 +82,8 @@ export interface TeamPeer {
   resetCreditCount?: number
   /** 各窗口 token 消耗总数(1d/7d/30d);无数据的窗口不包含对应键 */
   tokenUsage?: Partial<Record<UsageWindow, number>>
+  /** 各窗口各工具 token 消耗(团队榜分段用);缺省工具按 0 */
+  tokenUsageByAgent?: Partial<Record<UsageWindow, Partial<Record<AgentId, number>>>>
   /** 应用版本:排行榜以组内最高版本为基准标绿/黄点 */
   appVersion?: string
   /** 该 peer 最后更新时间(留作后续显示,本期 UI 不展示) */
@@ -189,6 +192,8 @@ export interface AppSettings {
   refreshIntervalSeconds: number
   percentageMode: PercentageMode
   locale: LocaleCode
+  /** 当前监控的 Agent 工具(Codex/Claude/OpenCode),决定扫描数据源 */
+  agentId: AgentId
   launchAtLogin: boolean
   iqThreshold: number
   /** 团队昵称(空时 UI 显示"我");仅作展示,不涉及凭据 */
@@ -353,6 +358,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   refreshIntervalSeconds: DEFAULT_REFRESH_INTERVAL_SECONDS,
   percentageMode: 'remaining',
   locale: 'zh-CN',
+  agentId: 'codex',
   launchAtLogin: false,
   iqThreshold: DEFAULT_IQ_THRESHOLD
 }
@@ -377,6 +383,22 @@ export function createEmptySnapshot(): UsageSnapshot {
   }
 }
 
+/** 非 Codex 工具的最小快照:无额度窗口/重置卡/雷达,固定 api 模式;用量/花费由 provider 扫描单独供给 */
+export function createApiModeSnapshot(): UsageSnapshot {
+  return {
+    available: false,
+    isRefreshing: false,
+    canRefresh: true,
+    authMode: 'api',
+    generatedAt: new Date().toISOString(),
+    rateLimits: [],
+    rateLimitSource: 'none',
+    sourceHost: 'No data',
+    issues: [],
+    filesScanned: 0
+  }
+}
+
 export function normalizeSettings(input: Partial<AppSettings> | undefined): AppSettings {
   return {
     refreshMode: isRefreshMode(input?.refreshMode)
@@ -387,6 +409,7 @@ export function normalizeSettings(input: Partial<AppSettings> | undefined): AppS
       ? input.percentageMode
       : DEFAULT_SETTINGS.percentageMode,
     locale: isLocaleCode(input?.locale) ? input.locale : DEFAULT_SETTINGS.locale,
+    agentId: isAgentId(input?.agentId) ? input.agentId : DEFAULT_SETTINGS.agentId,
     launchAtLogin:
       typeof input?.launchAtLogin === 'boolean'
         ? input.launchAtLogin
@@ -464,4 +487,8 @@ function isCapsuleViewMode(value: unknown): value is CapsuleViewMode {
 
 function isDockEdge(value: unknown): value is DockEdge {
   return value === 'left' || value === 'right'
+}
+
+function isAgentId(value: unknown): value is AgentId {
+  return value === 'codex' || value === 'claude' || value === 'opencode'
 }

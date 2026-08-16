@@ -9,7 +9,8 @@ import {
   resolveSessionPaths
 } from './quota.ts'
 import type { JsonlFileEntry } from './quota.ts'
-import type { TokenUsageDay, TokenUsageOverview, UsageWindow } from '../../shared/capsule'
+import type { AgentId, TokenUsageDay, TokenUsageOverview, UsageWindow } from '../../shared/capsule'
+import { AGENT_PROVIDERS, type UsageEvent } from './agents'
 
 // 30 天扫描窗口;mtime 早于该窗口的文件里不可能有窗口内事件,可直接剪枝
 const SCAN_WINDOW_DAYS = 30
@@ -113,40 +114,39 @@ type Accum = TokenDelta & { cost: number }
 type DayMap = Map<string, Accum>
 
 interface CacheEntry {
+  agentId: AgentId
   fingerprint: string
   fetchedAtMs: number
   days: DayMap
-  events: EventItem[]
-}
-
-// 单条去重后的有效事件(时间戳 + 增量 + 模型),供自定义区间按起止时间切片聚合
-interface EventItem {
-  ts: number
-  delta: TokenDelta
-  model: string | undefined
+  events: UsageEvent[]
 }
 
 /** 一次扫描的产物:按天聚合 + 事件级明细 */
 interface ScannedData {
   days: DayMap
-  events: EventItem[]
+  events: UsageEvent[]
 }
 
-let cache: CacheEntry | undefined
-// 防止并发调用(如预取 3 个窗口)重复扫描:首次扫描进行中时复用同一 Promise
-let inflight: Promise<ScannedData> | undefined
-// 最近一次算出的三窗口 token 总数,供 LAN 广播同步读取(peer 排行榜用)
-let lastTotals: Partial<Record<UsageWindow, number>> | undefined
+// 每 agent 一份缓存:团队榜要扫三个工具求和,互不覆盖
+const cacheByAgent = new Map<AgentId, CacheEntry>()
+// 并发去重:同一 agent 的并发扫描复用同一 Promise,避免 3 窗口并行拉取时重复扫描
+const inflightByAgent = new Map<AgentId, Promise<ScannedData>>()
+// 最近一次算出的每窗口每工具 token 总数,供 LAN 广播(peer 排行榜分段)同步读取
+let lastAgentTotals:
+  | Partial<Record<UsageWindow, Partial<Record<AgentId, number>>>>
+  | undefined
 
 /**
  * 获取 1/7/30 天 token 用量与估算花费。
  * 数据现算现得:扫描近 30 天 sessions JSONL,按"相邻事件 total 差值"归因到本地自然日。
  */
-export async function getTokenUsage(window: UsageWindow): Promise<TokenUsageOverview> {
-  const days = await loadDays()
+export async function getTokenUsage(
+  agentId: AgentId,
+  window: UsageWindow
+): Promise<TokenUsageOverview> {
+  const days = await loadDays(agentId)
   const series = buildSeries(days, window)
   const totals = computeTotals(series)
-  lastTotals = { ...lastTotals, [window]: totals.total }
   return {
     available: totals.total > 0,
     generatedAt: new Date().toISOString(),
@@ -161,19 +161,20 @@ export async function getTokenUsage(window: UsageWindow): Promise<TokenUsageOver
  * 区间超出扫描窗口(30 天)的部分自然取不到数据。
  */
 export async function getTokenUsageRange(
+  agentId: AgentId,
   startMs: number,
   endMs: number
 ): Promise<TokenUsageOverview> {
-  const { events } = await loadScanned()
+  const { events } = await loadScanned(agentId)
   const acc: Accum = { input: 0, cachedInput: 0, output: 0, reasoning: 0, total: 0, cost: 0 }
   for (const event of events) {
     if (event.ts >= startMs && event.ts < endMs) {
-      acc.input += event.delta.input
-      acc.cachedInput += event.delta.cachedInput
-      acc.output += event.delta.output
-      acc.reasoning += event.delta.reasoning
-      acc.total += event.delta.input + event.delta.output
-      acc.cost += computeCost(event.delta, event.model)
+      acc.input += event.tokens.input
+      acc.cachedInput += event.tokens.cachedInput
+      acc.output += event.tokens.output
+      acc.reasoning += event.tokens.reasoning
+      acc.total += event.tokens.input + event.tokens.output
+      acc.cost += event.costUsd ?? computeCost(event.tokens, event.model)
     }
   }
   acc.cost = Math.round(acc.cost * 10000) / 10000
@@ -200,55 +201,106 @@ export async function getTokenUsageRange(
   }
 }
 
-/** 同步返回最近一次计算的三窗口 token 总数;从未算过则 undefined */
-export function getCachedTokenTotals(): Partial<Record<UsageWindow, number>> | undefined {
-  return lastTotals
+/** 同步返回每窗口每工具 token 总数(团队榜分段用);从未算过则 undefined */
+export function getCachedAgentTokenTotals():
+  | Partial<Record<UsageWindow, Partial<Record<AgentId, number>>>>
+  | undefined {
+  return lastAgentTotals
 }
 
-/** 预热三窗口 token 总数并缓存,供主进程同步广播给 LAN peer */
-export async function warmTokenTotals(): Promise<Partial<Record<UsageWindow, number>>> {
-  const days = await loadDays()
-  const totals: Partial<Record<UsageWindow, number>> = {
-    '1d': computeTotals(buildSeries(days, '1d')).total,
-    '7d': computeTotals(buildSeries(days, '7d')).total,
-    '30d': computeTotals(buildSeries(days, '30d')).total
+/** 同步返回每窗口 token 总数(三工具和);从未算过则 undefined */
+export function getCachedTokenTotals(): Partial<Record<UsageWindow, number>> | undefined {
+  if (!lastAgentTotals) {
+    return undefined
   }
-  lastTotals = totals
+  const totals: Partial<Record<UsageWindow, number>> = {}
+  for (const [window, agents] of Object.entries(lastAgentTotals)) {
+    totals[window as UsageWindow] =
+      (agents.codex ?? 0) + (agents.claude ?? 0) + (agents.opencode ?? 0)
+  }
+  return totals
+}
+
+/** 切换 agentId 时清缓存:避免旧工具的日桶/事件/每窗口总数串味 */
+export function invalidateUsageCache(): void {
+  cacheByAgent.clear()
+  lastAgentTotals = undefined
+}
+
+const ALL_AGENTS: readonly AgentId[] = ['codex', 'claude', 'opencode']
+const ALL_WINDOWS: readonly UsageWindow[] = ['1d', '7d', '30d']
+
+/** 预热三个工具的每窗口 token 总数并缓存,供团队榜总量排名与分段展示 */
+export async function warmAllAgentTokenTotals(): Promise<
+  Partial<Record<UsageWindow, Partial<Record<AgentId, number>>>>
+> {
+  const totals: Partial<Record<UsageWindow, Partial<Record<AgentId, number>>>> = {}
+  for (const agentId of ALL_AGENTS) {
+    const days = await loadDays(agentId)
+    for (const window of ALL_WINDOWS) {
+      const total = computeTotals(buildSeries(days, window)).total
+      const byAgent = totals[window] ?? {}
+      byAgent[agentId] = total
+      totals[window] = byAgent
+    }
+  }
+  lastAgentTotals = totals
   return totals
 }
 
 // 带指纹+TTL 的缓存:指纹不变(文件集合+mtime 没变)且未过期时直接复用已解析的日桶,
-// 避免每 30s 快照刷新后 UI 拉取时重复读+解析全部文件
-async function loadScanned(): Promise<ScannedData> {
+// 避免每 30s 快照刷新后 UI 拉取时重复读+解析全部文件;切换 agentId 会因指纹前缀不同而自动失效
+async function loadScanned(agentId: AgentId): Promise<ScannedData> {
   const now = Date.now()
-  if (cache && now - cache.fetchedAtMs < CACHE_TTL_MS) {
-    return cache
+  const cached = cacheByAgent.get(agentId)
+  if (cached && now - cached.fetchedAtMs < CACHE_TTL_MS) {
+    return cached
   }
-  if (!inflight) {
-    const { fingerprint } = await collectRecentFiles(now)
-    if (cache && cache.fingerprint === fingerprint) {
-      cache.fetchedAtMs = now
-      return cache
-    }
-    inflight = scanRecentDays().then((data) => {
-      cache = { fingerprint, fetchedAtMs: now, ...data }
-      inflight = undefined
+  const existing = inflightByAgent.get(agentId)
+  if (existing) {
+    return existing
+  }
+  const promise = (async () => {
+    try {
+      const fingerprint = `${agentId}:${await fingerprintFor(agentId, now)}`
+      if (cached && cached.fingerprint === fingerprint) {
+        cached.fetchedAtMs = now
+        return cached
+      }
+      const events = await scanRecentEvents(agentId)
+      const days = aggregateDays(events)
+      const data = { days, events }
+      cacheByAgent.set(agentId, { agentId, fingerprint, fetchedAtMs: now, ...data })
       return data
-    })
-  }
-  return inflight
+    } finally {
+      inflightByAgent.delete(agentId)
+    }
+  })()
+  inflightByAgent.set(agentId, promise)
+  return promise
 }
 
-async function loadDays(): Promise<DayMap> {
-  const data = await loadScanned()
+async function loadDays(agentId: AgentId): Promise<DayMap> {
+  const data = await loadScanned(agentId)
   return data.days
 }
 
-// —— 用量聚合:两遍扫描 ——
-// 第一遍:解析每个 session 文件(session_meta 父子关系 + turn_context 模型 + token_count 差值)。
-// 第二遍:带 parent 的子会话与父会话做 token 签名匹配,跳过重放前缀,只累计各自的新工作。
+// —— 用量扫描:按 agentId 分派 ——
+// Codex 走本地两遍扫描(见 scanCodexEvents);Claude/OpenCode 走 provider 注册表。
+// 统一产出 UsageEvent[] 后,由 aggregateDays 归桶 + 计费。
+async function scanRecentEvents(agentId: AgentId): Promise<UsageEvent[]> {
+  if (agentId === 'codex') {
+    return scanCodexEvents()
+  }
+  const provider = AGENT_PROVIDERS[agentId]
+  return provider ? provider.scanRecentEvents() : []
+}
+
+// Codex 两遍扫描:
+// 第一遍解析每个 session 文件(session_meta 父子关系 + turn_context 模型 + token_count 差值),
+// 第二遍带 parent 的子会话与父会话做 token 签名匹配,跳过重放前缀,只累计各自的新工作。
 // 背景:Codex 子代理线程会重放父会话的累计上下文,直接求和会把同一份 token 重复计入(实测最高 9.5 倍)。
-async function scanRecentDays(): Promise<ScannedData> {
+async function scanCodexEvents(): Promise<UsageEvent[]> {
   const { entries } = await collectRecentFiles(Date.now())
 
   const byThread = new Map<string, ParsedFile>()
@@ -268,8 +320,7 @@ async function scanRecentDays(): Promise<ScannedData> {
     }
   }
 
-  const days: DayMap = new Map()
-  const events: EventItem[] = []
+  const events: UsageEvent[] = []
   for (const { threadId, file } of parsed) {
     let skipPrefix = 0
     if (threadId && file.parent && !file.deferred && file.rootTs !== undefined) {
@@ -280,22 +331,39 @@ async function scanRecentDays(): Promise<ScannedData> {
     }
     for (let index = skipPrefix; index < file.events.length; index++) {
       const event = file.events[index]
-      const dateKey = toLocalDayKey(new Date(event.ts))
-      let acc = days.get(dateKey)
-      if (!acc) {
-        acc = { input: 0, cachedInput: 0, output: 0, reasoning: 0, total: 0, cost: 0 }
-        days.set(dateKey, acc)
-      }
-      acc.input += event.delta.input
-      acc.cachedInput += event.delta.cachedInput
-      acc.output += event.delta.output
-      acc.reasoning += event.delta.reasoning
-      acc.total += event.delta.total
-      acc.cost += computeCost(event.delta, event.model)
-      events.push({ ts: event.ts, delta: event.delta, model: event.model })
+      events.push({ ts: event.ts, model: event.model, tokens: event.delta })
     }
   }
-  return { days, events }
+  return events
+}
+
+// 事件级明细 → 本地自然日桶;成本优先取 provider 直接给出的 costUsd(OpenCode),否则按价目估算
+function aggregateDays(events: UsageEvent[]): DayMap {
+  const days: DayMap = new Map()
+  for (const event of events) {
+    const dateKey = toLocalDayKey(new Date(event.ts))
+    let acc = days.get(dateKey)
+    if (!acc) {
+      acc = { input: 0, cachedInput: 0, output: 0, reasoning: 0, total: 0, cost: 0 }
+      days.set(dateKey, acc)
+    }
+    acc.input += event.tokens.input
+    acc.cachedInput += event.tokens.cachedInput
+    acc.output += event.tokens.output
+    acc.reasoning += event.tokens.reasoning
+    acc.total += event.tokens.total
+    acc.cost += event.costUsd ?? computeCost(event.tokens, event.model)
+  }
+  return days
+}
+
+// 缓存失效指纹:Codex 按文件集合+mtime;其余工具暂无文件级指纹,过期即重扫
+async function fingerprintFor(agentId: AgentId, now: number): Promise<string> {
+  if (agentId !== 'codex') {
+    return String(now)
+  }
+  const { fingerprint } = await collectRecentFiles(now)
+  return fingerprint
 }
 
 // 收集近 30 天窗口内的 JSONL 文件,并算出指纹(路径:mtime,按路径排序保证确定)

@@ -2628,6 +2628,77 @@ body {
   transition: width 400ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.team-row__bar-segments {
+  display: flex;
+  height: 100%;
+}
+
+.team-row__bar-segment {
+  height: 100%;
+  transition: width 400ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 悬停工具条:整行 hover 即时浮现,列出各工具用量(色点+名称+值);条本身仍不标文字 */
+.team-row__tooltip {
+  position: absolute;
+  right: 8px;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 11px;
+  border-radius: var(--panel-radius-sm);
+  background: var(--panel-card-3);
+  border: 1px solid var(--panel-line-strong);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    visibility 0s 120ms;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.team-row--token:hover .team-row__tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.team-row__tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.team-row__tooltip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.team-row__tooltip-label {
+  color: var(--panel-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.team-row__tooltip-value {
+  margin-left: auto;
+  padding-left: 14px;
+  color: var(--panel-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 .team-row__value {
   color: var(--metric-accent, var(--panel-text));
   font-size: 14px;
@@ -2860,6 +2931,7 @@ body {
 /* Token 消耗行:四列 rank | name | bar | value,去掉额度行的重置卡列,value 加宽容纳紧凑 token */
 .team-row--token {
   grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1.2fr) 68px;
+  position: relative;
 }
 
 /* 1d 视图带点赞列:点赞并入昵称列紧跟名字,不再占独立列,避免贴近进度条 */

@@ -11,6 +11,7 @@ import {
   createEmptySnapshot,
   type AnnouncementState,
   type AppSettings,
+  type AgentId,
   type AuthMode,
   type BroadcastMessage,
   type LocaleCode,
@@ -171,7 +172,10 @@ const COPY = {
     rangeStart: '开始',
     rangeEnd: '结束',
     rangeApply: '应用',
-    usageEstimated: '本地估算'
+    usageEstimated: '本地估算',
+    groupAgent: '工具',
+    agentId: '监控工具',
+    agentIdHint: '选择要统计用量与花费的 Agent 工具'
   },
   'en-US': {
     noData: 'No data',
@@ -274,7 +278,10 @@ const COPY = {
     rangeStart: 'Start',
     rangeEnd: 'End',
     rangeApply: 'Apply',
-    usageEstimated: 'Estimated'
+    usageEstimated: 'Estimated',
+    groupAgent: 'Agent',
+    agentId: 'Agent tool',
+    agentIdHint: 'Choose which agent tool to monitor'
   }
 } as const
 
@@ -550,6 +557,7 @@ function App(): React.JSX.Element {
     : String(settings.refreshIntervalSeconds)
   const canEditCustomRefresh = settings.refreshMode === 'auto' && isCustomRefreshInterval
   const isApiMode = snapshot.authMode === 'api'
+  const isCodex = settings.agentId === 'codex'
   const sourceValue = isApiMode
     ? copy.apiModeSource
     : snapshot.rateLimitSource === 'none'
@@ -680,6 +688,8 @@ function App(): React.JSX.Element {
     1,
     ...teamTokenPeers.map((peer) => peer.tokenUsage?.[teamTokenWindow] ?? 0)
   )
+  // 非 Codex 无订阅额度,团队页只留 Token 消耗榜(不显示额度/Token 切换 tab,切换工具即生效)
+  const effectiveTeamBoardMode: 'quota' | 'tokens' = isCodex ? teamBoardMode : 'tokens'
   // 本机 peer 标识:供回声过滤(自己发的消息只进 panel 流,不驱动胶囊切换)
   const selfPeerId = snapshot.teamPeers?.find((peer) => peer.isSelf)?.id
   useEffect(() => {
@@ -838,23 +848,28 @@ function App(): React.JSX.Element {
           }
         ]
       : []),
-    {
-      icon: <SparkleIcon />,
-      iconTone: 'var(--panel-icon-violet)',
-      label: settings.locale === 'zh-CN' ? '雷达推荐模型' : 'Top model',
-      labelHref: 'https://codex-reset-radar.pages.dev/',
-      value: snapshot.bestModelPick
-        ? formatModelPick(snapshot.bestModelPick.shortLabel)
-        : undefined,
-      valueColor: snapshot.bestModelPick
-        ? resolveModelColor(snapshot.bestModelPick.label)
-        : undefined,
-      hint: snapshot.bestModelPick
-        ? (settings.locale === 'zh-CN'
-          ? `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/题`
-          : `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/task`)
-        : undefined
-    },
+    // 雷达是 Codex 专有功能(推荐模型),非 Codex 工具不展示
+    ...(isCodex
+      ? [
+          {
+            icon: <SparkleIcon />,
+            iconTone: 'var(--panel-icon-violet)',
+            label: settings.locale === 'zh-CN' ? '雷达推荐模型' : 'Top model',
+            labelHref: 'https://codex-reset-radar.pages.dev/',
+            value: snapshot.bestModelPick
+              ? formatModelPick(snapshot.bestModelPick.shortLabel)
+              : undefined,
+            valueColor: snapshot.bestModelPick
+              ? resolveModelColor(snapshot.bestModelPick.label)
+              : undefined,
+            hint: snapshot.bestModelPick
+              ? (settings.locale === 'zh-CN'
+                ? `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/题`
+                : `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/task`)
+              : undefined
+          }
+        ]
+      : []),
     // 额度特赦重置:静态外链入口,跳转 codex-resets.com 查看官方重置记录(订阅专有,API Key 模式隐藏)
     ...(isApiMode
       ? []
@@ -1543,20 +1558,22 @@ function App(): React.JSX.Element {
                   </button>
                 </section>
               ) : null}
-              <div className="team-mode-switch">
-                <SegmentedControl
-                  onChange={(value) => setTeamBoardMode(value as 'quota' | 'tokens')}
-                  options={[
-                    { label: copy.teamModeQuota, value: 'quota' },
-                    { label: copy.teamModeTokens, value: 'tokens' }
-                  ]}
-                  value={teamBoardMode}
-                />
-              </div>
+              {isCodex ? (
+                <div className="team-mode-switch">
+                  <SegmentedControl
+                    onChange={(value) => setTeamBoardMode(value as 'quota' | 'tokens')}
+                    options={[
+                      { label: copy.teamModeQuota, value: 'quota' },
+                      { label: copy.teamModeTokens, value: 'tokens' }
+                    ]}
+                    value={teamBoardMode}
+                  />
+                </div>
+              ) : null}
               <div className="panel__header panel__header--team">
                 <div>
                   <h2 className="panel__title">
-                    {teamBoardMode === 'quota' ? copy.teamBoard : copy.teamTokenBoard}
+                    {effectiveTeamBoardMode === 'quota' ? copy.teamBoard : copy.teamTokenBoard}
                   </h2>
                 </div>
                 <button
@@ -1573,7 +1590,7 @@ function App(): React.JSX.Element {
                 </button>
               </div>
 
-              {teamBoardMode === 'tokens' ? (
+              {effectiveTeamBoardMode === 'tokens' ? (
                 <>
                   <div className="team-window-switch">
                     <SegmentedControl
@@ -1609,6 +1626,7 @@ function App(): React.JSX.Element {
                             rank={index + 1}
                             selfLiked={like?.selfLiked}
                             tokens={peer.tokenUsage?.[teamTokenWindow]}
+                            tokensByAgent={peer.tokenUsageByAgent?.[teamTokenWindow]}
                           />
                         )
                       })}
@@ -1721,6 +1739,25 @@ function App(): React.JSX.Element {
               </div>
 
               <div className="settings-list">
+                <div className="settings-section">
+                  <p className="settings-section__title">{copy.groupAgent}</p>
+                  <SettingField label={copy.agentId} hint={copy.agentIdHint}>
+                    <SegmentedControl
+                      onChange={(value) => {
+                        void handleSettingsPatch({
+                          agentId: value as AppSettings['agentId']
+                        })
+                      }}
+                      options={[
+                        { label: 'Codex', value: 'codex' },
+                        { label: 'Claude Code', value: 'claude' },
+                        { label: 'OpenCode', value: 'opencode' }
+                      ]}
+                      value={settings.agentId}
+                    />
+                  </SettingField>
+                </div>
+
                 <div className="settings-section">
                   <p className="settings-section__title">{copy.groupRefresh}</p>
                   <SettingField label={copy.refreshMode}>
@@ -2814,12 +2851,25 @@ function TeamRow({
   )
 }
 
+// 团队榜三工具分段颜色:进度条不标文字,颜色区分工具,悬停浮层提示明细
+const AGENT_SEGMENT_COLORS: Record<AgentId, string> = {
+  codex: 'var(--metric-accent, rgba(151, 163, 176, 0.74))',
+  claude: '#ecc05a',
+  opencode: '#b585ff'
+}
+const AGENT_SEGMENT_LABELS: Record<AgentId, string> = {
+  codex: 'Codex',
+  claude: 'Claude',
+  opencode: 'OpenCode'
+}
+
 // Token 消耗排行榜一行:排名/昵称/按窗口最大值归一化的横条/紧凑 token 值;self 行高亮
 function TokenRow({
   isSelf,
   rank,
   nickname,
   tokens,
+  tokensByAgent,
   maxTokens,
   locale,
   appVersion,
@@ -2832,6 +2882,7 @@ function TokenRow({
   rank: number
   nickname: string
   tokens?: number
+  tokensByAgent?: Partial<Record<AgentId, number>>
   maxTokens: number
   locale: LocaleCode
   appVersion?: string
@@ -2843,6 +2894,11 @@ function TokenRow({
   const percent = tokens !== undefined ? Math.min(100, Math.max(0, (tokens / maxTokens) * 100)) : 0
   const rankClass =
     rank === 1 ? ' is-top-1' : rank === 2 ? ' is-top-2' : rank === 3 ? ' is-top-3' : ''
+  const segments = tokensByAgent
+    ? (['codex', 'claude', 'opencode'] as const)
+        .map((id) => ({ id, tokens: tokensByAgent[id] ?? 0 }))
+        .filter((segment) => segment.tokens > 0)
+    : undefined
   return (
     <div
       className={`team-row team-row--token${isSelf ? ' is-self' : ''}${rankClass}${
@@ -2873,11 +2929,42 @@ function TokenRow({
         ) : null}
       </span>
       <span className="team-row__bar">
-        <span className="team-row__bar-fill" style={{ width: `${percent}%` }} />
+        {segments && segments.length > 0 ? (
+          <span className="team-row__bar-segments">
+            {segments.map((segment) => (
+              <span
+                className="team-row__bar-segment"
+                key={segment.id}
+                style={{
+                  width: `${Math.min(100, Math.max(0, (segment.tokens / maxTokens) * 100))}%`,
+                  background: AGENT_SEGMENT_COLORS[segment.id]
+                }}
+              />
+            ))}
+          </span>
+        ) : (
+          <span className="team-row__bar-fill" style={{ width: `${percent}%` }} />
+        )}
       </span>
       <span className="team-row__value">
         {tokens === undefined ? '--' : formatCompactTokens(tokens, locale)}
       </span>
+      {segments && segments.length > 0 ? (
+        <span className="team-row__tooltip" role="tooltip">
+          {(['codex', 'claude', 'opencode'] as const).map((id) => (
+            <span className="team-row__tooltip-row" key={id}>
+              <span
+                className="team-row__tooltip-dot"
+                style={{ background: AGENT_SEGMENT_COLORS[id] }}
+              />
+              <span className="team-row__tooltip-label">{AGENT_SEGMENT_LABELS[id]}</span>
+              <span className="team-row__tooltip-value">
+                {formatCompactTokens(tokensByAgent?.[id] ?? 0, locale)}
+              </span>
+            </span>
+          ))}
+        </span>
+      ) : null}
     </div>
   )
 }

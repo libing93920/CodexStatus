@@ -29,6 +29,7 @@ import {
   ORB_WINDOW_SIZE,
   PANEL_WINDOW_SIZE,
   createEmptySnapshot,
+  createApiModeSnapshot,
   normalizeSettings,
   type AnnouncementState,
   type BroadcastMessage,
@@ -58,11 +59,13 @@ import {
 import { collectUsageSnapshot, invalidateQuotaCaches, resolveCodexAuthPath } from './services/quota'
 import { refreshRadarNow, startRadarTimer, stopRadarTimer } from './services/radar'
 import {
+  getCachedAgentTokenTotals,
   getCachedTokenTotals,
   getTokenUsage,
   getTokenUsageRange,
+  invalidateUsageCache,
   setRateLookup,
-  warmTokenTotals
+  warmAllAgentTokenTotals
 } from './services/usage'
 import { fetchModelsDevRates, getPricingRate } from './services/pricing'
 import { getSpendUsage } from './services/billing'
@@ -358,10 +361,7 @@ if (hasSingleInstanceLock) {
     watchCodexAuthFile()
     syncLanService()
     // radar 推荐模型走独立定时(10 分钟),不再跟随额度刷新;拉到后注入 snapshot 并广播
-    startRadarTimer(persistedState.settings.iqThreshold, (pick) => {
-      currentSnapshot = { ...currentSnapshot, bestModelPick: pick }
-      broadcastSnapshot()
-    })
+    syncRadarTimer()
     void refreshStatus()
 
     // models.dev 价格后台同步:注入花费计算,拉取失败自动回落内置价格表
@@ -442,6 +442,7 @@ function registerIpcHandlers(): void {
     const previousIqThreshold = persistedState.settings.iqThreshold
     const previousTeamGroup = persistedState.settings.teamGroup
     const previousTeamNickname = persistedState.settings.teamNickname
+    const previousAgentId = persistedState.settings.agentId
     const nextSettings = syncLaunchAtLoginPreference({
       ...persistedState.settings,
       ...patch
@@ -473,8 +474,15 @@ function registerIpcHandlers(): void {
 
     const iqThresholdChanged =
       typeof patch.iqThreshold === 'number' && patch.iqThreshold !== previousIqThreshold
+    const agentIdChanged = patch.agentId !== undefined && patch.agentId !== previousAgentId
 
-    if (iqThresholdChanged) {
+    if (agentIdChanged) {
+      // 切换工具:清用量缓存,radar 仅 Codex 启动,强制全量刷新
+      invalidateUsageCache()
+      invalidateQuotaCaches()
+      syncRadarTimer()
+      void refreshStatus({ forceCredentialCheck: true })
+    } else if (iqThresholdChanged) {
       // IQ 阈值变更:重置卡缓存重拉,radar 立即按新阈值重拉(独立定时,不跟随额度刷新)
       invalidateQuotaCaches()
       void refreshRadarNow(persistedState.settings.iqThreshold)
@@ -549,12 +557,12 @@ function registerIpcHandlers(): void {
 
   // 按需拉取 1/7/30 天 token 用量统计(独立 IPC,不进快照广播)
   ipcMain.handle(CHANNELS.tokenUsage, async (_event, window: UsageWindow) => {
-    return getTokenUsage(window)
+    return getTokenUsage(persistedState.settings.agentId, window)
   })
 
   // 自定义起止时间区间内的 token 用量统计(本地扫描,边界精确到毫秒,上限 30 天)
   ipcMain.handle(CHANNELS.tokenUsageRange, async (_event, startMs: number, endMs: number) => {
-    return getTokenUsageRange(startMs, endMs)
+    return getTokenUsageRange(persistedState.settings.agentId, startMs, endMs)
   })
 
   // 按需拉取 1/7/30 天真实账单花费(仅 API Key 模式;不可用返回 available:false)
@@ -882,6 +890,7 @@ function buildTeamPeers(selfRemaining: number | undefined): TeamPeer[] {
       : undefined,
     resetCreditCount: currentSnapshot.resetCredit?.availableCount,
     tokenUsage: getCachedTokenTotals(),
+    tokenUsageByAgent: getCachedAgentTokenTotals(),
     appVersion: app.getVersion(),
     updatedAt: new Date().toISOString()
   }
@@ -933,6 +942,7 @@ function getLanSnapshot(): PeerSnapshot {
       ? { label: long.label, remainingPercent: long.remainingPercent }
       : undefined,
     tokenUsage: getCachedTokenTotals(),
+    tokenUsageByAgent: getCachedAgentTokenTotals(),
     appVersion: app.getVersion()
   }
 }
@@ -1000,6 +1010,20 @@ function broadcastAnnouncement(): void {
   sendToRenderers(CHANNELS.announcementUpdated, currentAnnouncement)
 }
 
+function applyRadarPick(pick: UsageSnapshot['bestModelPick']): void {
+  currentSnapshot = { ...currentSnapshot, bestModelPick: pick }
+  broadcastSnapshot()
+}
+
+// radar 仅 Codex 有意义(推荐模型);非 Codex 停掉定时器避免无谓请求与 bestModelPick 残留
+function syncRadarTimer(): void {
+  if (persistedState.settings.agentId === 'codex') {
+    startRadarTimer(persistedState.settings.iqThreshold, applyRadarPick)
+  } else {
+    stopRadarTimer()
+  }
+}
+
 async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): Promise<void> {
   if (refreshPromise) {
     return refreshPromise
@@ -1019,16 +1043,22 @@ async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): 
 
   refreshPromise = (async () => {
     try {
-      const collected = await collectUsageSnapshot({
-        iqThreshold: persistedState.settings.iqThreshold,
-        bestModelPick: currentSnapshot.bestModelPick
-      })
+      const agentId = persistedState.settings.agentId
+      const collected =
+        agentId === 'codex'
+          ? await collectUsageSnapshot({
+              iqThreshold: persistedState.settings.iqThreshold,
+              bestModelPick: currentSnapshot.bestModelPick
+            })
+          : createApiModeSnapshot()
       // 预热三窗口 token 汇总,供本机排行榜与 LAN 广播同步读取
-      await warmTokenTotals()
+      await warmAllAgentTokenTotals()
       // collect 期间 radar 回调可能已更新 bestModelPick;优先取最新值,旧值仅作兜底
       currentSnapshot = {
         ...collected,
-        bestModelPick: currentSnapshot.bestModelPick ?? collected.bestModelPick,
+        // 非 Codex 不保留雷达推荐(切换工具时避免旧 Codex 推荐残留)
+        bestModelPick:
+          agentId === 'codex' ? currentSnapshot.bestModelPick ?? collected.bestModelPick : undefined,
         teamPeers: buildTeamPeers(getSelfRemaining())
       }
       // 本机数据变化,广播给已连 peer

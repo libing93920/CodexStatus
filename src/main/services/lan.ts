@@ -4,6 +4,7 @@ import { isIPv4, type AddressInfo } from 'node:net'
 import { WebSocketServer, WebSocket } from 'ws'
 import Bonjour from 'bonjour-service'
 import type {
+  AgentId,
   AuthMode,
   BroadcastMessage,
   BroadcastSendResult,
@@ -38,6 +39,8 @@ export interface PeerSnapshot {
   longWindow?: { label: string; remainingPercent?: number }
   /** 各窗口 token 消耗总数(1d/7d/30d) */
   tokenUsage?: Partial<Record<UsageWindow, number>>
+  /** 各窗口各工具 token 消耗(团队榜分段用) */
+  tokenUsageByAgent?: Partial<Record<UsageWindow, Partial<Record<AgentId, number>>>>
   /** 应用版本:接收端以组内最高版本为基准判定是否最新 */
   appVersion?: string
 }
@@ -53,6 +56,7 @@ interface PeerEntry {
   shortWindow?: { label: string; remainingPercent?: number }
   longWindow?: { label: string; remainingPercent?: number }
   tokenUsage?: Partial<Record<UsageWindow, number>>
+  tokenUsageByAgent?: Partial<Record<UsageWindow, Partial<Record<AgentId, number>>>>
   appVersion?: string
   updatedAt?: string
 }
@@ -248,6 +252,7 @@ export class LanService {
       longWindow: entry.longWindow,
       resetCreditCount: entry.resetCreditCount,
       tokenUsage: entry.tokenUsage,
+      tokenUsageByAgent: entry.tokenUsageByAgent,
       appVersion: entry.appVersion,
       updatedAt: entry.updatedAt
     }))
@@ -477,6 +482,7 @@ export class LanService {
       shortWindow: snapshot?.shortWindow ?? existing?.shortWindow,
       longWindow: snapshot?.longWindow ?? existing?.longWindow,
       tokenUsage: snapshot?.tokenUsage ?? existing?.tokenUsage,
+      tokenUsageByAgent: snapshot?.tokenUsageByAgent ?? existing?.tokenUsageByAgent,
       appVersion: snapshot?.appVersion ?? existing?.appVersion,
       updatedAt: new Date().toISOString()
     }
