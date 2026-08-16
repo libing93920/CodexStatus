@@ -1874,11 +1874,6 @@ body {
   font-weight: 620;
 }
 
-.usage-card__seg {
-  flex: 0 0 auto;
-  min-width: 150px;
-}
-
 .usage-card__empty {
   margin: 12px 0 2px;
   color: var(--panel-muted);
@@ -1893,45 +1888,100 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* 用量统计自定义区间:头部触发器 + 下拉面板 */
-.usage-card__seg {
-  min-width: 0;
+/* 模型用量榜:跟随用量卡窗口切换,Top 3 + 其他 */
+.model-board {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--panel-line);
 }
 
-.usage-range-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--panel-line);
-  background: var(--panel-card-2);
+.model-board__title {
+  margin-bottom: 8px;
   color: var(--panel-text);
   font-size: 12px;
-  font-weight: 540;
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
-  transition:
-    border-color 180ms cubic-bezier(0.22, 0.9, 0.3, 1),
-    background 180ms cubic-bezier(0.22, 0.9, 0.3, 1);
+  font-weight: 620;
 }
 
-.usage-range-trigger:hover {
-  border-color: var(--panel-line-strong);
-  background: var(--panel-card-3);
+.model-board__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
 }
 
-.usage-range-trigger__label {
-  max-width: 180px;
+.model-board__name {
+  flex: 0 0 30%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--panel-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
-.usage-range-trigger__caret {
-  color: var(--panel-muted);
-  font-size: 10px;
-  line-height: 1;
+.model-board__track {
+  flex: 1 1 auto;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--panel-inset);
+}
+
+.model-board__fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--panel-accent);
+}
+
+.model-board__meta {
+  flex: 0 0 28%;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: right;
+  color: var(--panel-text);
+  font-size: 12px;
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 模型名过长时悬停浮层:完整名,样式对齐 usage-tooltip */
+.model-board__tooltip {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 6;
+  padding: 5px 9px;
+  border-radius: var(--panel-radius-md);
+  border: 1px solid var(--panel-line-strong);
+  background: var(--panel-card-3);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  color: var(--panel-text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* 用量信息浮层:锚在行右侧 */
+.model-board__tooltip--right {
+  left: auto;
+  right: 0;
+}
+
+/* 用量统计:时间选择 tab(1天/7天/30天/自定义),复用 segmented 组件 */
+.usage-card .segmented {
+  width: 280px;
+  min-height: 32px;
+  margin: 10px 0 12px;
+}
+
+.usage-card .segmented button {
+  min-height: 24px;
 }
 
 .usage-range-panel {
@@ -1942,42 +1992,10 @@ body {
   background: var(--panel-card-2);
 }
 
-.usage-range-presets {
-  display: flex;
-  gap: 6px;
-}
-
-.usage-range-presets__btn {
-  flex: 1;
-  padding: 5px 8px;
-  border-radius: var(--panel-radius-sm);
-  border: 1px solid var(--panel-line);
-  background: transparent;
-  color: var(--panel-muted);
-  font-size: 12px;
-  cursor: pointer;
-  transition:
-    border-color 180ms cubic-bezier(0.22, 0.9, 0.3, 1),
-    color 180ms cubic-bezier(0.22, 0.9, 0.3, 1),
-    background 180ms cubic-bezier(0.22, 0.9, 0.3, 1);
-}
-
-.usage-range-presets__btn:hover {
-  border-color: var(--panel-line-strong);
-  color: var(--panel-text);
-}
-
-.usage-range-presets__btn.is-active {
-  border-color: var(--panel-accent);
-  background: color-mix(in srgb, var(--panel-accent) 14%, transparent);
-  color: var(--panel-text);
-}
-
 .usage-range-fields {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 12px;
 }
 
 .usage-range-field {

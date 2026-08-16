@@ -15,6 +15,7 @@ import {
   type AuthMode,
   type BroadcastMessage,
   type LocaleCode,
+  type ModelUsage,
   type PanelFocusTarget,
   type PanelView,
   type PercentageMode,
@@ -169,6 +170,9 @@ const COPY = {
     usage1d: '1天',
     usage7d: '7天',
     usage30d: '30天',
+    modelUsage: '模型用量',
+    modelOther: '其他',
+    rangeCustom: '自定义',
     rangeStart: '开始',
     rangeEnd: '结束',
     rangeApply: '应用',
@@ -275,6 +279,9 @@ const COPY = {
     usage1d: '1d',
     usage7d: '7d',
     usage30d: '30d',
+    modelUsage: 'Model usage',
+    modelOther: 'Other',
+    rangeCustom: 'Custom',
     rangeStart: 'Start',
     rangeEnd: 'End',
     rangeApply: 'Apply',
@@ -1818,49 +1825,53 @@ function App(): React.JSX.Element {
                   </SettingField>
                 </div>
 
-                <div className="settings-section">
-                  <p className="settings-section__title">{copy.groupDisplay}</p>
-                  <SettingField label={copy.percentageMode}>
-                    <SegmentedControl
-                      onChange={(value) => {
-                        void handleSettingsPatch({
-                          percentageMode: value as PercentageMode
-                        })
-                      }}
-                      options={[
-                        { label: copy.remaining, value: 'remaining' },
-                        { label: copy.used, value: 'used' }
-                      ]}
-                      value={settings.percentageMode}
-                    />
-                  </SettingField>
-                </div>
-
-                <div className="settings-section">
-                  <p className="settings-section__title">{copy.groupRecommend}</p>
-                  <SettingField label={copy.iqThreshold} hint={copy.iqThresholdHint}>
-                    <label className="inline-input is-active">
-                      <span>{copy.iqThreshold}</span>
-                      <input
-                        max={MAX_IQ_THRESHOLD}
-                        min={MIN_IQ_THRESHOLD}
-                        onBlur={commitIqThreshold}
-                        onChange={(event) => {
-                          setIqThresholdInput(event.target.value)
+                {isCodex ? (
+                  <div className="settings-section">
+                    <p className="settings-section__title">{copy.groupDisplay}</p>
+                    <SettingField label={copy.percentageMode}>
+                      <SegmentedControl
+                        onChange={(value) => {
+                          void handleSettingsPatch({
+                            percentageMode: value as PercentageMode
+                          })
                         }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.currentTarget.blur()
-                          }
-                        }}
-                        step={1}
-                        type="number"
-                        value={iqThresholdInput}
+                        options={[
+                          { label: copy.remaining, value: 'remaining' },
+                          { label: copy.used, value: 'used' }
+                        ]}
+                        value={settings.percentageMode}
                       />
-                      <em>IQ</em>
-                    </label>
-                  </SettingField>
-                </div>
+                    </SettingField>
+                  </div>
+                ) : null}
+
+                {isCodex ? (
+                  <div className="settings-section">
+                    <p className="settings-section__title">{copy.groupRecommend}</p>
+                    <SettingField label={copy.iqThreshold} hint={copy.iqThresholdHint}>
+                      <label className="inline-input is-active">
+                        <span>{copy.iqThreshold}</span>
+                        <input
+                          max={MAX_IQ_THRESHOLD}
+                          min={MIN_IQ_THRESHOLD}
+                          onBlur={commitIqThreshold}
+                          onChange={(event) => {
+                            setIqThresholdInput(event.target.value)
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.currentTarget.blur()
+                            }
+                          }}
+                          step={1}
+                          type="number"
+                          value={iqThresholdInput}
+                        />
+                        <em>IQ</em>
+                      </label>
+                    </SettingField>
+                  </div>
+                ) : null}
 
                 <div className="settings-section">
                   <p className="settings-section__title">{copy.groupGeneral}</p>
@@ -2127,7 +2138,75 @@ const EMPTY_USAGE_OVERVIEW: TokenUsageOverview = {
   available: false,
   generatedAt: '',
   days: [],
-  totals: { input: 0, cachedInput: 0, output: 0, reasoning: 0, total: 0, cost: 0 }
+  totals: { input: 0, cachedInput: 0, output: 0, reasoning: 0, total: 0, cost: 0 },
+  models: []
+}
+
+// 模型用量榜:按 total 降序取 Top 5,其余合并为"其他";每行横条占比 + token + 花费
+function ModelLeaderboard({
+  models,
+  locale
+}: {
+  models: ModelUsage[]
+  locale: LocaleCode
+}): React.JSX.Element {
+  const copy = COPY[locale]
+  const [hoveredModel, setHoveredModel] = useState<string | null>(null)
+  const [hoveredMetaModel, setHoveredMetaModel] = useState<string | null>(null)
+  const grandTotal = models.reduce((sum, model) => sum + model.total, 0)
+  const rows: Array<{ model: string; total: number; cost: number }> = models
+    .slice(0, 5)
+    .map((model) => ({ model: model.model, total: model.total, cost: model.cost }))
+  const rest = models.slice(5)
+  if (rest.length > 0) {
+    rows.push({
+      model: copy.modelOther,
+      total: rest.reduce((sum, model) => sum + model.total, 0),
+      cost: rest.reduce((sum, model) => sum + model.cost, 0)
+    })
+  }
+  return (
+    <div className="model-board">
+      <div className="model-board__title">{copy.modelUsage}</div>
+      {rows.map((row) => {
+        const share = grandTotal > 0 ? Math.round((row.total / grandTotal) * 100) : 0
+        const metaText = `${share}% · ${formatCompactTokens(row.total, locale)} · ${formatUsd(row.cost)}`
+        const nameTruncated = hoveredModel === row.model
+        const metaTruncated = hoveredMetaModel === row.model
+        return (
+          <div className="model-board__row" key={row.model}>
+            <span
+              className="model-board__name"
+              onMouseEnter={(event) => {
+                const el = event.currentTarget
+                setHoveredModel(el.scrollWidth > el.clientWidth ? row.model : null)
+              }}
+              onMouseLeave={() => setHoveredModel(null)}
+            >
+              {row.model}
+            </span>
+            <span className="model-board__track" aria-hidden="true">
+              <span className="model-board__fill" style={{ width: `${share}%` }} />
+            </span>
+            <span
+              className="model-board__meta"
+              onMouseEnter={(event) => {
+                const el = event.currentTarget
+                setHoveredMetaModel(el.scrollWidth > el.clientWidth ? row.model : null)
+              }}
+              onMouseLeave={() => setHoveredMetaModel(null)}
+            >
+              {metaText}
+            </span>
+            {nameTruncated ? <span className="model-board__tooltip">{row.model}</span> : null}
+            {metaTruncated ? (
+              <span className="model-board__tooltip model-board__tooltip--right">{metaText}</span>
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function UsageCard({
@@ -2237,43 +2316,38 @@ function UsageCard({
   const rangeHasData =
     rangeUsage?.available === true && rangeTotals !== undefined && rangeDay !== undefined
 
-  const triggerLabel = isCustom
-    ? formatRangeLabel(customStartMs ?? 0, customEndMs ?? 0)
-    : presetWindow === '1d'
-      ? copy.usage1d
-      : presetWindow === '7d'
-        ? copy.usage7d
-        : copy.usage30d
+  const models = isCustom ? rangeUsage?.models : usage?.models
 
   return (
     <section className="usage-card">
       <div className="usage-card__head">
         <span className="usage-card__title">{copy.usage}</span>
-        <div className="usage-card__seg">
-          <button
-            className="usage-range-trigger"
-            type="button"
-            onClick={() => setRangeOpen((open) => !open)}
-          >
-            <span className="usage-range-trigger__label">{triggerLabel}</span>
-            <span className="usage-range-trigger__caret" aria-hidden="true">
-              ▾
-            </span>
-          </button>
-        </div>
       </div>
+
+      <SegmentedControl
+        value={rangeOpen || isCustom ? 'custom' : presetWindow}
+        options={[
+          { label: copy.usage1d, value: '1d' },
+          { label: copy.usage7d, value: '7d' },
+          { label: copy.usage30d, value: '30d' },
+          { label: copy.rangeCustom, value: 'custom' }
+        ]}
+        onChange={(value) => {
+          if (value === 'custom') {
+            setRangeOpen(true)
+          } else {
+            setPresetWindow(value as UsageWindow)
+            setCustomRange(undefined)
+            setRangeOpen(false)
+          }
+        }}
+      />
 
       {rangeOpen ? (
         <RangePanel
           copy={copy}
-          presetWindow={presetWindow}
           startMs={customStartMs}
           endMs={customEndMs}
-          onPreset={(window) => {
-            setPresetWindow(window)
-            setCustomRange(undefined)
-            setRangeOpen(false)
-          }}
           onCustom={(startMs, endMs) => {
             setCustomRange({ startMs, endMs })
             setRangeOpen(false)
@@ -2389,6 +2463,9 @@ function UsageCard({
           {costIsReal ? <p className="usage-card__spend-hint">{copy.spendReal}</p> : null}
         </>
       )}
+      {models && models.length > 0 ? (
+        <ModelLeaderboard models={models} locale={locale} />
+      ) : null}
     </section>
   )
 }
@@ -2396,17 +2473,13 @@ function UsageCard({
 // 自定义区间选择面板:预设窗口 + 起止「日期+时分」输入,点「应用」生效
 function RangePanel({
   copy,
-  presetWindow,
   startMs,
   endMs,
-  onPreset,
   onCustom
 }: {
   copy: (typeof COPY)[LocaleCode]
-  presetWindow: UsageWindow
   startMs: number | undefined
   endMs: number | undefined
-  onPreset: (window: UsageWindow) => void
   onCustom: (startMs: number, endMs: number) => void
 }): React.JSX.Element {
   // mount 时取一次当前时间,作为区间回填与日期输入范围的基准(render 期间不调用不纯的 Date.now)
@@ -2440,20 +2513,6 @@ function RangePanel({
 
   return (
     <div className="usage-range-panel">
-      <div className="usage-range-presets">
-        {(['1d', '7d', '30d'] as UsageWindow[]).map((window) => (
-          <button
-            className={`usage-range-presets__btn${
-              window === presetWindow && startMs === undefined ? ' is-active' : ''
-            }`}
-            key={window}
-            type="button"
-            onClick={() => onPreset(window)}
-          >
-            {window === '1d' ? copy.usage1d : window === '7d' ? copy.usage7d : copy.usage30d}
-          </button>
-        ))}
-      </div>
       <div className="usage-range-fields">
         <div className="usage-range-field">
           <span className="usage-range-field__label">{copy.rangeStart}</span>
@@ -2500,18 +2559,6 @@ function RangePanel({
       </button>
     </div>
   )
-}
-
-// 触发器文本:同日内折叠为「MM-DD HH:mm – HH:mm」,跨天显示完整起止
-function formatRangeLabel(startMs: number, endMs: number): string {
-  const start = new Date(startMs)
-  const end = new Date(endMs)
-  const pad = (n: number): string => String(n).padStart(2, '0')
-  const date = (dt: Date): string => `${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`
-  const time = (dt: Date): string => `${pad(dt.getHours())}:${pad(dt.getMinutes())}`
-  return start.toDateString() === end.toDateString()
-    ? `${date(start)} ${time(start)} – ${time(end)}`
-    : `${date(start)} ${time(start)} – ${date(end)} ${time(end)}`
 }
 
 function toDateInput(ms: number): string {

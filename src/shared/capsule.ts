@@ -152,6 +152,19 @@ export interface TokenUsageDay {
   cost: number
 }
 
+/** 单模型用量与花费(模型用量榜一行) */
+export interface ModelUsage {
+  /** 归一化模型名(去 provider 前缀/日期后缀),未识别为 unknown */
+  model: string
+  input: number
+  cachedInput: number
+  output: number
+  reasoning: number
+  total: number
+  /** 估算/真实花费(USD) */
+  cost: number
+}
+
 /** 1/7/30 天 token 用量统计总览 */
 export interface TokenUsageOverview {
   available: boolean
@@ -166,6 +179,8 @@ export interface TokenUsageOverview {
     total: number
     cost: number
   }
+  /** 按模型聚合的用量榜,按 total 降序 */
+  models: ModelUsage[]
 }
 
 /** 单日真实账单花费(USD) */

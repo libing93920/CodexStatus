@@ -9,8 +9,9 @@ import {
   resolveSessionPaths
 } from './quota.ts'
 import type { JsonlFileEntry } from './quota.ts'
-import type { AgentId, TokenUsageDay, TokenUsageOverview, UsageWindow } from '../../shared/capsule'
+import type { AgentId, ModelUsage, TokenUsageDay, TokenUsageOverview, UsageWindow } from '../../shared/capsule'
 import { AGENT_PROVIDERS, listClaudeFiles, parseClaudeFile, type UsageEvent } from './agents.ts'
+import { normalizeModel } from './pricing.ts'
 
 // 30 天扫描窗口;mtime 早于该窗口的文件里不可能有窗口内事件,可直接剪枝
 const SCAN_WINDOW_DAYS = 30
@@ -159,14 +160,15 @@ export async function getTokenUsage(
   agentId: AgentId,
   window: UsageWindow
 ): Promise<TokenUsageOverview> {
-  const days = await loadDays(agentId)
+  const { days, events } = await loadScanned(agentId)
   const series = buildSeries(days, window)
   const totals = computeTotals(series)
   return {
     available: totals.total > 0,
     generatedAt: new Date().toISOString(),
     days: series,
-    totals
+    totals,
+    models: aggregateModels(events, windowStartMs(window), Date.now())
   }
 }
 
@@ -212,7 +214,8 @@ export async function getTokenUsageRange(
       reasoning: acc.reasoning,
       total: acc.total,
       cost: acc.cost
-    }
+    },
+    models: aggregateModels(events, startMs, endMs)
   }
 }
 
@@ -421,6 +424,47 @@ function aggregateDays(events: UsageEvent[]): DayMap {
     acc.cost += event.costUsd ?? computeCost(event.tokens, event.model)
   }
   return days
+}
+
+// 事件级明细 → 按模型聚合(归一化模型名分组),按 total 降序;供模型用量榜使用
+function aggregateModels(events: UsageEvent[], startMs: number, endMs: number): ModelUsage[] {
+  const byModel = new Map<string, Accum>()
+  for (const event of events) {
+    if (event.ts < startMs || event.ts >= endMs) {
+      continue
+    }
+    const model = event.model ? normalizeModel(event.model) : 'unknown'
+    let acc = byModel.get(model)
+    if (!acc) {
+      acc = { input: 0, cachedInput: 0, output: 0, reasoning: 0, total: 0, cost: 0 }
+      byModel.set(model, acc)
+    }
+    acc.input += event.tokens.input
+    acc.cachedInput += event.tokens.cachedInput
+    acc.output += event.tokens.output
+    acc.reasoning += event.tokens.reasoning
+    acc.total += event.tokens.total
+    acc.cost += event.costUsd ?? computeCost(event.tokens, event.model)
+  }
+  return [...byModel.entries()]
+    .map(([model, acc]) => ({
+      model,
+      input: acc.input,
+      cachedInput: acc.cachedInput,
+      output: acc.output,
+      reasoning: acc.reasoning,
+      total: acc.total,
+      cost: Math.round(acc.cost * 10000) / 10000
+    }))
+    .sort((left, right) => right.total - left.total)
+}
+
+// 窗口最早自然日的本地 00:00 时间戳(与 buildSeries 的日期范围对齐)
+function windowStartMs(window: UsageWindow): number {
+  const today = toLocalDayKey(new Date())
+  const earliest = addDays(today, -(WINDOW_DAYS[window] - 1))
+  const [year, month, day] = earliest.split('-').map(Number)
+  return new Date(year, month - 1, day).getTime()
 }
 
 // 收集近 30 天窗口内的 JSONL 文件(按路径排序,保证遍历顺序确定)
