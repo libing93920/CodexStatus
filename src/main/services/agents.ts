@@ -1,12 +1,14 @@
 // Agent 工具 provider 抽象:统一"本地扫描 → 事件级 token 用量"的接口。
 // v1 只做本地扫描出用量/花费,不涉及 billing/官方额度/重置卡/雷达。
-// 注:codex 的扫描逻辑仍在 usage.ts 内(其解析与累计差值/重放去重深度耦合),此处注册表只放 claude/opencode。
+// 注:codex 与 claude 的扫描逻辑已迁到 usage.ts 做增量(incrementalScanCodex/incrementalScanClaude),
+// 此处注册表只剩 opencode(SQLite 无文件粒度增量,走全量查询)。
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import type { AgentId } from '../../shared/capsule'
-import { collectJsonlFiles, getNonNegativeNumber, getRecord, getString, parseJsonObject } from './quota'
+import { collectJsonlFiles, getNonNegativeNumber, getRecord, getString, parseJsonObject } from './quota.ts'
+import type { JsonlFileEntry } from './quota.ts'
 
 /** 单次用量增量的五分量 token 计数 */
 export interface TokenUsage {
@@ -33,11 +35,6 @@ export interface AgentProvider {
 }
 
 export const AGENT_PROVIDERS: Partial<Record<AgentId, AgentProvider>> = {
-  claude: {
-    id: 'claude',
-    label: 'Claude Code',
-    scanRecentEvents: scanClaudeEvents
-  },
   opencode: {
     id: 'opencode',
     label: 'OpenCode',
@@ -49,33 +46,38 @@ export const AGENT_PROVIDERS: Partial<Record<AgentId, AgentProvider>> = {
 const CLAUDE_SCAN_WINDOW_DAYS = 30
 const DAY_MS = 24 * 60 * 60 * 1000
 
-// Claude 的 message.usage 每消息独立、非累计,各 API 请求只计一次 → 直接求和,无需重放去重。
-async function scanClaudeEvents(): Promise<UsageEvent[]> {
+// 枚举近 30 天窗口内的 Claude 会话文件(path+mtimeMs);目录不存在返回空。
+// 供 usage.ts 增量 diff 复用。
+export function listClaudeFiles(): Promise<JsonlFileEntry[]> {
+  return listClaudeFilesAt(Date.now())
+}
+
+async function listClaudeFilesAt(now: number): Promise<JsonlFileEntry[]> {
   const projectsDir = resolveClaudeProjectsDir()
   if (!(await pathExists(projectsDir))) {
     return []
   }
   const files = await collectJsonlFiles(projectsDir, Number.MAX_SAFE_INTEGER)
-  const cutoff = Date.now() - CLAUDE_SCAN_WINDOW_DAYS * DAY_MS
+  const cutoff = now - CLAUDE_SCAN_WINDOW_DAYS * DAY_MS
+  return files.filter((file) => file.mtimeMs >= cutoff)
+}
+
+// 解析单个 Claude 会话文件为事件级明细;读取/解析失败返回空。
+export async function parseClaudeFile(filePath: string): Promise<UsageEvent[]> {
+  let content: string
+  try {
+    content = await fs.readFile(filePath, 'utf8')
+  } catch {
+    return []
+  }
   const events: UsageEvent[] = []
-  for (const file of files) {
-    if (file.mtimeMs < cutoff) {
+  for (const rawLine of content.split(/\r?\n/)) {
+    if (rawLine.trim().length === 0) {
       continue
     }
-    let content: string
-    try {
-      content = await fs.readFile(file.filePath, 'utf8')
-    } catch {
-      continue
-    }
-    for (const rawLine of content.split(/\r?\n/)) {
-      if (rawLine.trim().length === 0) {
-        continue
-      }
-      const event = parseClaudeAssistantEvent(rawLine)
-      if (event) {
-        events.push(event)
-      }
+    const event = parseClaudeAssistantEvent(rawLine)
+    if (event) {
+      events.push(event)
     }
   }
   return events

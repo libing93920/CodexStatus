@@ -10,12 +10,14 @@ import {
 } from './quota.ts'
 import type { JsonlFileEntry } from './quota.ts'
 import type { AgentId, TokenUsageDay, TokenUsageOverview, UsageWindow } from '../../shared/capsule'
-import { AGENT_PROVIDERS, type UsageEvent } from './agents'
+import { AGENT_PROVIDERS, listClaudeFiles, parseClaudeFile, type UsageEvent } from './agents.ts'
 
 // 30 天扫描窗口;mtime 早于该窗口的文件里不可能有窗口内事件,可直接剪枝
 const SCAN_WINDOW_DAYS = 30
 const DAY_MS = 24 * 60 * 60 * 1000
 const CACHE_TTL_MS = 60_000
+// 增量缓存兜底:距上次全量重扫超过该时长强制全量对账,消除 mtime 不可靠导致的累计偏差
+const FULL_RESCAN_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 // 各模型每百万 token 价格(USD),取官方标准(short context)价目:
 // https://developers.openai.com/api/docs/pricing
@@ -113,18 +115,31 @@ type Accum = TokenDelta & { cost: number }
 
 type DayMap = Map<string, Accum>
 
+/** 单个文件的上次解析产物:codex 存 ParsedFile(父子去重要用),claude 存独立事件 */
+type FileState =
+  | { kind: 'codex'; mtimeMs: number; parsed: ParsedFile }
+  | { kind: 'claude'; mtimeMs: number; events: UsageEvent[] }
+
 interface CacheEntry {
   agentId: AgentId
-  fingerprint: string
   fetchedAtMs: number
   days: DayMap
   events: UsageEvent[]
+  /** 文件级增量状态:path → 该文件上次解析产物 */
+  files: Map<string, FileState>
+  /** 最近一次全量重扫时间戳;距上次超过 FULL_RESCAN_INTERVAL_MS 强制全量对账 */
+  fullScannedAtMs: number
 }
 
 /** 一次扫描的产物:按天聚合 + 事件级明细 */
 interface ScannedData {
   days: DayMap
   events: UsageEvent[]
+}
+
+/** 一次扫描的完整产物:在 ScannedData 基础上附带文件级增量状态 */
+interface IncrementalScanResult extends ScannedData {
+  files: Map<string, FileState>
 }
 
 // 每 agent 一份缓存:团队榜要扫三个工具求和,互不覆盖
@@ -262,16 +277,19 @@ async function loadScanned(agentId: AgentId): Promise<ScannedData> {
   }
   const promise = (async () => {
     try {
-      const fingerprint = `${agentId}:${await fingerprintFor(agentId, now)}`
-      if (cached && cached.fingerprint === fingerprint) {
-        cached.fetchedAtMs = now
-        return cached
-      }
-      const events = await scanRecentEvents(agentId)
-      const days = aggregateDays(events)
-      const data = { days, events }
-      cacheByAgent.set(agentId, { agentId, fingerprint, fetchedAtMs: now, ...data })
-      return data
+      // 距上次全量重扫超时则强制全量,否则用上次文件状态做增量 diff
+      const forceFull = cached !== undefined && now - cached.fullScannedAtMs >= FULL_RESCAN_INTERVAL_MS
+      const prevFiles = forceFull ? undefined : cached?.files
+      const scanned = await scanIncrementally(agentId, prevFiles)
+      cacheByAgent.set(agentId, {
+        agentId,
+        fetchedAtMs: now,
+        fullScannedAtMs: forceFull ? now : (cached?.fullScannedAtMs ?? now),
+        days: scanned.days,
+        events: scanned.events,
+        files: scanned.files
+      })
+      return { days: scanned.days, events: scanned.events }
     } finally {
       inflightByAgent.delete(agentId)
     }
@@ -286,37 +304,85 @@ async function loadDays(agentId: AgentId): Promise<DayMap> {
 }
 
 // —— 用量扫描:按 agentId 分派 ——
-// Codex 走本地两遍扫描(见 scanCodexEvents);Claude/OpenCode 走 provider 注册表。
+// Codex 走增量文件扫描(见 incrementalScanCodex);Claude/OpenCode 走 provider 注册表。
 // 统一产出 UsageEvent[] 后,由 aggregateDays 归桶 + 计费。
-async function scanRecentEvents(agentId: AgentId): Promise<UsageEvent[]> {
+async function scanIncrementally(
+  agentId: AgentId,
+  prevFiles: Map<string, FileState> | undefined
+): Promise<IncrementalScanResult> {
   if (agentId === 'codex') {
-    return scanCodexEvents()
+    return incrementalScanCodex(prevFiles)
   }
+  if (agentId === 'claude') {
+    return incrementalScanClaude(prevFiles)
+  }
+  // opencode:SQLite 无文件粒度增量,每次全量查询
   const provider = AGENT_PROVIDERS[agentId]
-  return provider ? provider.scanRecentEvents() : []
+  const events = provider ? await provider.scanRecentEvents() : []
+  return { days: aggregateDays(events), events, files: new Map() }
+}
+
+// Claude 增量扫描:按 mtime diff 只重扫变化/新增文件,未变化文件复用上次事件(无跨文件去重)
+async function incrementalScanClaude(
+  prevFiles: Map<string, FileState> | undefined
+): Promise<IncrementalScanResult> {
+  const entries = await listClaudeFiles()
+  const files = new Map<string, FileState>()
+  const events: UsageEvent[] = []
+  for (const entry of entries) {
+    const prev = prevFiles?.get(entry.filePath)
+    if (prev?.kind === 'claude' && prev.mtimeMs === entry.mtimeMs) {
+      files.set(entry.filePath, prev)
+      events.push(...prev.events)
+      continue
+    }
+    const fileEvents = await parseClaudeFile(entry.filePath)
+    files.set(entry.filePath, { kind: 'claude', mtimeMs: entry.mtimeMs, events: fileEvents })
+    events.push(...fileEvents)
+  }
+  return { days: aggregateDays(events), events, files }
 }
 
 // Codex 两遍扫描:
 // 第一遍解析每个 session 文件(session_meta 父子关系 + turn_context 模型 + token_count 差值),
 // 第二遍带 parent 的子会话与父会话做 token 签名匹配,跳过重放前缀,只累计各自的新工作。
 // 背景:Codex 子代理线程会重放父会话的累计上下文,直接求和会把同一份 token 重复计入(实测最高 9.5 倍)。
-async function scanCodexEvents(): Promise<UsageEvent[]> {
-  const { entries } = await collectRecentFiles(Date.now())
-
-  const byThread = new Map<string, ParsedFile>()
+// 增量:按 mtime diff 只重扫变化/新增文件,未变化文件复用上次 ParsedFile;去重仍在完整集合上重跑。
+async function incrementalScanCodex(
+  prevFiles: Map<string, FileState> | undefined
+): Promise<IncrementalScanResult> {
+  const entries = await collectRecentFiles(Date.now())
+  const files = new Map<string, FileState>()
   const parsed: Array<{ threadId: string | undefined; file: ParsedFile }> = []
   for (const entry of entries) {
+    const prev = prevFiles?.get(entry.filePath)
+    if (prev?.kind === 'codex' && prev.mtimeMs === entry.mtimeMs) {
+      files.set(entry.filePath, prev)
+      parsed.push({ threadId: threadIdFromFilename(entry.filePath), file: prev.parsed })
+      continue
+    }
     const threadId = threadIdFromFilename(entry.filePath)
     const file = await parseSessionFile(entry.filePath, threadId)
     if (!file || file.events.length === 0) {
       continue
     }
+    files.set(entry.filePath, { kind: 'codex', mtimeMs: entry.mtimeMs, parsed: file })
     parsed.push({ threadId, file })
-    if (threadId) {
-      const existing = byThread.get(threadId)
-      if (!existing || existing.events.length < file.events.length) {
-        byThread.set(threadId, file)
-      }
+  }
+  const events = dedupParsedFiles(parsed)
+  return { days: aggregateDays(events), events, files }
+}
+
+// 跨文件父子重放去重:先按 threadId 选出事件最多的父文件,再对子文件前缀匹配跳过重放
+function dedupParsedFiles(parsed: Array<{ threadId: string | undefined; file: ParsedFile }>): UsageEvent[] {
+  const byThread = new Map<string, ParsedFile>()
+  for (const { threadId, file } of parsed) {
+    if (!threadId) {
+      continue
+    }
+    const existing = byThread.get(threadId)
+    if (!existing || existing.events.length < file.events.length) {
+      byThread.set(threadId, file)
     }
   }
 
@@ -357,19 +423,8 @@ function aggregateDays(events: UsageEvent[]): DayMap {
   return days
 }
 
-// 缓存失效指纹:Codex 按文件集合+mtime;其余工具暂无文件级指纹,过期即重扫
-async function fingerprintFor(agentId: AgentId, now: number): Promise<string> {
-  if (agentId !== 'codex') {
-    return String(now)
-  }
-  const { fingerprint } = await collectRecentFiles(now)
-  return fingerprint
-}
-
-// 收集近 30 天窗口内的 JSONL 文件,并算出指纹(路径:mtime,按路径排序保证确定)
-async function collectRecentFiles(
-  now: number
-): Promise<{ entries: JsonlFileEntry[]; fingerprint: string }> {
+// 收集近 30 天窗口内的 JSONL 文件(按路径排序,保证遍历顺序确定)
+async function collectRecentFiles(now: number): Promise<JsonlFileEntry[]> {
   const cutoff = now - SCAN_WINDOW_DAYS * DAY_MS
   const entries: JsonlFileEntry[] = []
   for (const root of resolveSessionPaths()) {
@@ -378,12 +433,9 @@ async function collectRecentFiles(
     }
     entries.push(...(await collectJsonlFiles(root, Number.MAX_SAFE_INTEGER)))
   }
-  const recent = entries.filter((entry) => entry.mtimeMs >= cutoff)
-  recent.sort((left, right) => left.filePath.localeCompare(right.filePath))
-  const fingerprint =
-    `${recent.map((entry) => `${entry.filePath}:${entry.mtimeMs}`).join('|')}|` +
-    toLocalDayKey(new Date(now))
-  return { entries: recent, fingerprint }
+  return entries
+    .filter((entry) => entry.mtimeMs >= cutoff)
+    .sort((left, right) => left.filePath.localeCompare(right.filePath))
 }
 
 // 从 rollout 文件名提取尾部 UUID(线程 id):rollout-<时间>-<uuid>.jsonl
