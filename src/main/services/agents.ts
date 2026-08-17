@@ -171,7 +171,9 @@ function mapOpenCodeRow(row: Record<string, unknown>): UsageEvent | undefined {
   const tokensOutput = toNumber(row.tokens_output)
   const tokensReasoning = toNumber(row.tokens_reasoning)
   const cachedInput = toNumber(row.tokens_cache_read) + toNumber(row.tokens_cache_write)
-  const input = tokensInput + cachedInput
+  // OpenCode 的 tokens_input 已含缓存(cache_read/write 是其子集;OpenCode 自身计费也是 input - cache 再单算),
+  // 故不能再次相加,否则缓存会被重复计入输入与总 token。
+  const input = tokensInput
   // OpenCode 的 tokens_output 不含 reasoning(实测 reasoning 可 > output),相加才是总输出
   const output = tokensOutput + tokensReasoning
   if (input === 0 && output === 0) {
