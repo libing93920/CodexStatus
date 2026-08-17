@@ -1,7 +1,7 @@
-// models.dev 价格同步:主进程启动时后台拉取全量价目,注入 usage.ts 的花费计算。
-// 拉取失败/未命中时,usage.ts 回落到内置 MODEL_RATES 与 DEFAULT_RATE。
+// models.dev 价格同步:主进程启动时后台拉取全量价目,注入 rate.ts 的花费计算。
+// 拉取失败/未命中时,rate.ts 回落到内置 MODEL_RATES 与 DEFAULT_RATE。
 import { net } from 'electron'
-import type { ModelRate } from './usage'
+import { normalizeModel, type ModelRate } from './rate'
 
 const MODELS_DEV_URL = 'https://models.dev/api.json'
 const MODELS_DEV_TIMEOUT_MS = 15_000
@@ -10,18 +10,6 @@ const PRICING_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 
 let ratesCache: Map<string, ModelRate> | undefined
 let fetchedAtMs = 0
-
-// 归一化模型名:小写、去 provider/ 前缀、去日期后缀,与 models.dev 的 key 对齐
-export function normalizeModel(raw: string): string {
-  let name = raw.trim().toLowerCase()
-  const slash = name.lastIndexOf('/')
-  if (slash >= 0) {
-    name = name.slice(slash + 1)
-  }
-  name = name.replace(/-\d{4}-\d{2}-\d{2}$/, '')
-  name = name.replace(/-\d{8}$/, '')
-  return name
-}
 
 // 拉取 models.dev 全量价目并建索引;任何失败都不抛错,回落到内置表
 export async function fetchModelsDevRates(): Promise<void> {
@@ -64,8 +52,13 @@ export async function fetchModelsDevRates(): Promise<void> {
         const existing = best.get(key)
         if (!existing || score > existing.score) {
           best.set(key, {
-            // cache_read 未标价的模型按无缓存折扣(全价输入)处理
-            rate: { input, output, cachedInput: asNumber(cost.cache_read) ?? input },
+            // cache_read/cache_write 未标价的模型按无缓存折扣(全价输入)处理
+            rate: {
+              input,
+              output,
+              cachedInput: asNumber(cost.cache_read) ?? input,
+              cacheCreation: asNumber(cost.cache_write) ?? input
+            },
             score
           })
         }

@@ -11,7 +11,7 @@ import {
 import type { JsonlFileEntry } from './quota.ts'
 import type { AgentId, ModelUsage, TokenUsageDay, TokenUsageOverview, UsageWindow } from '../../shared/capsule'
 import { AGENT_PROVIDERS, listClaudeFiles, parseClaudeFile, type UsageEvent } from './agents.ts'
-import { normalizeModel } from './pricing.ts'
+import { computeCost, normalizeModel } from './rate.ts'
 
 // 30 天扫描窗口;mtime 早于该窗口的文件里不可能有窗口内事件,可直接剪枝
 const SCAN_WINDOW_DAYS = 30
@@ -20,64 +20,14 @@ const CACHE_TTL_MS = 60_000
 // 增量缓存兜底:距上次全量重扫超过该时长强制全量对账,消除 mtime 不可靠导致的累计偏差
 const FULL_RESCAN_INTERVAL_MS = 24 * 60 * 60 * 1000
 
-// 各模型每百万 token 价格(USD),取官方标准(short context)价目:
-// https://developers.openai.com/api/docs/pricing
-// 说明:① 官方无独立 reasoning 单价,思考输出按 output 价计,故公式不含 reasoning 项;
-//   ② 无缓存价的模型(pro 系)按"缓存无折扣=按 input 全价"处理;
-//   ③ 表中未登记模型(如 codex-auto-review、第三方 GLM/DeepSeek 等)落到 DEFAULT_RATE。
-const MODEL_RATES: Record<string, ModelRate> = {
-  'gpt-5.6-sol': { input: 5.0, cachedInput: 0.5, output: 30.0 },
-  'gpt-5.6-terra': { input: 2.0, cachedInput: 0.2, output: 12.0 },
-  'gpt-5.6-luna': { input: 0.2, cachedInput: 0.02, output: 1.2 },
-  'gpt-5.5': { input: 5.0, cachedInput: 0.5, output: 30.0 },
-  'gpt-5.5-pro': { input: 30.0, cachedInput: 30.0, output: 180.0 },
-  'gpt-5.4': { input: 2.5, cachedInput: 0.25, output: 15.0 },
-  'gpt-5.4-mini': { input: 0.75, cachedInput: 0.075, output: 4.5 },
-  'gpt-5.4-nano': { input: 0.2, cachedInput: 0.02, output: 1.25 },
-  'gpt-5.4-pro': { input: 30.0, cachedInput: 30.0, output: 180.0 },
-  'gpt-5.3-codex': { input: 1.75, cachedInput: 0.175, output: 14.0 },
-  'gpt-5.2': { input: 1.75, cachedInput: 0.175, output: 14.0 },
-  'gpt-5.2-pro': { input: 21.0, cachedInput: 21.0, output: 168.0 },
-  'gpt-5.1': { input: 1.25, cachedInput: 0.125, output: 10.0 },
-  'gpt-5': { input: 1.25, cachedInput: 0.125, output: 10.0 },
-  'gpt-5-mini': { input: 0.25, cachedInput: 0.025, output: 2.0 },
-  'gpt-5-nano': { input: 0.05, cachedInput: 0.005, output: 0.4 },
-  'gpt-5-pro': { input: 15.0, cachedInput: 15.0, output: 120.0 },
-  'gpt-4.1': { input: 2.0, cachedInput: 0.5, output: 8.0 },
-  'gpt-4.1-mini': { input: 0.4, cachedInput: 0.1, output: 1.6 },
-  'gpt-4.1-nano': { input: 0.1, cachedInput: 0.025, output: 0.4 },
-  'gpt-4o': { input: 2.5, cachedInput: 1.25, output: 10.0 },
-  'gpt-4o-mini': { input: 0.15, cachedInput: 0.075, output: 0.6 },
-  o3: { input: 2.0, cachedInput: 0.5, output: 8.0 },
-  'o4-mini': { input: 1.1, cachedInput: 0.275, output: 4.4 },
-  'o3-mini': { input: 1.1, cachedInput: 0.55, output: 4.4 },
-  o1: { input: 15.0, cachedInput: 7.5, output: 60.0 }
-}
-// 兜底价(未登记模型):取 gpt-5.1 档位,中性偏低;第三方模型实际常更便宜,为估算上限
-const DEFAULT_RATE: ModelRate = { input: 1.25, cachedInput: 0.125, output: 10 }
-
-// 外部注入的价格查询(主进程启动时挂 models.dev 拉取结果);未注入/查不到时回落硬编码表
-let rateLookup: ((model: string | undefined) => ModelRate | undefined) | undefined
-
-export function setRateLookup(
-  lookup: ((model: string | undefined) => ModelRate | undefined) | undefined
-): void {
-  rateLookup = lookup
-}
-
-export interface ModelRate {
-  input: number
-  cachedInput: number
-  output: number
-}
-
-/** 单次增量(相邻 token_count 事件 total 之差) */
+/** 单次增量(相邻 token_count 事件 total 之差);cacheCreation 仅 claude/opencode 提供,codex 恒为 0 */
 interface TokenDelta {
   input: number
   cachedInput: number
   output: number
   reasoning: number
   total: number
+  cacheCreation?: number
 }
 
 /** token_count 的五分量计数(用于跨文件重放签名匹配) */
@@ -343,7 +293,27 @@ async function incrementalScanClaude(
     files.set(entry.filePath, { kind: 'claude', mtimeMs: entry.mtimeMs, events: fileEvents })
     events.push(...fileEvents)
   }
-  return { days: aggregateDays(events), events, files }
+  // Claude 会跨文件重复同一 message.id(续会话/会话副本),按 id 全局只留 usage 更大的代表
+  const deduped = dedupClaudeEvents(events)
+  return { days: aggregateDays(deduped), events: deduped, files }
+}
+
+// Claude 全局去重:同一 message.id 保留 usage(输出)更大的代表,无 id 事件直接保留
+export function dedupClaudeEvents(events: UsageEvent[]): UsageEvent[] {
+  const best = new Map<string, UsageEvent>()
+  const out: UsageEvent[] = []
+  for (const event of events) {
+    if (event.messageId !== undefined) {
+      const prev = best.get(event.messageId)
+      if (prev && prev.tokens.output >= event.tokens.output) {
+        continue
+      }
+      best.set(event.messageId, event)
+      continue
+    }
+    out.push(event)
+  }
+  return [...best.values()].concat(out)
 }
 
 // Codex 两遍扫描:
@@ -512,6 +482,9 @@ async function parseSessionFile(
   let model: string | undefined
   let prev: TokenDelta | undefined
   const events: ParsedEvent[] = []
+  // 成对重复快照判重状态:codex 会为同一 token_count 连写两份(rate-limit 刷新重发),total/last 不变
+  const lastSignatureBySource = new Map<string, TokenSignature>()
+  let previousTokenSignature: TokenSignature | undefined
 
   for (const rawLine of content.split(/\r?\n/)) {
     if (rawLine.trim().length === 0) {
@@ -567,26 +540,61 @@ async function parseSessionFile(
       continue
     }
 
-    // total_token_usage 是文件内累计值,取相邻事件差值才是该时段的真实增量
-    const current: TokenDelta = {
-      input: getNonNegativeNumber(totalUsage.input_tokens) ?? 0,
-      cachedInput: getNonNegativeNumber(totalUsage.cached_input_tokens) ?? 0,
-      output: getNonNegativeNumber(totalUsage.output_tokens) ?? 0,
-      reasoning: getNonNegativeNumber(totalUsage.reasoning_output_tokens) ?? 0,
-      total: getNonNegativeNumber(totalUsage.total_tokens) ?? 0
+    const signature = buildSignature(totalUsage, lastUsage)
+    // 成对重复快照(rate-limit 刷新重发,total/last 不变)按签名判重,delta 置 0;
+    // 否则 last_token_usage 优先会把同一请求计两次(cc-switch 同款判重)。
+    const snapshotSource = getString(getRecord(payload.rate_limits)?.limit_id)
+    const duplicate =
+      sigEq(signature, previousTokenSignature) ||
+      (snapshotSource !== undefined && sigEq(signature, lastSignatureBySource.get(snapshotSource)))
+    if (snapshotSource !== undefined) {
+      lastSignatureBySource.set(snapshotSource, signature)
     }
-    const delta = prev ? subtractClamp(current, prev) : current
+    previousTokenSignature = signature
+
+    // total_token_usage 是文件内累计值;优先用 last_token_usage 的精确单次用量,
+    // 缺失时取相邻 total 差值(cc-switch 同款:last 优先,累计差兜底)。
+    // prev 始终按累计值推进,保证 last 缺失的事件回落差值算法正确。
+    const current = toDelta(totalUsage)
+    const delta = duplicate ? ZERO_DELTA : buildCodexDelta(current, lastUsage, prev)
     prev = current
 
     events.push({
       ts: timestamp.getTime(),
-      sig: buildSignature(totalUsage, lastUsage),
+      sig: signature,
       delta,
       model
     })
   }
 
   return { parent, deferred, rootTs, events }
+}
+
+const ZERO_DELTA: TokenDelta = { input: 0, cachedInput: 0, output: 0, reasoning: 0, total: 0 }
+
+// 单个 token_count 事件 → 本次增量:有 last_token_usage 时直接用其精确单次用量,否则回落相邻累计差
+export function buildCodexDelta(
+  current: TokenDelta,
+  lastUsage: Record<string, unknown> | undefined,
+  prev: TokenDelta | undefined
+): TokenDelta {
+  if (lastUsage) {
+    return toDelta(lastUsage)
+  }
+  return prev ? subtractClamp(current, prev) : current
+}
+
+// codex token_count 的 total/last 五分量转 TokenDelta;cachedInput 钳制不超过 input(cc-switch 同款)
+function toDelta(usage: Record<string, unknown>): TokenDelta {
+  const input = getNonNegativeNumber(usage.input_tokens) ?? 0
+  const cachedInput = Math.min(getNonNegativeNumber(usage.cached_input_tokens) ?? 0, input)
+  return {
+    input,
+    cachedInput,
+    output: getNonNegativeNumber(usage.output_tokens) ?? 0,
+    reasoning: getNonNegativeNumber(usage.reasoning_output_tokens) ?? 0,
+    total: getNonNegativeNumber(usage.total_tokens) ?? 0
+  }
 }
 
 function buildSignature(
@@ -623,7 +631,13 @@ function pickCounters(usage: Record<string, unknown>): TokenCounter | undefined 
   }
 }
 
-function sigEq(a: TokenSignature, b: TokenSignature): boolean {
+function sigEq(a: TokenSignature | undefined, b: TokenSignature | undefined): boolean {
+  if (Boolean(a) !== Boolean(b)) {
+    return false
+  }
+  if (!a || !b) {
+    return true
+  }
   return countersEq(a.total, b.total) && countersEq(a.last, b.last)
 }
 
@@ -682,21 +696,6 @@ function subtractClamp(current: TokenDelta, prev: TokenDelta): TokenDelta {
     reasoning: Math.max(0, current.reasoning - prev.reasoning),
     total: Math.max(0, current.total - prev.total)
   }
-}
-
-function computeCost(delta: TokenDelta, model: string | undefined): number {
-  const rate =
-    rateLookup?.(model) ??
-    (model !== undefined ? MODEL_RATES[model] : undefined) ??
-    DEFAULT_RATE
-  // input 含 cachedInput,常规输入部分需减去;output 已含 reasoning,无独立思考单价
-  const regularInput = Math.max(0, delta.input - delta.cachedInput)
-  const cost =
-    (regularInput * rate.input +
-      delta.cachedInput * rate.cachedInput +
-      delta.output * rate.output) /
-    1e6
-  return Math.round(cost * 10000) / 10000
 }
 
 // 窗口内日期序列,升序、零填充(补全缺失日)

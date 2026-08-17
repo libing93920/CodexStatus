@@ -64,9 +64,9 @@ import {
   getTokenUsage,
   getTokenUsageRange,
   invalidateUsageCache,
-  setRateLookup,
   warmAllAgentTokenTotals
 } from './services/usage'
+import { setRateLookup } from './services/rate'
 import { fetchModelsDevRates, getPricingRate } from './services/pricing'
 import { getSpendUsage } from './services/billing'
 import { loadPersistedState, savePersistedState } from './services/state'

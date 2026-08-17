@@ -17,6 +17,8 @@ export interface TokenUsage {
   output: number
   reasoning: number
   total: number
+  /** 其中缓存写入(creation)的 token 数;计费时与 cache_read 分开按不同单价。展示层不拆,cachedInput 仍是两者之和 */
+  cacheCreation?: number
 }
 
 /** 一条可归桶的事件级用量;costUsd 存在时跳过按价目估算(OpenCode 直接给成本) */
@@ -25,6 +27,8 @@ export interface UsageEvent {
   model?: string
   tokens: TokenUsage
   costUsd?: number
+  /** 来源消息 id(claude 专用),用于跨文件全局去重:同一请求可能被续会话/会话副本重复写入 */
+  messageId?: string
 }
 
 export interface AgentProvider {
@@ -62,7 +66,9 @@ async function listClaudeFilesAt(now: number): Promise<JsonlFileEntry[]> {
   return files.filter((file) => file.mtimeMs >= cutoff)
 }
 
-// 解析单个 Claude 会话文件为事件级明细;读取/解析失败返回空。
+// 解析单个 Claude 会话文件为事件级明细;同一 message.id 在文件里会重复出现
+// (Anthropic 先写 message_start 快照再写最终块,部分会话还会被重放多份),按 id 只取代表行,
+// 避免同一请求被重复计入(实测未去重时总量虚高 ~2.3x)。
 export async function parseClaudeFile(filePath: string): Promise<UsageEvent[]> {
   let content: string
   try {
@@ -70,22 +76,45 @@ export async function parseClaudeFile(filePath: string): Promise<UsageEvent[]> {
   } catch {
     return []
   }
+  const best = new Map<string, ClaudeParsedLine>()
   const events: UsageEvent[] = []
   for (const rawLine of content.split(/\r?\n/)) {
     if (rawLine.trim().length === 0) {
       continue
     }
-    const event = parseClaudeAssistantEvent(rawLine)
-    if (event) {
-      events.push(event)
+    const line = parseClaudeLine(rawLine)
+    if (!line) {
+      continue
+    }
+    if (!line.messageId) {
+      events.push(line.event)
+      continue
+    }
+    const prev = best.get(line.messageId)
+    if (!prev || isBetterRepresentative(prev, line)) {
+      best.set(line.messageId, line)
     }
   }
-  return events
+  return [...best.values()].map((line) => line.event).concat(events)
 }
 
-// 解析一条 assistant 消息:取 message.usage 五分量 + 顶层 timestamp(ISO) + message.model。
-// cache_creation 与 cache_read 一并并入 cachedInput(v1 不细分两者计费差异)。
-function parseClaudeAssistantEvent(rawLine: string): UsageEvent | undefined {
+interface ClaudeParsedLine {
+  event: UsageEvent
+  messageId?: string
+  hasStopReason: boolean
+}
+
+// cc-switch 同款代表行规则:有 stop_reason 的是最终块,优先;同状态取 output 更大者
+function isBetterRepresentative(prev: ClaudeParsedLine, next: ClaudeParsedLine): boolean {
+  if (prev.hasStopReason !== next.hasStopReason) {
+    return next.hasStopReason
+  }
+  return next.event.tokens.output > prev.event.tokens.output
+}
+
+// 解析一条 assistant 消息行:取 message.usage + 顶层 timestamp(ISO) + message.model;
+// 返回 messageId 供同文件去重;事件内 cache_creation 单独带出供计费(展示层仍并入 cachedInput)。
+function parseClaudeLine(rawLine: string): ClaudeParsedLine | undefined {
   const parsed = parseJsonObject(rawLine)
   if (!parsed || getString(parsed.type) !== 'assistant') {
     return undefined
@@ -113,10 +142,27 @@ function parseClaudeAssistantEvent(rawLine: string): UsageEvent | undefined {
     return undefined
   }
   return {
-    ts,
-    model: getString(message?.model),
-    tokens: { input, cachedInput, output: outputTokens, reasoning: 0, total: input + outputTokens }
+    event: {
+      ts,
+      model: getString(message?.model),
+      tokens: {
+        input,
+        cachedInput,
+        output: outputTokens,
+        reasoning: 0,
+        total: input + outputTokens,
+        cacheCreation
+      },
+      messageId: getString(message?.id)
+    },
+    messageId: getString(message?.id),
+    hasStopReason: getString(message?.stop_reason) !== undefined
   }
+}
+
+// 单行解析(不含去重),供单测使用
+export function parseClaudeAssistantEvent(rawLine: string): UsageEvent | undefined {
+  return parseClaudeLine(rawLine)?.event
 }
 
 // Claude 配置目录:~/.claude(可被 CLAUDE_CONFIG_DIR 覆盖),projects 子目录存各会话 JSONL
@@ -131,8 +177,10 @@ function resolveClaudeProjectsDir(): string {
 // —— OpenCode 读取器 ——
 const OPENCODE_SCAN_WINDOW_DAYS = 30
 
-// OpenCode 存 SQLite(session 表每会话聚合 tokens_* + cost),非 JSONL。
-// cost 为 0 时(自定义 provider 未计价/免费模型)不直接给 costUsd,回落按价目估算。
+// OpenCode 存 SQLite(非 JSONL)。对齐 cc-switch 读 message 表逐条 assistant 消息(而非 session 表整会话),
+// 窗口按消息 time_created 过滤——session 表按 time_updated 会把整会话历史拖入窗口,长会话机器上虚高 ~10x。
+// 只取已完成(time.completed 存在)的消息,进行中只有半截 token;cost 为 0 时(自定义 provider 未计价/免费模型)
+// 不直接给 costUsd,回落按价目估算。
 async function scanOpenCodeEvents(): Promise<UsageEvent[]> {
   const dbPath = resolveOpenCodeDbPath()
   if (!(await pathExists(dbPath))) {
@@ -150,12 +198,16 @@ async function scanOpenCodeEvents(): Promise<UsageEvent[]> {
     const cutoff = Date.now() - OPENCODE_SCAN_WINDOW_DAYS * DAY_MS
     const rows = db
       .prepare(
-        'SELECT time_updated, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write, cost, model FROM session WHERE time_updated >= ?'
+        `SELECT data FROM message
+         WHERE json_extract(data, '$.role') = 'assistant'
+           AND json_extract(data, '$.tokens') IS NOT NULL
+           AND json_extract(data, '$.time.completed') IS NOT NULL
+           AND time_created >= ?`
       )
       .all(cutoff)
     const events: UsageEvent[] = []
     for (const row of rows) {
-      const event = mapOpenCodeRow(row)
+      const event = parseOpenCodeMessage(getString(row.data))
       if (event) {
         events.push(event)
       }
@@ -166,49 +218,39 @@ async function scanOpenCodeEvents(): Promise<UsageEvent[]> {
   }
 }
 
-function mapOpenCodeRow(row: Record<string, unknown>): UsageEvent | undefined {
-  const tokensInput = toNumber(row.tokens_input)
-  const tokensOutput = toNumber(row.tokens_output)
-  const tokensReasoning = toNumber(row.tokens_reasoning)
-  const cachedInput = toNumber(row.tokens_cache_read) + toNumber(row.tokens_cache_write)
-  // OpenCode 的 tokens_input 已含缓存(cache_read/write 是其子集;OpenCode 自身计费也是 input - cache 再单算),
-  // 故不能再次相加,否则缓存会被重复计入输入与总 token。
-  const input = tokensInput
-  // OpenCode 的 tokens_output 不含 reasoning(实测 reasoning 可 > output),相加才是总输出
-  const output = tokensOutput + tokensReasoning
-  if (input === 0 && output === 0) {
+// 解析 opencode message.data JSON 为事件;字段语义与 cc-switch 一致:
+// tokens.input 是"非缓存输入"(input 与 cache.read/write 是并列字段),cache 两桶分开带出供计费,
+// tokens.output 不含 reasoning,相加才是总输出。
+export function parseOpenCodeMessage(dataRaw: string | undefined): UsageEvent | undefined {
+  const data = dataRaw ? parseJsonObject(dataRaw) : undefined
+  const tokens = data ? getRecord(data.tokens) : undefined
+  const time = data ? getRecord(data.time) : undefined
+  if (!data || !tokens || !time || getNonNegativeNumber(time.completed) === undefined) {
+    return undefined
+  }
+  const freshInput = getNonNegativeNumber(tokens.input) ?? 0
+  const outputTokens = getNonNegativeNumber(tokens.output) ?? 0
+  const reasoning = getNonNegativeNumber(tokens.reasoning) ?? 0
+  const cache = getRecord(tokens.cache)
+  const cacheRead = cache ? getNonNegativeNumber(cache.read) ?? 0 : 0
+  const cacheWrite = cache ? getNonNegativeNumber(cache.write) ?? 0 : 0
+  const cachedInput = cacheRead + cacheWrite
+  const input = freshInput + cachedInput
+  const output = outputTokens + reasoning
+  const ts = getNonNegativeNumber(time.created) ?? 0
+  if ((input === 0 && output === 0) || ts === 0) {
     return undefined
   }
   const event: UsageEvent = {
-    ts: toNumber(row.time_updated),
-    model: extractOpenCodeModelId(row.model),
-    tokens: { input, cachedInput, output, reasoning: tokensReasoning, total: input + output }
+    ts,
+    model: getString(data.modelID),
+    tokens: { input, cachedInput, output, reasoning, total: input + output, cacheCreation: cacheWrite }
   }
-  const cost = toNumber(row.cost)
+  const cost = getNonNegativeNumber(data.cost) ?? 0
   if (cost > 0) {
     event.costUsd = cost
   }
   return event
-}
-
-function toNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0
-}
-
-// OpenCode 的 model 列是 JSON 字符串(如 {"id":"...","providerID":"..."}),取 id 供价目查询
-function extractOpenCodeModelId(raw: unknown): string | undefined {
-  if (typeof raw !== 'string' || raw.length === 0) {
-    return undefined
-  }
-  if (!raw.startsWith('{')) {
-    return raw
-  }
-  try {
-    const obj = JSON.parse(raw) as Record<string, unknown>
-    return typeof obj.id === 'string' ? obj.id : undefined
-  } catch {
-    return raw
-  }
 }
 
 // OpenCode 数据目录:遵循 XDG,默认 ~/.local/share/opencode/opencode.db
