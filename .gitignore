@@ -11,6 +11,9 @@ out
 # Claude Code 本地工作目录
 .claude/
 
+# Git 隔离工作区
+.worktrees/
+
 # 临时截图/产物
 .tmp-*.png
 
