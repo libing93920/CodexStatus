@@ -108,21 +108,44 @@ test('tab 动效只由用户切换到不同页面触发', () => {
   assert.ok(clearMotion < changeView)
 })
 
-test('tab 内容使用 Quick Snap 四档错峰动画', () => {
-  assert.match(cssSource, /@keyframes panel-tab-quick-snap/)
+test('tab 卡片和内部信息使用两层错峰的 Quick Snap', () => {
+  const selectorStart = cssSource.indexOf('.panel__body.is-tab-switching\n  :is(')
+  const selectorEnd = cssSource.indexOf('{', selectorStart)
+  const contentSelectors = cssSource.slice(selectorStart, selectorEnd)
+
+  assert.notEqual(selectorStart, -1, 'missing tab content motion selector')
+  assert.match(contentSelectors, /\.quota-card/)
+  assert.match(contentSelectors, /\.usage-card/)
+  assert.match(contentSelectors, /\.detail-row/)
+  assert.match(contentSelectors, /\.settings-section/)
+  assert.match(contentSelectors, /> \*/)
+  assert.doesNotMatch(contentSelectors, /\.quota-grid/)
+  assert.doesNotMatch(contentSelectors, /\.panel__rows/)
+  assert.match(cssSource, /@keyframes panel-tab-content-snap/)
   assert.match(
     cssSource,
-    /animation:\s*panel-tab-quick-snap 420ms cubic-bezier\(0\.34, 1\.56, 0\.64, 1\) both/
+    /animation:\s*panel-tab-content-snap 380ms cubic-bezier\(0\.34, 1\.56, 0\.64, 1\) both/
   )
-  assert.match(cssSource, /animation-delay:\s*90ms/)
-  assert.match(cssSource, /animation-delay:\s*180ms/)
-  assert.match(cssSource, /animation-delay:\s*270ms/)
-  assert.match(cssSource, /transform:\s*translateY\(16px\) scale\(0\.93\)/)
   assert.match(
     cssSource,
-    /\.panel__body--team\.is-team-switching \.team-empty\s*{[^}]*animation:\s*panel-tab-quick-snap 420ms/s
+    /animation-delay:\s*calc\(var\(--panel-tab-card-delay, 0ms\) \+ var\(--panel-tab-content-delay, 0ms\)\)/
   )
-  assert.match(appSource, /const PANEL_TAB_MOTION_CLEAR_MS = 720/)
+  assert.match(cssSource, /\.quota-card:nth-child\(1\)[^{]*{[^}]*--panel-tab-card-delay:\s*40ms/s)
+  assert.match(cssSource, /\.usage-card[^{]*{[^}]*--panel-tab-card-delay:\s*120ms/s)
+  assert.match(
+    cssSource,
+    /\.detail-row:nth-child\(n \+ 3\)[^{]*{[^}]*--panel-tab-card-delay:\s*240ms/s
+  )
+  assert.match(cssSource, /--panel-tab-content-delay:\s*40ms/)
+  assert.match(cssSource, /--panel-tab-content-delay:\s*80ms/)
+  assert.match(cssSource, /--panel-tab-content-delay:\s*120ms/)
+  assert.match(cssSource, /transform:\s*translateY\(10px\) scale\(0\.98\)/)
+  assert.match(appSource, /const PANEL_TAB_MOTION_CLEAR_MS = 700/)
+})
+
+test('tab 栏和页面标题不参与窗口拖拽，避免重叠时拦截点击', () => {
+  assert.match(cssSource, /\.panel__tabs\s*{[^}]*-webkit-app-region:\s*no-drag/s)
+  assert.match(cssSource, /\.panel__header\s*{[^}]*-webkit-app-region:\s*no-drag/s)
 })
 
 test('排行榜模式和时间窗口切换会逐行上浮并消散模糊', () => {

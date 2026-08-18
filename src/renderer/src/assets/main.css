@@ -1695,39 +1695,103 @@ body {
   background: rgba(255, 255, 255, 0.22);
 }
 
-.panel__body.is-tab-switching .panel__header,
-.panel__body--details.is-tab-switching .quota-grid,
-.panel__body--details.is-tab-switching .usage-card,
-.panel__body--details.is-tab-switching .panel__rows,
-.panel__body--team.is-tab-switching .team-announcement,
-.panel__body--team.is-tab-switching .team-mode-switch,
-.panel__body--team.is-tab-switching .team-window-switch,
+.panel__body.is-tab-switching
+  :is(
+    .panel__header,
+    .quota-card,
+    .usage-card,
+    .detail-row,
+    .team-announcement,
+    .team-mode-switch,
+    .team-window-switch,
+    .team-broadcast,
+    .settings-section
+  )
+  > *,
 .panel__body--team.is-tab-switching .team-empty,
-.panel__body--team.is-tab-switching .team-broadcast,
-.panel__body--settings.is-tab-switching .settings-section {
-  animation: panel-tab-quick-snap 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
-
 .panel__body--team.is-team-switching .team-empty {
-  animation: panel-tab-quick-snap 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: panel-tab-content-snap 380ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: calc(var(--panel-tab-card-delay, 0ms) + var(--panel-tab-content-delay, 0ms));
 }
 
-.panel__body--details.is-tab-switching .quota-grid,
-.panel__body--settings.is-tab-switching .settings-section:nth-child(1) {
-  animation-delay: 90ms;
+.panel__body--details.is-tab-switching .quota-card:nth-child(1),
+.panel__body--settings.is-tab-switching .settings-section:nth-child(1),
+.panel__body--team.is-tab-switching .team-mode-switch {
+  --panel-tab-card-delay: 40ms;
+}
+
+.panel__body--details.is-tab-switching .quota-card:nth-child(2),
+.panel__body--settings.is-tab-switching .settings-section:nth-child(2),
+.panel__body--team.is-tab-switching .panel__header {
+  --panel-tab-card-delay: 80ms;
 }
 
 .panel__body--details.is-tab-switching .usage-card,
-.panel__body--team.is-tab-switching .team-window-switch,
-.panel__body--team.is-tab-switching .team-empty,
-.panel__body--settings.is-tab-switching .settings-section:nth-child(2) {
-  animation-delay: 180ms;
+.panel__body--settings.is-tab-switching .settings-section:nth-child(n + 3),
+.panel__body--team.is-tab-switching .team-window-switch {
+  --panel-tab-card-delay: 120ms;
 }
 
-.panel__body--details.is-tab-switching .panel__rows,
-.panel__body--team.is-tab-switching .team-broadcast,
-.panel__body--settings.is-tab-switching .settings-section:nth-child(n + 3) {
-  animation-delay: 270ms;
+.panel__body--details.is-tab-switching .detail-row:nth-child(1),
+.panel__body--team.is-tab-switching .team-empty,
+.panel__body--team.is-tab-switching .team-broadcast {
+  --panel-tab-card-delay: 160ms;
+}
+
+.panel__body--details.is-tab-switching .detail-row:nth-child(2) {
+  --panel-tab-card-delay: 200ms;
+}
+
+.panel__body--details.is-tab-switching .detail-row:nth-child(n + 3) {
+  --panel-tab-card-delay: 240ms;
+}
+
+.panel__body.is-tab-switching
+  :is(
+    .panel__header,
+    .quota-card,
+    .usage-card,
+    .detail-row,
+    .team-announcement,
+    .team-mode-switch,
+    .team-window-switch,
+    .team-broadcast,
+    .settings-section
+  )
+  > :nth-child(2) {
+  --panel-tab-content-delay: 40ms;
+}
+
+.panel__body.is-tab-switching
+  :is(
+    .panel__header,
+    .quota-card,
+    .usage-card,
+    .detail-row,
+    .team-announcement,
+    .team-mode-switch,
+    .team-window-switch,
+    .team-broadcast,
+    .settings-section
+  )
+  > :nth-child(3) {
+  --panel-tab-content-delay: 80ms;
+}
+
+.panel__body.is-tab-switching
+  :is(
+    .panel__header,
+    .quota-card,
+    .usage-card,
+    .detail-row,
+    .team-announcement,
+    .team-mode-switch,
+    .team-window-switch,
+    .team-broadcast,
+    .settings-section
+  )
+  > :nth-child(n + 4) {
+  --panel-tab-content-delay: 120ms;
 }
 
 .panel__rows {
@@ -2509,6 +2573,7 @@ body {
   gap: 2px;
   margin-bottom: 18px;
   padding: 4px;
+  -webkit-app-region: no-drag;
   /* 胶囊容器:沉底 + 圆角,sticky 时遮盖下方滚动内容 */
   border-radius: var(--panel-radius-md);
   background: var(--panel-inset);
@@ -3380,8 +3445,7 @@ body {
 .panel__header {
   margin-top: 6px;
   margin-bottom: 14px;
-  -webkit-app-region: drag;
-  cursor: grab;
+  -webkit-app-region: no-drag;
 }
 
 .panel__header--team {
@@ -3718,10 +3782,10 @@ body {
   opacity: 0.6;
 }
 
-@keyframes panel-tab-quick-snap {
+@keyframes panel-tab-content-snap {
   from {
     opacity: 0;
-    transform: translateY(16px) scale(0.93);
+    transform: translateY(10px) scale(0.98);
   }
   to {
     opacity: 1;
