@@ -28,6 +28,7 @@ const CHANNELS = {
   finishCapsuleWindowDrag: 'codex-status:finish-capsule-window-drag',
   openExternal: 'codex-status:open-external',
   panelReady: 'codex-status:panel-ready',
+  capsuleReady: 'codex-status:capsule-ready',
   showPanel: 'codex-status:show-panel',
   snapshotUpdated: 'codex-status:snapshot-updated',
   preferencesUpdated: 'codex-status:preferences-updated',
@@ -61,6 +62,7 @@ const api: CodexStatusApi = {
     ipcRenderer.invoke(CHANNELS.finishCapsuleWindowDrag) as Promise<WindowPreferences>,
   openExternal: (url) => ipcRenderer.invoke(CHANNELS.openExternal, url) as Promise<void>,
   notifyPanelReady: () => ipcRenderer.invoke(CHANNELS.panelReady) as Promise<void>,
+  notifyCapsuleReady: () => ipcRenderer.invoke(CHANNELS.capsuleReady) as Promise<void>,
   showPanel: (view: PanelView, options?: ShowPanelOptions) =>
     ipcRenderer.invoke(CHANNELS.showPanel, view, options) as Promise<void>,
   checkForUpdate: () => ipcRenderer.invoke(CHANNELS.checkUpdate) as Promise<UpdateCheckResult>,

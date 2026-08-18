@@ -88,6 +88,7 @@ const CHANNELS = {
   finishCapsuleWindowDrag: 'codex-status:finish-capsule-window-drag',
   openExternal: 'codex-status:open-external',
   panelReady: 'codex-status:panel-ready',
+  capsuleReady: 'codex-status:capsule-ready',
   showPanel: 'codex-status:show-panel',
   snapshotUpdated: 'codex-status:snapshot-updated',
   preferencesUpdated: 'codex-status:preferences-updated',
@@ -178,9 +179,9 @@ function createCapsuleWindow(): BrowserWindow {
     }
   })
 
-  window.on('ready-to-show', () => {
-    window.show()
-  })
+  // 不在 ready-to-show 直接 show:胶囊需等首次有数据后再显示,
+  // 避免启动时以最大尺寸空壳先露一帧、数据回来再缩小的"由大变小"闪烁。
+  // 显示时机改由渲染层 notifyCapsuleReady(数据就绪)驱动,见 CHANNELS.capsuleReady handler。
 
   window.on('move', () => {
     const bounds = window.getBounds()
@@ -545,6 +546,20 @@ function registerIpcHandlers(): void {
     panelRevealPending = false
   })
 
+  // 胶囊显示时机:渲染层确认有数据(generatedAt 存在)并完成一帧绘制后通知,
+  // 此时窗口尺寸已是最终值,避免空壳先露再缩小的闪烁
+  ipcMain.handle(CHANNELS.capsuleReady, async () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return
+    }
+    if (!hasCapsuleData(currentSnapshot)) {
+      return
+    }
+    if (!mainWindow.isVisible()) {
+      showWindow()
+    }
+  })
+
   // 普通点击沿用显隐切换;提醒跳转用 forceOpen 保证 panel 显示、聚焦并定位目标区域
   ipcMain.handle(CHANNELS.showPanel, async (_, rawView: unknown, rawOptions?: unknown) => {
     if (!isPanelView(rawView)) {
@@ -809,7 +824,11 @@ function toggleWindowVisibility(): void {
     mainWindow.hide()
   } else {
     userHidCapsule = false
-    showWindow()
+    // 用户主动点击托盘:即使无数据也显示(守卫仅拦自动 show 路径,不拦用户主动操作)
+    const bounds = resolveCapsuleBounds(persistedState.window)
+    mainWindow.setBounds(bounds)
+    mainWindow.show()
+    mainWindow.focus()
   }
 }
 
@@ -817,11 +836,22 @@ function showWindow(): void {
   if (!mainWindow) {
     return
   }
+  // 自动 show 路径(second-instance/resume/display-metrics)在无数据时不提前显示,
+  // 避免空壳先露;数据就绪后由 capsuleReady 驱动显示
+  if (!hasCapsuleData(currentSnapshot)) {
+    return
+  }
 
   const bounds = resolveCapsuleBounds(persistedState.window)
   mainWindow.setBounds(bounds)
   mainWindow.show()
   mainWindow.focus()
+}
+
+// 数据就绪判定:首次刷新完成(无论成功/失败/无凭据)后 snapshot 带 generatedAt,
+// 启动初始空快照(createEmptySnapshot)无此字段
+function hasCapsuleData(snapshot: UsageSnapshot): boolean {
+  return snapshot.generatedAt !== undefined
 }
 
 function openSettingsFromTray(): void {

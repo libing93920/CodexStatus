@@ -962,6 +962,32 @@ function App(): React.JSX.Element {
     }
   }, [ready, windowRole, panelRevealRequest])
 
+  // 胶囊显示时机:有数据(generatedAt 存在)后通知主进程显示窗口。
+  // 无数据不通知 → 启动空快照阶段胶囊保持隐藏,避免先大后小闪烁。
+  // 双 rAF 等内容完成一帧绘制再 show,对齐 panel 的防旧帧先露做法。
+  useLayoutEffect(() => {
+    if (!ready || windowRole !== 'capsule') {
+      return
+    }
+    if (snapshot.generatedAt === undefined) {
+      return
+    }
+
+    let revealFrame = 0
+    const commitFrame = window.requestAnimationFrame(() => {
+      revealFrame = window.requestAnimationFrame(() => {
+        void window.codexStatus.notifyCapsuleReady()
+      })
+    })
+
+    return () => {
+      window.cancelAnimationFrame(commitFrame)
+      if (revealFrame !== 0) {
+        window.cancelAnimationFrame(revealFrame)
+      }
+    }
+  }, [ready, windowRole, snapshot.generatedAt])
+
   function closePanel(): void {
     setPanelView('details')
     void window.codexStatus.closePanel()
