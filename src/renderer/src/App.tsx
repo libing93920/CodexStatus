@@ -371,8 +371,15 @@ function App(): React.JSX.Element {
   // 消息流容器:新消息到达时滚到底,保证最新可见
   const broadcastFeedRef = useRef<HTMLDivElement | null>(null)
   const announcementRef = useRef<HTMLElement | null>(null)
+  // 三个视图共用同一个 .panel__content 滚动节点(React 按位置复用,不卸载),切换 tab 需手动重置滚动
+  const panelContentRef = useRef<HTMLDivElement | null>(null)
   const announcementVisibleRef = useRef(false)
   const [announcement, setAnnouncement] = useState<AnnouncementState | null>(null)
+
+  // 每次切换 tab 滚动回顶部
+  useLayoutEffect(() => {
+    panelContentRef.current?.scrollTo(0, 0)
+  }, [panelView])
 
   useEffect(() => {
     let active = true
@@ -1548,7 +1555,7 @@ function App(): React.JSX.Element {
       <section className={`panel panel--${panelView}`}>
         {panelView === 'details' ? (
           <div className={`panel__body panel__body--details${panelTabMotionClass}`}>
-            <div className="panel__content">
+            <div className="panel__content" ref={panelContentRef}>
               <PanelTabs
                 current={panelView}
                 labels={{ details: copy.details, team: copy.team, settings: copy.settings }}
@@ -1613,7 +1620,7 @@ function App(): React.JSX.Element {
           <div
             className={`panel__body panel__body--team${panelTabMotionClass}${teamBoardMotionClass}`}
           >
-            <div className="panel__content">
+            <div className="panel__content" ref={panelContentRef}>
               <PanelTabs
                 current={panelView}
                 labels={{ details: copy.details, team: copy.team, settings: copy.settings }}
@@ -1822,7 +1829,7 @@ function App(): React.JSX.Element {
           </div>
         ) : (
           <div className={`panel__body panel__body--settings${panelTabMotionClass}`}>
-            <div className="panel__content">
+            <div className="panel__content" ref={panelContentRef}>
               <PanelTabs
                 current={panelView}
                 labels={{ details: copy.details, team: copy.team, settings: copy.settings }}
