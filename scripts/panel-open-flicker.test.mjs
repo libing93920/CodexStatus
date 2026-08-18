@@ -2,11 +2,13 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-const [mainSource, appSource, cssSource] = await Promise.all([
-  readFile(new URL('../src/main/index.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/renderer/src/App.tsx', import.meta.url), 'utf8'),
-  readFile(new URL('../src/renderer/src/assets/main.css', import.meta.url), 'utf8')
-])
+const [mainSource, appSource, cssSource] = (
+  await Promise.all([
+    readFile(new URL('../src/main/index.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../src/renderer/src/App.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/renderer/src/assets/main.css', import.meta.url), 'utf8')
+  ])
+).map((source) => source.replaceAll('\r\n', '\n'))
 
 test('隐藏 Panel 等待 renderer ready 后再显示', () => {
   const start = mainSource.indexOf('function openPanelWindow(')
@@ -124,7 +126,7 @@ test('tab 卡片和内部信息使用两层错峰的 Quick Snap', () => {
   assert.match(cssSource, /@keyframes panel-tab-content-snap/)
   assert.match(
     cssSource,
-    /animation:\s*panel-tab-content-snap 380ms cubic-bezier\(0\.34, 1\.56, 0\.64, 1\) both/
+    /animation:\s*panel-tab-content-snap 380ms cubic-bezier\(0\.34, 1\.56, 0\.64, 1\) backwards/
   )
   assert.match(
     cssSource,
@@ -140,7 +142,7 @@ test('tab 卡片和内部信息使用两层错峰的 Quick Snap', () => {
   assert.match(cssSource, /--panel-tab-content-delay:\s*80ms/)
   assert.match(cssSource, /--panel-tab-content-delay:\s*120ms/)
   assert.match(cssSource, /transform:\s*translateY\(10px\) scale\(0\.98\)/)
-  assert.match(appSource, /const PANEL_TAB_MOTION_CLEAR_MS = 700/)
+  assert.match(appSource, /const PANEL_TAB_MOTION_CLEAR_MS = 800/)
 })
 
 test('tab 栏和页面标题不参与窗口拖拽，避免重叠时拦截点击', () => {
@@ -155,7 +157,7 @@ test('排行榜模式和时间窗口切换会逐行上浮并消散模糊', () =>
   assert.match(cssSource, /@keyframes team-row-rise-in/)
   assert.match(
     cssSource,
-    /\.panel__body--team\.is-team-switching \.team-row\s*{[^}]*animation:\s*team-row-rise-in 576ms cubic-bezier\(0\.16, 1, 0\.3, 1\) both/s
+    /\.panel__body--team\.is-team-switching \.team-row\s*{[^}]*animation:\s*team-row-rise-in 576ms cubic-bezier\(0\.16, 1, 0\.3, 1\) backwards/s
   )
   assert.match(cssSource, /filter:\s*blur\(10px\)/)
   assert.match(cssSource, /transform:\s*translateY\(40px\) scale\(0\.94\)/)
