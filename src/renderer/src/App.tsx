@@ -765,6 +765,17 @@ function App(): React.JSX.Element {
     }
   }, [panelView, focusUpdatePending])
 
+  // panel 重新打开时重置更新态为 idle,打破 downloaded 死端
+  // 场景:1.1.5 下载完不装、1.1.6 发布后重开 panel → 重置 → 重新检查能跳到 1.1.6
+  // panel 内切 tab 不碰 panelRevealRequest,不会触发;红点进来(focusUpdatePending)不打断;
+  // 下载中(downloading)不打断。依赖数组只放 reveal 计数,避免 updateState 变化误触发
+  useEffect(() => {
+    if (!focusUpdatePending && updateState !== 'downloading') {
+      setUpdateState('idle')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelRevealRequest])
+
   useEffect(() => {
     if (panelView !== 'team' || !focusTargetPending) {
       return
@@ -2144,7 +2155,7 @@ function App(): React.JSX.Element {
                     </div>
                   )}
                   {updateState === 'downloaded' && (
-                    <p className="about-row__hint">{copy.downloaded}</p>
+                    <p className="about-row__hint">{copy.downloaded} v{updateVersion}</p>
                   )}
                   {updateState === 'error' && (
                     <p className="about-row__hint about-row__hint--error">
