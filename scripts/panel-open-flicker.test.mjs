@@ -108,15 +108,21 @@ test('tab 动效只由用户切换到不同页面触发', () => {
   assert.ok(clearMotion < changeView)
 })
 
-test('tab 内容使用明显四档错峰动画', () => {
-  assert.match(cssSource, /@keyframes panel-tab-group-in/)
+test('tab 内容使用 Quick Snap 四档错峰动画', () => {
+  assert.match(cssSource, /@keyframes panel-tab-quick-snap/)
   assert.match(
     cssSource,
-    /animation:\s*panel-tab-group-in 260ms cubic-bezier\(0\.22, 0\.9, 0\.3, 1\) both/
+    /animation:\s*panel-tab-quick-snap 420ms cubic-bezier\(0\.34, 1\.56, 0\.64, 1\) both/
   )
-  assert.match(cssSource, /animation-delay:\s*45ms/)
   assert.match(cssSource, /animation-delay:\s*90ms/)
-  assert.match(cssSource, /animation-delay:\s*135ms/)
+  assert.match(cssSource, /animation-delay:\s*180ms/)
+  assert.match(cssSource, /animation-delay:\s*270ms/)
+  assert.match(cssSource, /transform:\s*translateY\(16px\) scale\(0\.93\)/)
+  assert.match(
+    cssSource,
+    /\.panel__body--team\.is-team-switching \.team-empty\s*{[^}]*animation:\s*panel-tab-quick-snap 420ms/s
+  )
+  assert.match(appSource, /const PANEL_TAB_MOTION_CLEAR_MS = 720/)
 })
 
 test('排行榜模式和时间窗口切换会逐行上浮并消散模糊', () => {

@@ -1705,29 +1705,29 @@ body {
 .panel__body--team.is-tab-switching .team-empty,
 .panel__body--team.is-tab-switching .team-broadcast,
 .panel__body--settings.is-tab-switching .settings-section {
-  animation: panel-tab-group-in 260ms cubic-bezier(0.22, 0.9, 0.3, 1) both;
+  animation: panel-tab-quick-snap 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 .panel__body--team.is-team-switching .team-empty {
-  animation: panel-tab-group-in 260ms cubic-bezier(0.22, 0.9, 0.3, 1) both;
+  animation: panel-tab-quick-snap 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 .panel__body--details.is-tab-switching .quota-grid,
 .panel__body--settings.is-tab-switching .settings-section:nth-child(1) {
-  animation-delay: 45ms;
+  animation-delay: 90ms;
 }
 
 .panel__body--details.is-tab-switching .usage-card,
 .panel__body--team.is-tab-switching .team-window-switch,
 .panel__body--team.is-tab-switching .team-empty,
 .panel__body--settings.is-tab-switching .settings-section:nth-child(2) {
-  animation-delay: 90ms;
+  animation-delay: 180ms;
 }
 
 .panel__body--details.is-tab-switching .panel__rows,
 .panel__body--team.is-tab-switching .team-broadcast,
 .panel__body--settings.is-tab-switching .settings-section:nth-child(n + 3) {
-  animation-delay: 135ms;
+  animation-delay: 270ms;
 }
 
 .panel__rows {
@@ -3718,14 +3718,14 @@ body {
   opacity: 0.6;
 }
 
-@keyframes panel-tab-group-in {
+@keyframes panel-tab-quick-snap {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(16px) scale(0.93);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
