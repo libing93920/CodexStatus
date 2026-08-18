@@ -9,6 +9,7 @@
     "format": "prettier --write .",
     "lint": "eslint --cache .",
     "test:quota": "node --experimental-strip-types --test scripts/quota-recheck.test.mjs",
+    "test:panel-open": "node --test scripts/panel-open-flicker.test.mjs",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",

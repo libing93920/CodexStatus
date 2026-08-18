@@ -114,6 +114,7 @@ const SINGLE_ORB_WINDOW_HEIGHT = 96
 
 let mainWindow: BrowserWindow | null = null
 let panelWindow: BrowserWindow | null = null
+let panelRevealPending = false
 let tray: Tray | null = null
 let refreshTimer: NodeJS.Timeout | undefined
 let persistTimer: NodeJS.Timeout | undefined
@@ -271,10 +272,14 @@ function createPanelWindow(): BrowserWindow {
     }
 
     event.preventDefault()
+    panelRevealPending = false
     window.hide()
+    window.setOpacity(1)
+    window.webContents.setBackgroundThrottling(true)
   })
 
   window.on('closed', () => {
+    panelRevealPending = false
     panelWindow = null
   })
 
@@ -495,7 +500,13 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(CHANNELS.closePanel, async () => {
-    panelWindow?.hide()
+    if (!panelWindow || panelWindow.isDestroyed()) {
+      return
+    }
+    panelRevealPending = false
+    panelWindow.hide()
+    panelWindow.setOpacity(1)
+    panelWindow.webContents.setBackgroundThrottling(true)
   })
 
   ipcMain.handle(CHANNELS.moveCapsuleWindow, async (_, payload: CapsuleDragMovePayload) => {
@@ -522,10 +533,16 @@ function registerIpcHandlers(): void {
   // 渲染层 bootstrap 完成、真正内容挂载后通知主进程显示窗口,
   // 避免 ready-to-show 早于 React 挂载导致空窗闪烁
   ipcMain.handle(CHANNELS.panelReady, async () => {
-    if (panelWindow && !panelWindow.isDestroyed() && !panelWindow.isVisible()) {
-      panelWindow.show()
-      panelWindow.focus()
+    if (!panelRevealPending || !panelWindow || panelWindow.isDestroyed()) {
+      return
     }
+    if (!panelWindow.isVisible()) {
+      panelWindow.show()
+    }
+    panelWindow.setOpacity(1)
+    panelWindow.webContents.setBackgroundThrottling(true)
+    panelWindow.focus()
+    panelRevealPending = false
   })
 
   // 普通点击沿用显隐切换;提醒跳转用 forceOpen 保证 panel 显示、聚焦并定位目标区域
@@ -544,7 +561,10 @@ function registerIpcHandlers(): void {
       !panelWindow.isDestroyed() &&
       panelWindow.isVisible()
     ) {
+      panelRevealPending = false
       panelWindow.hide()
+      panelWindow.setOpacity(1)
+      panelWindow.webContents.setBackgroundThrottling(true)
       return
     }
     openPanelWindow(rawView)
@@ -1160,14 +1180,19 @@ function openPanelWindow(view: PanelView): void {
   currentPanelView = view
   if (!panelWindow || panelWindow.isDestroyed()) {
     // 新窗口页面未加载,command 收不到;focusUpdate 留给 bootstrap 消费
+    panelRevealPending = true
     panelWindow = createPanelWindow()
     return
   }
-  if (!panelWindow.isVisible()) {
+  const isVisible = panelWindow.isVisible()
+  if (!isVisible) {
     panelWindow.setBounds(resolvePanelBounds(persistedState.panel.x, persistedState.panel.y))
+    // 先以完全透明状态进入可见绘制，避免隐藏窗口停帧或复用旧合成帧。
+    panelRevealPending = true
+    panelWindow.setOpacity(0)
+    panelWindow.webContents.setBackgroundThrottling(false)
+    panelWindow.showInactive()
   }
-  panelWindow.show()
-  panelWindow.focus()
 
   panelWindow.webContents.send(CHANNELS.command, {
     type: 'show-panel-view',
@@ -1175,6 +1200,11 @@ function openPanelWindow(view: PanelView): void {
     focusUpdate: consumeFocusUpdate(),
     focusTarget: consumeFocusTarget()
   } satisfies RendererCommandPayload)
+
+  // 隐藏窗口等目标页面完成绘制后由 panelReady 显示，避免旧页面先露一帧。
+  if (isVisible) {
+    panelWindow.focus()
+  }
 }
 
 // 读取并清除一次性定位标志:已存在窗口由 command 消费,新窗口由 bootstrap 消费

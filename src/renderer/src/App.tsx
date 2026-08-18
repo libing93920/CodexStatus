@@ -302,6 +302,7 @@ function App(): React.JSX.Element {
   })
   const [windowRole, setWindowRole] = useState<RendererWindowRole>('capsule')
   const [panelView, setPanelView] = useState<PanelView>('details')
+  const [panelRevealRequest, setPanelRevealRequest] = useState(0)
   const [customRefreshInput, setCustomRefreshInput] = useState(
     String(DEFAULT_SETTINGS.refreshIntervalSeconds)
   )
@@ -434,6 +435,7 @@ function App(): React.JSX.Element {
       if (payload.focusTarget) {
         setFocusTargetPending(payload.focusTarget)
       }
+      setPanelRevealRequest((value) => value + 1)
     })
 
     // 订阅更新进度:主进程转发 autoUpdater 事件,据此驱动 UI 状态机
@@ -908,19 +910,26 @@ function App(): React.JSX.Element {
     }
   }, [windowRole, panelView, hasResetWindow, hasAnnouncementTime])
 
-  // panel 窗口显示时机:等 React commit + 浏览器 paint 完成后再通知主进程 show。
-  // 用 rAF 推迟到下一帧,确保 DOM 已真正绘制——避免窗口 show 时画面仍空导致闪一下。
-  useEffect(() => {
+  // panel 窗口显示时机:隐藏窗口需等新页面完成一帧绘制，避免 show 时先暴露旧帧。
+  useLayoutEffect(() => {
     if (!ready || windowRole !== 'panel') {
       return
     }
-    const raf = window.requestAnimationFrame(() => {
-      void window.codexStatus.notifyPanelReady()
+
+    let revealFrame = 0
+    const commitFrame = window.requestAnimationFrame(() => {
+      revealFrame = window.requestAnimationFrame(() => {
+        void window.codexStatus.notifyPanelReady()
+      })
     })
+
     return () => {
-      window.cancelAnimationFrame(raf)
+      window.cancelAnimationFrame(commitFrame)
+      if (revealFrame !== 0) {
+        window.cancelAnimationFrame(revealFrame)
+      }
     }
-  }, [ready, windowRole])
+  }, [ready, windowRole, panelRevealRequest])
 
   function closePanel(): void {
     setPanelView('details')
