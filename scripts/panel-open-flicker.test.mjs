@@ -88,3 +88,81 @@ test('Panel 内容不再执行 rise-in 动画', () => {
   assert.doesNotMatch(cssSource, /animation:\s*rise-in/)
   assert.match(cssSource, /animation:\s*panel-in/)
 })
+
+test('tab 动效只由用户切换到不同页面触发', () => {
+  const handlerStart = appSource.indexOf('function handlePanelViewChange(')
+  const handlerEnd = appSource.indexOf('\n  function ', handlerStart + 1)
+  const handler = appSource.slice(handlerStart, handlerEnd)
+
+  assert.notEqual(handlerStart, -1, 'missing handlePanelViewChange')
+  assert.match(handler, /if \(view === panelView\)/)
+  assert.match(handler, /setTabMotionView\(view\)/)
+
+  const commandStart = appSource.indexOf('const disposeCommand = window.codexStatus.onCommand')
+  const commandEnd = appSource.indexOf('const disposeUpdateProgress', commandStart)
+  const commandHandler = appSource.slice(commandStart, commandEnd)
+  const clearMotion = commandHandler.indexOf('setTabMotionView(null)')
+  const changeView = commandHandler.indexOf('setPanelView(payload.panelView)')
+
+  assert.notEqual(clearMotion, -1, 'external command must clear tab motion')
+  assert.ok(clearMotion < changeView)
+})
+
+test('tab 内容使用明显四档错峰动画', () => {
+  assert.match(cssSource, /@keyframes panel-tab-group-in/)
+  assert.match(
+    cssSource,
+    /animation:\s*panel-tab-group-in 260ms cubic-bezier\(0\.22, 0\.9, 0\.3, 1\) both/
+  )
+  assert.match(cssSource, /animation-delay:\s*45ms/)
+  assert.match(cssSource, /animation-delay:\s*90ms/)
+  assert.match(cssSource, /animation-delay:\s*135ms/)
+})
+
+test('排行榜模式和时间窗口切换会逐行上浮并消散模糊', () => {
+  assert.match(appSource, /function handleTeamBoardModeChange\(/)
+  assert.match(appSource, /function handleTeamTokenWindowChange\(/)
+  assert.match(appSource, /is-team-switching/)
+  assert.match(cssSource, /@keyframes team-row-rise-in/)
+  assert.match(
+    cssSource,
+    /\.panel__body--team\.is-team-switching \.team-row\s*{[^}]*animation:\s*team-row-rise-in 576ms cubic-bezier\(0\.16, 1, 0\.3, 1\) both/s
+  )
+  assert.match(cssSource, /filter:\s*blur\(10px\)/)
+  assert.match(cssSource, /transform:\s*translateY\(40px\) scale\(0\.94\)/)
+  assert.doesNotMatch(cssSource, /@keyframes team-row-flip-in/)
+  assert.doesNotMatch(cssSource, /rotateX\(-72deg\)/)
+  assert.match(appSource, /'--team-row-delay'/)
+  assert.match(appSource, /const TEAM_ROW_STAGGER_MS = 72/)
+  assert.match(appSource, /const TEAM_BOARD_MOTION_CLEAR_MS = 1360/)
+  assert.match(cssSource, /animation-delay:\s*var\(--team-row-delay, 0ms\)/)
+})
+
+test('排行榜冠军在上浮结束后扫光', () => {
+  assert.match(cssSource, /@keyframes team-champion-shine/)
+  assert.match(cssSource, /\.panel__body--team\.is-team-switching \.team-row\.is-top-1::after\s*{/s)
+  assert.match(cssSource, /animation:\s*team-champion-shine 640ms ease-out both/)
+  assert.match(cssSource, /animation-delay:\s*672ms/)
+})
+
+test('排行榜上浮动画终态和静态态一致，避免文字在结束时抖动', () => {
+  assert.match(cssSource, /\.team-row\s*{[^}]*filter:\s*blur\(0\)/s)
+  assert.match(cssSource, /\.team-row\s*{[^}]*transform:\s*translateY\(0\) scale\(1\)/s)
+  assert.match(
+    cssSource,
+    /@keyframes team-row-rise-in[\s\S]*to\s*{[^}]*filter:\s*blur\(0\)[^}]*transform:\s*translateY\(0\) scale\(1\)/
+  )
+})
+
+test('排行榜动画期间禁止内容区产生横向滚动条', () => {
+  assert.match(cssSource, /\.panel__content\s*{[^}]*overflow-x:\s*hidden/s)
+})
+
+test('减少动态效果时禁用 tab 动画', () => {
+  const reducedMotionStart = cssSource.indexOf('@media (prefers-reduced-motion: reduce)')
+  const reducedMotion = cssSource.slice(reducedMotionStart)
+
+  assert.notEqual(reducedMotionStart, -1)
+  assert.match(reducedMotion, /\.panel__body\.is-tab-switching \*/)
+  assert.match(reducedMotion, /animation:\s*none/)
+})

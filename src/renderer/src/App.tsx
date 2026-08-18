@@ -34,6 +34,10 @@ import { formatAnnouncementTime, resolveCapsuleAlert } from '../../shared/announ
 const DEFAULT_CUSTOM_REFRESH_INTERVAL_SECONDS = 40
 const CAPSULE_CLICK_DRAG_DISTANCE = 5
 const MANUAL_REFRESH_FEEDBACK_MS = 680
+const PANEL_TAB_MOTION_CLEAR_MS = 420
+const TEAM_BOARD_MOTION_CLEAR_MS = 1360
+const TEAM_ROW_STAGGER_MS = 72
+const TEAM_ROW_STAGGER_MAX_INDEX = 5
 // 广播消息:胶囊进入消息态后无操作 N 毫秒自动回额度;panel 会话内消息流上限
 const BROADCAST_REVERT_MS = 15000
 const BROADCAST_FEED_LIMIT = 3
@@ -303,6 +307,7 @@ function App(): React.JSX.Element {
   const [windowRole, setWindowRole] = useState<RendererWindowRole>('capsule')
   const [panelView, setPanelView] = useState<PanelView>('details')
   const [panelRevealRequest, setPanelRevealRequest] = useState(0)
+  const [tabMotionView, setTabMotionView] = useState<PanelView | null>(null)
   const [customRefreshInput, setCustomRefreshInput] = useState(
     String(DEFAULT_SETTINGS.refreshIntervalSeconds)
   )
@@ -314,6 +319,7 @@ function App(): React.JSX.Element {
   // 团队页排行榜模式:quota=额度, tokens=Token 消耗;消耗模式再选 1d/7d/30d 窗口
   const [teamBoardMode, setTeamBoardMode] = useState<'quota' | 'tokens'>('quota')
   const [teamTokenWindow, setTeamTokenWindow] = useState<UsageWindow>('1d')
+  const [teamBoardMotionActive, setTeamBoardMotionActive] = useState(false)
   const [capsulePointerActive, setCapsulePointerActive] = useState(false)
   const [manualRefreshActive, setManualRefreshActive] = useState(false)
   const [appVersion, setAppVersion] = useState('')
@@ -338,6 +344,8 @@ function App(): React.JSX.Element {
   const capsuleRef = useRef<HTMLElement | null>(null)
   const manualRefreshTimerRef = useRef<number | undefined>(undefined)
   const justRefreshedTimerRef = useRef<number | undefined>(undefined)
+  const tabMotionTimerRef = useRef<number | undefined>(undefined)
+  const teamBoardMotionTimerRef = useRef<number | undefined>(undefined)
   // "已是最新"提示停留几秒后自动回 idle
   const upToDateTimerRef = useRef<number | undefined>(undefined)
   // 局域网广播消息:panel 会话内消息流 + 胶囊当前展示消息(到达即切,无操作自动回)
@@ -427,7 +435,17 @@ function App(): React.JSX.Element {
 
       if (payload.panelView !== 'team') {
         announcementVisibleRef.current = false
+        if (teamBoardMotionTimerRef.current !== undefined) {
+          window.clearTimeout(teamBoardMotionTimerRef.current)
+          teamBoardMotionTimerRef.current = undefined
+        }
+        setTeamBoardMotionActive(false)
       }
+      if (tabMotionTimerRef.current !== undefined) {
+        window.clearTimeout(tabMotionTimerRef.current)
+        tabMotionTimerRef.current = undefined
+      }
+      setTabMotionView(null)
       setPanelView(payload.panelView)
       if (payload.focusUpdate) {
         setFocusUpdatePending(true)
@@ -514,6 +532,12 @@ function App(): React.JSX.Element {
       }
       if (justRefreshedTimerRef.current !== undefined) {
         window.clearTimeout(justRefreshedTimerRef.current)
+      }
+      if (tabMotionTimerRef.current !== undefined) {
+        window.clearTimeout(tabMotionTimerRef.current)
+      }
+      if (teamBoardMotionTimerRef.current !== undefined) {
+        window.clearTimeout(teamBoardMotionTimerRef.current)
       }
       if (upToDateTimerRef.current !== undefined) {
         window.clearTimeout(upToDateTimerRef.current)
@@ -1160,10 +1184,57 @@ function App(): React.JSX.Element {
   }
 
   function handlePanelViewChange(view: PanelView): void {
+    if (view === panelView) {
+      return
+    }
     if (view !== 'team') {
       announcementVisibleRef.current = false
+      if (teamBoardMotionTimerRef.current !== undefined) {
+        window.clearTimeout(teamBoardMotionTimerRef.current)
+        teamBoardMotionTimerRef.current = undefined
+      }
+      setTeamBoardMotionActive(false)
+    } else {
+      startTeamBoardMotion()
     }
+    if (tabMotionTimerRef.current !== undefined) {
+      window.clearTimeout(tabMotionTimerRef.current)
+    }
+    setTabMotionView(view)
     setPanelView(view)
+    tabMotionTimerRef.current = window.setTimeout(() => {
+      setTabMotionView(null)
+      tabMotionTimerRef.current = undefined
+    }, PANEL_TAB_MOTION_CLEAR_MS)
+  }
+
+  function startTeamBoardMotion(): void {
+    if (teamBoardMotionTimerRef.current !== undefined) {
+      window.clearTimeout(teamBoardMotionTimerRef.current)
+    }
+    setTeamBoardMotionActive(true)
+    teamBoardMotionTimerRef.current = window.setTimeout(() => {
+      setTeamBoardMotionActive(false)
+      teamBoardMotionTimerRef.current = undefined
+    }, TEAM_BOARD_MOTION_CLEAR_MS)
+  }
+
+  function handleTeamBoardModeChange(value: string): void {
+    const mode = value as 'quota' | 'tokens'
+    if (mode === teamBoardMode) {
+      return
+    }
+    startTeamBoardMotion()
+    setTeamBoardMode(mode)
+  }
+
+  function handleTeamTokenWindowChange(value: string): void {
+    const usageWindow = value as UsageWindow
+    if (usageWindow === teamTokenWindow) {
+      return
+    }
+    startTeamBoardMotion()
+    setTeamTokenWindow(usageWindow)
   }
 
   function recordSnapshotIssue(error: unknown): void {
@@ -1469,11 +1540,14 @@ function App(): React.JSX.Element {
     )
   }
 
+  const panelTabMotionClass = tabMotionView === panelView ? ' is-tab-switching' : ''
+  const teamBoardMotionClass = teamBoardMotionActive ? ' is-team-switching' : ''
+
   return (
     <div className="app-shell app-shell--panel">
       <section className={`panel panel--${panelView}`}>
         {panelView === 'details' ? (
-          <div className="panel__body panel__body--details">
+          <div className={`panel__body panel__body--details${panelTabMotionClass}`}>
             <div className="panel__content">
               <PanelTabs
                 current={panelView}
@@ -1536,7 +1610,9 @@ function App(): React.JSX.Element {
             </div>
           </div>
         ) : panelView === 'team' ? (
-          <div className="panel__body panel__body--team">
+          <div
+            className={`panel__body panel__body--team${panelTabMotionClass}${teamBoardMotionClass}`}
+          >
             <div className="panel__content">
               <PanelTabs
                 current={panelView}
@@ -1577,7 +1653,7 @@ function App(): React.JSX.Element {
               {isCodex ? (
                 <div className="team-mode-switch">
                   <SegmentedControl
-                    onChange={(value) => setTeamBoardMode(value as 'quota' | 'tokens')}
+                    onChange={handleTeamBoardModeChange}
                     options={[
                       { label: copy.teamModeQuota, value: 'quota' },
                       { label: copy.teamModeTokens, value: 'tokens' }
@@ -1610,7 +1686,7 @@ function App(): React.JSX.Element {
                 <>
                   <div className="team-window-switch">
                     <SegmentedControl
-                      onChange={(value) => setTeamTokenWindow(value as UsageWindow)}
+                      onChange={handleTeamTokenWindowChange}
                       options={[
                         { label: copy.usage1d, value: '1d' },
                         { label: copy.usage7d, value: '7d' },
@@ -1620,7 +1696,7 @@ function App(): React.JSX.Element {
                     />
                   </div>
                   {teamTokenPeers.length > 0 ? (
-                    <div className="team-board">
+                    <div className="team-board" key={`tokens-${teamTokenWindow}`}>
                       {teamTokenPeers.map((peer, index) => {
                         const showLikes = teamTokenWindow === '1d'
                         const like = showLikes ? aggregateReactions(peer.id) : undefined
@@ -1648,11 +1724,13 @@ function App(): React.JSX.Element {
                       })}
                     </div>
                   ) : (
-                    <p className="team-empty">{copy.teamEmpty}</p>
+                    <p className="team-empty" key={`tokens-empty-${teamTokenWindow}`}>
+                      {copy.teamEmpty}
+                    </p>
                   )}
                 </>
               ) : teamPeers.length > 0 ? (
-                <div className="team-board">
+                <div className="team-board" key="quota">
                   {teamPeers.map((peer, index) => (
                     <TeamRow
                       key={peer.id}
@@ -1673,7 +1751,9 @@ function App(): React.JSX.Element {
                   ))}
                 </div>
               ) : (
-                <p className="team-empty">{copy.teamEmpty}</p>
+                <p className="team-empty" key="quota-empty">
+                  {copy.teamEmpty}
+                </p>
               )}
 
               {/* 广播消息流:会话内仅实时,最新在底;发送经主进程校验与回显 */}
@@ -1741,7 +1821,7 @@ function App(): React.JSX.Element {
             </div>
           </div>
         ) : (
-          <div className="panel__body panel__body--settings">
+          <div className={`panel__body panel__body--settings${panelTabMotionClass}`}>
             <div className="panel__content">
               <PanelTabs
                 current={panelView}
@@ -2863,7 +2943,12 @@ function TeamRow({
   return (
     <div
       className={`team-row${isSelf ? ' is-self' : ''}${rankClass}${hasBoth ? ' team-row--dual' : ''}`}
-      style={{ '--metric-accent': accent } as CSSProperties}
+      style={
+        {
+          '--metric-accent': accent,
+          '--team-row-delay': `${Math.min(rank - 1, TEAM_ROW_STAGGER_MAX_INDEX) * TEAM_ROW_STAGGER_MS}ms`
+        } as CSSProperties
+      }
     >
       <span className="team-row__rank">{rank}</span>
       <span className="team-row__name">
@@ -2960,6 +3045,11 @@ function TokenRow({
       className={`team-row team-row--token${isSelf ? ' is-self' : ''}${rankClass}${
         onLike ? ' is-like' : ''
       }`}
+      style={
+        {
+          '--team-row-delay': `${Math.min(rank - 1, TEAM_ROW_STAGGER_MAX_INDEX) * TEAM_ROW_STAGGER_MS}ms`
+        } as CSSProperties
+      }
     >
       <span className="team-row__rank">{rank}</span>
       <span className="team-row__name">

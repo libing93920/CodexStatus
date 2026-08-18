@@ -1670,6 +1670,7 @@ body {
 .panel__content {
   min-height: 0;
   flex: 1 1 auto;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -1692,6 +1693,41 @@ body {
 
 .panel__content::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.22);
+}
+
+.panel__body.is-tab-switching .panel__header,
+.panel__body--details.is-tab-switching .quota-grid,
+.panel__body--details.is-tab-switching .usage-card,
+.panel__body--details.is-tab-switching .panel__rows,
+.panel__body--team.is-tab-switching .team-announcement,
+.panel__body--team.is-tab-switching .team-mode-switch,
+.panel__body--team.is-tab-switching .team-window-switch,
+.panel__body--team.is-tab-switching .team-empty,
+.panel__body--team.is-tab-switching .team-broadcast,
+.panel__body--settings.is-tab-switching .settings-section {
+  animation: panel-tab-group-in 260ms cubic-bezier(0.22, 0.9, 0.3, 1) both;
+}
+
+.panel__body--team.is-team-switching .team-empty {
+  animation: panel-tab-group-in 260ms cubic-bezier(0.22, 0.9, 0.3, 1) both;
+}
+
+.panel__body--details.is-tab-switching .quota-grid,
+.panel__body--settings.is-tab-switching .settings-section:nth-child(1) {
+  animation-delay: 45ms;
+}
+
+.panel__body--details.is-tab-switching .usage-card,
+.panel__body--team.is-tab-switching .team-window-switch,
+.panel__body--team.is-tab-switching .team-empty,
+.panel__body--settings.is-tab-switching .settings-section:nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.panel__body--details.is-tab-switching .panel__rows,
+.panel__body--team.is-tab-switching .team-broadcast,
+.panel__body--settings.is-tab-switching .settings-section:nth-child(n + 3) {
+  animation-delay: 135ms;
 }
 
 .panel__rows {
@@ -2529,6 +2565,32 @@ body {
   margin-top: 2px;
 }
 
+.panel__body--team.is-team-switching .team-row {
+  position: relative;
+  animation: team-row-rise-in 576ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--team-row-delay, 0ms);
+}
+
+.panel__body--team.is-team-switching .team-row.is-top-1 {
+  overflow: hidden;
+}
+
+.panel__body--team.is-team-switching .team-row.is-top-1::after {
+  content: '';
+  position: absolute;
+  inset: -40% -20%;
+  pointer-events: none;
+  background: linear-gradient(
+    110deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.52) 50%,
+    transparent 65%
+  );
+  transform: translateX(-120%);
+  animation: team-champion-shine 640ms ease-out both;
+  animation-delay: 672ms;
+}
+
 .team-row {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1.2fr) 48px 36px;
@@ -2538,6 +2600,8 @@ body {
   border-radius: var(--panel-radius-lg);
   border: 1px solid var(--panel-line);
   background: var(--panel-card);
+  filter: blur(0);
+  transform: translateY(0) scale(1);
   transition:
     transform 200ms cubic-bezier(0.22, 0.9, 0.3, 1),
     border-color 200ms cubic-bezier(0.22, 0.9, 0.3, 1),
@@ -3654,6 +3718,36 @@ body {
   opacity: 0.6;
 }
 
+@keyframes panel-tab-group-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes team-row-rise-in {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateY(40px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes team-champion-shine {
+  to {
+    transform: translateX(120%);
+  }
+}
+
 @keyframes field-in {
   from {
     opacity: 0;
@@ -3778,6 +3872,9 @@ body {
   .capsule.is-manual-refreshing .capsule__progress span,
   .capsule__percent.is-critical,
   .capsule__percent.is-just-refreshed,
+  .panel__body.is-tab-switching *,
+  .panel__body.is-team-switching *,
+  .panel__body.is-team-switching .team-row::after,
   .panel,
   .panel__header--details,
   .quota-grid,
