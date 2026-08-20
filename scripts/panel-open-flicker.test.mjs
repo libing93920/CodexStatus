@@ -197,3 +197,16 @@ test('减少动态效果时禁用 tab 动画', () => {
   assert.match(reducedMotion, /\.panel__body\.is-tab-switching \*/)
   assert.match(reducedMotion, /animation:\s*none/)
 })
+
+test('横向和竖向胶囊共用不改变布局的双层描边', () => {
+  const capsuleStart = cssSource.indexOf('.capsule {')
+  const capsuleEnd = cssSource.indexOf('\n}', capsuleStart)
+  const capsuleRule = cssSource.slice(capsuleStart, capsuleEnd)
+
+  assert.notEqual(capsuleStart, -1)
+  assert.match(capsuleRule, /border:\s*0/)
+  assert.match(
+    capsuleRule,
+    /box-shadow:\s*inset 0 0 0 0\.5px rgba\(109, 180, 255, 0\.34\),\s*inset 0 0 0 1px rgba\(255, 255, 255, 0\.035\)/s
+  )
+})
