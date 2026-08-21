@@ -1931,7 +1931,7 @@ function App(): React.JSX.Element {
                       />
                       {intervalControlValue === 'custom' ? (
                         <label
-                          className={`inline-input ${canEditCustomRefresh ? 'is-active' : 'is-disabled'}`}
+                          className={`inline-input ${canEditCustomRefresh ? '' : 'is-disabled'}`}
                         >
                           <span>{copy.customInterval}</span>
                           <input
@@ -1982,7 +1982,7 @@ function App(): React.JSX.Element {
                   <div className="settings-section">
                     <p className="settings-section__title">{copy.groupRecommend}</p>
                     <SettingField label={copy.iqThreshold} hint={copy.iqThresholdHint}>
-                      <label className="inline-input is-active">
+                      <label className="inline-input">
                         <span>{copy.iqThreshold}</span>
                         <input
                           max={MAX_IQ_THRESHOLD}
@@ -2042,7 +2042,7 @@ function App(): React.JSX.Element {
                 <div className="settings-section">
                   <p className="settings-section__title">{copy.team}</p>
                   <SettingField label={copy.teamNickname} hint={copy.teamNicknameHint}>
-                    <label className="inline-input is-active">
+                    <label className="inline-input">
                       <span>{copy.teamNickname}</span>
                       <input
                         onBlur={commitTeamNickname}
@@ -2061,7 +2061,7 @@ function App(): React.JSX.Element {
                     </label>
                   </SettingField>
                   <SettingField label={copy.teamGroup} hint={copy.teamGroupHint}>
-                    <label className="inline-input is-active">
+                    <label className="inline-input">
                       <span>{copy.teamGroup}</span>
                       <input
                         onBlur={commitTeamGroup}

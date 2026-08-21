@@ -2615,9 +2615,6 @@ body {
   background: var(--panel-accent-soft);
   color: var(--panel-accent);
   border-color: color-mix(in srgb, var(--panel-accent) 30%, transparent);
-  box-shadow:
-    inset 0 1px 2px rgba(121, 192, 255, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .panel__tab:focus-visible {
@@ -3254,7 +3251,9 @@ body {
   color: var(--panel-text);
   font-size: 13px;
   outline: none;
-  transition: border-color 200ms ease;
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease;
 }
 
 .team-broadcast__input::placeholder {
@@ -3262,7 +3261,9 @@ body {
 }
 
 .team-broadcast__input:focus {
-  border-color: var(--panel-accent);
+  /* 与设置页输入框选中态一致:30% accent 描边 + 1px 外投影 */
+  border-color: color-mix(in srgb, var(--panel-accent) 30%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--panel-accent) 30%, transparent);
 }
 
 .team-broadcast__send {
@@ -3636,9 +3637,6 @@ body {
   border-color: color-mix(in srgb, var(--panel-accent) 30%, transparent);
   color: var(--panel-accent);
   background: var(--panel-accent-soft);
-  box-shadow:
-    inset 0 1px 2px rgba(121, 192, 255, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .segmented button:focus-visible {
@@ -3732,10 +3730,10 @@ body {
   align-self: stretch;
   min-height: 38px;
   padding: 0 14px;
-  /* 输入框:沉底 + 圆角,不要全黑 */
-  border-radius: var(--panel-radius-md);
+  /* 输入框:与团队广播输入框同语言,胶囊圆角 + 卡片底色 */
+  border-radius: 999px;
   border: 1px solid var(--panel-line);
-  background: var(--panel-inset);
+  background: var(--panel-card);
   color: var(--panel-text-2);
   font-size: 13px;
   transition:
@@ -3755,12 +3753,12 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.inline-input.is-active {
-  border-color: color-mix(in srgb, var(--panel-accent) 42%, transparent);
-  background: var(--panel-inset);
-  color: var(--panel-text-2);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--panel-accent) 14%, transparent);
-}.inline-input input:disabled {
+.inline-input:focus-within {
+  /* 选中:30% accent 描边 + 1px 外投影同色,轻不压 tab */
+  border-color: color-mix(in srgb, var(--panel-accent) 30%, transparent);
+  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--panel-accent) 30%, transparent);
+}
+.inline-input input:disabled {
   color: var(--panel-muted);
   cursor: default;
 }
