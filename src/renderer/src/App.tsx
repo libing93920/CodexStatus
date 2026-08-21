@@ -2357,6 +2357,28 @@ function UsageCard({
   // API Key 模式真实账单花费(窗口维度)
   const [spendByWindow, setSpendByWindow] = useState<Partial<Record<UsageWindow, SpendUsage>>>({})
   const [hoveredIndex, setHoveredIndex] = useState<number | undefined>(undefined)
+  // 时间 tab 切换动效:复用页面 tab 切换的 Quick Snap,内容块错峰上浮
+  const [windowMotionActive, setWindowMotionActive] = useState(false)
+  const windowMotionTimerRef = useRef<number | undefined>(undefined)
+
+  useEffect(() => {
+    return () => {
+      if (windowMotionTimerRef.current !== undefined) {
+        window.clearTimeout(windowMotionTimerRef.current)
+      }
+    }
+  }, [])
+
+  const startWindowMotion = (): void => {
+    if (windowMotionTimerRef.current !== undefined) {
+      window.clearTimeout(windowMotionTimerRef.current)
+    }
+    setWindowMotionActive(true)
+    windowMotionTimerRef.current = window.setTimeout(() => {
+      setWindowMotionActive(false)
+      windowMotionTimerRef.current = undefined
+    }, PANEL_TAB_MOTION_CLEAR_MS)
+  }
 
   // 区间选择:customRange 为空=1/7/30 天预设,有值=自定义起止时间(毫秒)
   const [presetWindow, setPresetWindow] = useState<UsageWindow>('1d')
@@ -2452,7 +2474,7 @@ function UsageCard({
   const models = isCustom ? rangeUsage?.models : usage?.models
 
   return (
-    <section className="usage-card">
+    <section className={`usage-card${windowMotionActive ? ' is-window-switching' : ''}`}>
       <div className="usage-card__head">
         <span className="usage-card__title">{copy.usage}</span>
       </div>
@@ -2467,9 +2489,17 @@ function UsageCard({
         ]}
         onChange={(value) => {
           if (value === 'custom') {
+            if (!rangeOpen) {
+              startWindowMotion()
+            }
             setRangeOpen(true)
           } else {
-            setPresetWindow(value as UsageWindow)
+            const usageWindow = value as UsageWindow
+            // 同一预设且无自定义态时重复点击不重放动效
+            if (usageWindow !== presetWindow || isCustom || rangeOpen) {
+              startWindowMotion()
+            }
+            setPresetWindow(usageWindow)
             setCustomRange(undefined)
             setRangeOpen(false)
           }

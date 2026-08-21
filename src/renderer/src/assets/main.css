@@ -1797,6 +1797,31 @@ body {
   --panel-tab-content-delay: 120ms;
 }
 
+/* 用量统计时间 tab 切换:内容块复用页面 tab 的 Quick Snap,逐块错峰 */
+.usage-card.is-window-switching
+  :is(.usage-summary, .usage-range-panel, .usage-chart, .usage-bar, .model-board, .usage-card__spend-hint, .usage-card__empty) {
+  animation: panel-tab-content-snap 380ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+.usage-card.is-window-switching :is(.usage-summary, .usage-range-panel) {
+  animation-delay: 0ms;
+}
+
+.usage-card.is-window-switching :is(.usage-chart, .usage-bar) {
+  animation-delay: 40ms;
+}
+
+.usage-card.is-window-switching :is(.model-board, .usage-card__spend-hint) {
+  animation-delay: 80ms;
+}
+
+/* 柱状图随窗口切换从底部一起长出,scaleY 不改动内联高度;等容器 snap 结束(40ms+380ms)再起播 */
+.usage-card.is-window-switching .usage-chart__bar--stack {
+  transform-origin: bottom;
+  animation: usage-bar-rise 380ms cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+  animation-delay: 420ms;
+}
+
 .panel__rows {
   display: flex;
   flex-direction: column;
@@ -3794,6 +3819,15 @@ body {
   }
 }
 
+@keyframes usage-bar-rise {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
 @keyframes team-row-rise-in {
   from {
     opacity: 0;
@@ -3940,6 +3974,7 @@ body {
   .panel__body.is-tab-switching *,
   .panel__body.is-team-switching *,
   .panel__body.is-team-switching .team-row::after,
+  .usage-card.is-window-switching *,
   .panel,
   .panel__header--details,
   .quota-grid,

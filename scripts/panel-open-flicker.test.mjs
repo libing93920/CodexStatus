@@ -198,6 +198,45 @@ test('减少动态效果时禁用 tab 动画', () => {
   assert.match(reducedMotion, /animation:\s*none/)
 })
 
+test('用量统计时间 tab 切换复用 Quick Snap 动效', () => {
+  assert.match(appSource, /is-window-switching/)
+  assert.match(appSource, /startWindowMotion\(\)/)
+  assert.match(
+    cssSource,
+    /\.usage-card\.is-window-switching\s*:is\([^)]*\)\s*{[^}]*animation:\s*panel-tab-content-snap 380ms cubic-bezier\(0\.34, 1\.56, 0\.64, 1\) backwards/s
+  )
+  assert.match(cssSource, /\.usage-card\.is-window-switching\s*:is\(\.usage-summary, \.usage-range-panel\)/)
+  assert.match(
+    cssSource,
+    /\.usage-card\.is-window-switching :is\(\.usage-summary, \.usage-range-panel\)\s*{[^}]*animation-delay:\s*0ms/s
+  )
+  assert.match(
+    cssSource,
+    /\.usage-card\.is-window-switching :is\(\.usage-chart, \.usage-bar\)\s*{[^}]*animation-delay:\s*40ms/s
+  )
+  assert.match(
+    cssSource,
+    /\.usage-card\.is-window-switching :is\(\.model-board, \.usage-card__spend-hint\)\s*{[^}]*animation-delay:\s*80ms/s
+  )
+  assert.match(cssSource, /@keyframes usage-bar-rise/)
+  assert.match(
+    cssSource,
+    /\.usage-card\.is-window-switching \.usage-chart__bar--stack\s*{[^}]*animation:\s*usage-bar-rise 380ms cubic-bezier\(0\.22, 0\.9, 0\.3, 1\) backwards/s
+  )
+  assert.match(
+    cssSource,
+    /\.usage-card\.is-window-switching \.usage-chart__bar--stack\s*{[^}]*animation-delay:\s*420ms/s
+  )
+})
+
+test('减少动态效果时禁用用量统计窗口切换动画', () => {
+  const reducedMotionStart = cssSource.indexOf('@media (prefers-reduced-motion: reduce)')
+  const reducedMotion = cssSource.slice(reducedMotionStart)
+
+  assert.notEqual(reducedMotionStart, -1)
+  assert.match(reducedMotion, /\.usage-card\.is-window-switching \*/)
+})
+
 test('横向和竖向胶囊共用不改变布局的双层描边', () => {
   const capsuleStart = cssSource.indexOf('.capsule {')
   const capsuleEnd = cssSource.indexOf('\n}', capsuleStart)
