@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CodexStatus · UI 风格方案预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(64, 86, 161, .25), transparent 60%),
+      radial-gradient(900px 500px at 10% 110%, rgba(20, 120, 104, .18), transparent 60%),
+      #0a0c12;
+    color: #e8edf4;
+    font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 72px 24px;
+    gap: 14px;
+  }
+  h1 { font-size: 30px; font-weight: 700; letter-spacing: .5px; }
+  .sub { color: #93a1b5; font-size: 14px; margin-bottom: 34px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 22px;
+    width: min(1240px, 100%);
+  }
+  a.card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    border-radius: 20px;
+    padding: 26px 26px 22px;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.09);
+    transition: transform .25s cubic-bezier(.22,.9,.3,1), box-shadow .25s;
+    min-height: 210px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  a.card:hover { transform: translateY(-4px); box-shadow: 0 24px 48px rgba(0,0,0,.45); }
+  a.card .tag { font-size: 11px; letter-spacing: 3px; opacity: .75; text-transform: uppercase; }
+  a.card h2 { font-size: 23px; font-weight: 700; }
+  a.card p { font-size: 13px; line-height: 1.7; opacity: .82; }
+  a.card .swatches { display: flex; gap: 6px; margin-top: 10px; }
+  a.card .swatches i { width: 22px; height: 22px; border-radius: 7px; border: 1px solid rgba(255,255,255,.18); }
+  /* 四套方案的卡片底色 */
+  .card--aurora {
+    background:
+      radial-gradient(400px 200px at 90% 0%, rgba(56, 232, 177, .28), transparent 65%),
+      radial-gradient(500px 260px at 0% 100%, rgba(88, 101, 242, .30), transparent 60%),
+      linear-gradient(160deg, #10141f, #0b0e16);
+  }
+  .card--cyber {
+    background:
+      repeating-linear-gradient(0deg, transparent 0 3px, rgba(0, 255, 213, .025) 3px 4px),
+      radial-gradient(420px 220px at 85% 10%, rgba(0, 255, 213, .13), transparent 60%),
+      #050807;
+    font-family: Consolas, monospace;
+  }
+  .card--porcelain { background: linear-gradient(155deg, #fbfaf7, #eceae4); color: #3c4350; }
+  .card--porcelain .tag { opacity: .55; }
+  .card--titan {
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.05) 0%, transparent 30%),
+      linear-gradient(160deg, #131316, #0a0a0c);
+  }
+  .foot { margin-top: 40px; color: #64708233; font-size: 12px; color:#647082; }
+</style>
+</head>
+<body>
+  <h1>CodexStatus · UI 风格重设计方案</h1>
+  <p class="sub">横胶囊 / 竖 Orb / Panel 三件套 × 4 套风格 · 均含动效演示 · 点击进入</p>
+  <div class="grid">
+    <a class="card card--aurora" href="./aurora-glass.html">
+      <span class="tag">Scheme A</span>
+      <h2>极光玻璃 Aurora Glass</h2>
+      <p>深色玻璃拟态 + 极光流光描边。胶囊边框有缓慢旋转的极光色带，进度条带 shimmer 流光，Panel 卡片悬浮发光。</p>
+      <div class="swatches"><i style="background:#0b0e16"></i><i style="background:#5865f2"></i><i style="background:#38e8b1"></i><i style="background:#79c0ff"></i></div>
+    </a>
+    <a class="card card--cyber" href="./cyber-hud.html">
+      <span class="tag">Scheme B</span>
+      <h2>赛博终端 Cyber HUD</h2>
+      <p>黑底霓虹青 + 扫描线 + 等宽读数。胶囊切角造型像 HUD 仪表，Panel 是终端面板风，数据带故障闪烁与打字机效果。</p>
+      <div class="swatches"><i style="background:#050807"></i><i style="background:#00ffd5"></i><i style="background:#ff2d78"></i><i style="background:#ffb347"></i></div>
+    </a>
+    <a class="card card--porcelain" href="./porcelain.html">
+      <span class="tag">Scheme C</span>
+      <h2>瓷釉浅色 Porcelain</h2>
+      <p>奶油白瓷面 + 柔和彩色糖珠。浅色毛玻璃胶囊、大圆角白瓷卡片、弹性进度动画，整体轻盈友好，白天桌面不突兀。</p>
+      <div class="swatches"><i style="background:#fbfaf7"></i><i style="background:#ff9d76"></i><i style="background:#5fb8a0"></i><i style="background:#7c9cf5"></i></div>
+    </a>
+    <a class="card card--titan" href="./obsidian-titan.html">
+      <span class="tag">Scheme D</span>
+      <h2>黑曜钛金 Obsidian Titan</h2>
+      <p>近黑岩面 + 钛银分割线 + 琥珀金强调。金属高光边缘、刻度式进度环、金色扫光，沉稳高级的商务质感。</p>
+      <div class="swatches"><i style="background:#0a0a0c"></i><i style="background:#d9a441"></i><i style="background:#8f98a8"></i><i style="background:#3dd68c"></i></div>
+    </a>
+  </div>
+  <p class="foot">预览用静态页 · 数据为示意 · 确认风格后再落地到 Electron 项目</p>
+</body>
+</html>

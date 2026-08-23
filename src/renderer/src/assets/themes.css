@@ -1,0 +1,1839 @@
+/* =====================================================================
+   主题系统:5 套,单文件 token + 结构覆盖
+   [data-theme="midnight"] 默认深色青蓝(现状);其余 4 套对应 design-previews
+   每个 [data-theme] 块只覆盖 token 与该主题独有的结构装饰,
+   布局/功能/动效完全复用 main.css,不重复
+   ===================================================================== */
+
+/* ============ 公共:装饰节点(默认隐藏,各主题按需开启) ============ */
+/* capsule 装饰层:承载各主题常驻装饰(极光描边/扫描线/糖珠/金扫光);
+   非该主题时 display:none,不影响布局与点击;pointer-events 穿透 */
+.capsule__deco,
+.panel__deco {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+  overflow: hidden;
+  display: none;
+}
+
+.panel__deco {
+  z-index: 0;
+}
+
+/* =====================================================================
+   1. MIDNIGHT · 默认深色青蓝(现状)
+   无装饰节点,无切角,与改造前完全一致
+   ===================================================================== */
+[data-theme='midnight'] {
+  --capsule-radius: 20px;
+  --capsule-orb-radius: 17px;
+  --capsule-clip: none;
+  --panel-radius: 26px;
+  --panel-clip: inset(0 round 26px);
+}
+
+/* =====================================================================
+   2. AURORA · 极光玻璃
+   深色玻璃拟态 + 缓慢旋转的极光 conic 描边 + shimmer 流光进度条 + 内部漂移雾气
+   ===================================================================== */
+[data-theme='aurora'] {
+  /* 胶囊 */
+  --capsule-radius: 20px;
+  --capsule-orb-radius: 17px;
+  --capsule-clip: none;
+  --capsule-text: rgba(238, 244, 250, 0.95);
+  --capsule-bg: linear-gradient(168deg, rgba(30, 38, 54, 0.6) 0%, rgba(12, 16, 26, 0.68) 100%);
+  --capsule-orb-bg: linear-gradient(180deg, rgba(30, 38, 54, 0.62) 0%, rgba(12, 16, 26, 0.7) 100%);
+  --capsule-edge: rgba(140, 180, 255, 0.34);
+  --capsule-edge-soft: rgba(255, 255, 255, 0.035);
+  --capsule-filter: blur(14px) saturate(1.5);
+  --capsule-accent: #58e8b1;
+  /* panel */
+  --panel-radius: 26px;
+  --panel-clip: inset(0 round 26px);
+  --panel-border: 1px solid rgba(255, 255, 255, 0.09);
+  --panel-tint: radial-gradient(circle at 22% 0%, rgba(88, 232, 177, 0.06) 0%, transparent 46%),
+    radial-gradient(circle at 90% 8%, rgba(88, 101, 242, 0.08) 0%, transparent 42%);
+  --panel-bg: linear-gradient(168deg, #0d1118 0%, #131926 100%);
+  --panel-shadow: 0 32px 72px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  /* 色板 */
+  --panel-card: #141921;
+  --panel-card-2: #1a2030;
+  --panel-card-3: #222a3a;
+  --panel-inset: rgba(0, 0, 0, 0.32);
+  --panel-text: #e6edf3;
+  --panel-text-2: #8b98ac;
+  --panel-muted: #6f7d92;
+  --panel-accent: #79c0ff;
+  --panel-accent-2: #b585ff;
+  --panel-accent-soft: rgba(121, 192, 255, 0.14);
+  --panel-success: #38e8b1;
+  --panel-line: rgba(255, 255, 255, 0.08);
+  --panel-line-strong: rgba(140, 190, 255, 0.35);
+  --panel-icon-blue: #79c0ff;
+  --panel-icon-violet: #b585ff;
+  --panel-icon-amber: #ffdf8e;
+  --panel-icon-pink: #ffa27b;
+  --panel-icon-green: #38e8b1;
+}
+
+/* 极光描边层:conic 渐变随角度旋转,只露出 1.2px 的环 */
+@property --aurora-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+[data-theme='aurora'] .capsule__deco,
+[data-theme='aurora'] .panel__deco {
+  display: block;
+}
+
+[data-theme='aurora'] .capsule__deco::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.2px;
+  background: conic-gradient(
+    from var(--aurora-angle),
+    #5865f2 0deg,
+    #38e8b1 80deg,
+    #79c0ff 160deg,
+    #b585ff 240deg,
+    #5865f2 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: aurora-spin 7s linear infinite;
+}
+
+[data-theme='aurora'] .capsule--orb .capsule__deco::before {
+  padding: 1.2px;
+}
+
+[data-theme='aurora'] .panel__deco::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #5865f2, #38e8b1, #79c0ff, transparent);
+  opacity: 0.8;
+  animation: aurora-topline-hue 6s linear infinite;
+}
+
+/* 内部极光雾气:左下角一团缓慢漂移的柔光 */
+[data-theme='aurora'] .capsule__deco::after {
+  content: '';
+  position: absolute;
+  width: 130%;
+  height: 220%;
+  left: -30%;
+  bottom: -120%;
+  border-radius: inherit;
+  background: radial-gradient(closest-side, rgba(88, 232, 177, 0.17), transparent 72%);
+  animation: aurora-mist-drift 9s ease-in-out infinite alternate;
+}
+
+@keyframes aurora-spin {
+  to {
+    --aurora-angle: 360deg;
+  }
+}
+
+@keyframes aurora-topline-hue {
+  0%,
+  100% {
+    filter: hue-rotate(0deg);
+    opacity: 0.55;
+  }
+  50% {
+    filter: hue-rotate(36deg);
+    opacity: 0.95;
+  }
+}
+
+@keyframes aurora-mist-drift {
+  from {
+    transform: translate(-8%, 6%) rotate(-6deg);
+    opacity: 0.7;
+  }
+  to {
+    transform: translate(10%, -4%) rotate(5deg);
+    opacity: 1;
+  }
+}
+
+/* =====================================================================
+   3. CYBER · 赛博终端
+   切角外形 + 扫描线 + 四角瞄准括号 + 分段刻度进度条 + 霓虹读数 + 等宽字体
+   ===================================================================== */
+[data-theme='cyber'] {
+  --capsule-radius: 0px;
+  --capsule-orb-radius: 0px;
+  /* 切角 polygon:左上/右下斜切,HUD 感;圆角设 0 让 polygon 干净 */
+  --capsule-clip: polygon(
+    12px 0,
+    100% 0,
+    100% calc(100% - 12px),
+    calc(100% - 12px) 100%,
+    0 100%,
+    0 12px
+  );
+  --capsule-text: #d8fff6;
+  --capsule-bg: linear-gradient(170deg, rgba(6, 26, 22, 0.78), rgba(3, 10, 9, 0.86));
+  --capsule-orb-bg: linear-gradient(180deg, rgba(6, 26, 22, 0.78), rgba(3, 10, 9, 0.86));
+  --capsule-edge: rgba(0, 255, 213, 0.35);
+  --capsule-edge-soft: rgba(0, 255, 213, 0.06);
+  --capsule-filter: blur(10px);
+  --capsule-accent: #00ffd5;
+  --capsule-font: 'Cascadia Code', Consolas, 'Microsoft YaHei UI', monospace;
+  /* panel 切角更大 */
+  --panel-radius: 0px;
+  --panel-clip: polygon(
+    18px 0,
+    100% 0,
+    100% calc(100% - 18px),
+    calc(100% - 18px) 100%,
+    0 100%,
+    0 18px
+  );
+  --panel-border: 0;
+  --panel-tint: repeating-linear-gradient(
+    0deg,
+    transparent 0 3px,
+    rgba(0, 255, 213, 0.016) 3px 4px
+  );
+  --panel-bg: linear-gradient(168deg, #071210 0%, #050a09 100%);
+  --panel-shadow: inset 0 0 0 1px rgba(0, 255, 213, 0.22), 0 30px 70px rgba(0, 0, 0, 0.6);
+  /* 色板 */
+  --panel-card: rgba(0, 255, 213, 0.028);
+  --panel-card-2: rgba(0, 255, 213, 0.04);
+  --panel-card-3: rgba(0, 255, 213, 0.06);
+  --panel-inset: rgba(0, 0, 0, 0.34);
+  --panel-text: #c9eadf;
+  --panel-text-2: #6da39a;
+  --panel-muted: #4f7a70;
+  --panel-accent: #00ffd5;
+  --panel-accent-2: #ff2d78;
+  --panel-accent-soft: rgba(0, 255, 213, 0.14);
+  --panel-success: #9dff5e;
+  --panel-danger: #ff2d78;
+  --panel-line: rgba(0, 255, 213, 0.13);
+  --panel-line-strong: rgba(0, 255, 213, 0.25);
+  --panel-icon-blue: #00ffd5;
+  --panel-icon-violet: #ff2d78;
+  --panel-icon-amber: #ffb347;
+  --panel-icon-pink: #ff7ba6;
+  --panel-icon-green: #9dff5e;
+  --panel-font: 'Cascadia Code', Consolas, 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cyber'] .capsule__deco,
+[data-theme='cyber'] .panel__deco {
+  display: block;
+}
+
+/* 四角瞄准括号:左上/右下两个 L 形角标 */
+[data-theme='cyber'] .capsule__deco::before,
+[data-theme='cyber'] .capsule__deco::after {
+  content: '';
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  border: 0 solid var(--capsule-accent);
+  filter: drop-shadow(0 0 4px var(--capsule-accent));
+}
+
+[data-theme='cyber'] .capsule__deco::before {
+  top: 2px;
+  left: 2px;
+  border-top-width: 1.5px;
+  border-left-width: 1.5px;
+}
+
+[data-theme='cyber'] .capsule__deco::after {
+  bottom: 2px;
+  right: 2px;
+  border-bottom-width: 1.5px;
+  border-right-width: 1.5px;
+}
+
+/* 赛博胶囊扫描线:细亮线从上往下连续扫,周期拉长降低频繁感;
+   用 deco 背景动画承载,不占 ::before/::after(留给四角括号);
+   size 300% 保证 loop 两端(100%↔0%)亮带完全在胶囊外,无闪 */
+[data-theme='cyber'] .capsule__deco {
+  background: linear-gradient(
+    180deg,
+    transparent 44%,
+    rgba(0, 255, 213, 0.14) 50%,
+    transparent 56%
+  );
+  background-size: 100% 300%;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  animation: cyber-capsule-scan 8s linear infinite;
+}
+
+@keyframes cyber-capsule-scan {
+  from {
+    background-position: 0 100%;
+  }
+  to {
+    background-position: 0 0%;
+  }
+}
+
+/* panel 不加扫描线(仅胶囊保留四角括号);赛博 panel 靠切角+描边撑视觉 */
+
+/* =====================================================================
+   4. TITAN · 黑曜钛金
+   近黑岩面 + 钛银高光棱线 + 琥珀金强调 + 刻度进度条 + 金色扫光
+   ===================================================================== */
+[data-theme='titan'] {
+  --capsule-radius: 14px;
+  --capsule-orb-radius: 14px;
+  --capsule-clip: none;
+  --capsule-text: #eceded;
+  --capsule-bg: repeating-linear-gradient(
+      115deg,
+      rgba(255, 255, 255, 0.012) 0 2px,
+      transparent 2px 4px
+    ),
+    linear-gradient(170deg, #232327 0%, #131316 55%, #0d0d10 100%);
+  --capsule-orb-bg: repeating-linear-gradient(
+      115deg,
+      rgba(255, 255, 255, 0.012) 0 2px,
+      transparent 2px 4px
+    ),
+    linear-gradient(175deg, #232327 0%, #131316 55%, #0d0d10 100%);
+  --capsule-edge: rgba(255, 255, 255, 0.05);
+  --capsule-edge-soft: rgba(255, 255, 255, 0.16);
+  --capsule-filter: none;
+  --capsule-accent: #d9a441;
+  --panel-radius: 22px;
+  --panel-clip: inset(0 round 22px);
+  --panel-border: 0;
+  --panel-tint: repeating-linear-gradient(
+      115deg,
+      rgba(255, 255, 255, 0.008) 0 2px,
+      transparent 2px 4px
+    ),
+    radial-gradient(circle at 18% 0%, rgba(217, 164, 65, 0.05) 0%, transparent 40%);
+  --panel-bg: linear-gradient(168deg, #1a1a1e 0%, #101013 100%);
+  --panel-shadow: 0 32px 72px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 -1px 0 rgba(0, 0, 0, 0.6),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  /* 色板 */
+  --panel-card: linear-gradient(170deg, #26262b 0%, #18181c 100%);
+  --panel-card-2: linear-gradient(170deg, #202024 0%, #151518 100%);
+  --panel-card-3: linear-gradient(170deg, #2a2a2f 0%, #19191d 100%);
+  --panel-inset: rgba(0, 0, 0, 0.35);
+  --panel-text: #e8e8ea;
+  --panel-text-2: #8f939b;
+  --panel-muted: #6b6e76;
+  --panel-accent: #d9a441;
+  --panel-accent-2: #9db4f8;
+  --panel-accent-soft: rgba(217, 164, 65, 0.14);
+  --panel-success: #7fc99a;
+  --panel-danger: #e89a9a;
+  --panel-line: rgba(255, 255, 255, 0.045);
+  --panel-line-strong: rgba(217, 164, 65, 0.3);
+  --panel-icon-blue: #9db4f8;
+  --panel-icon-violet: #b595e8;
+  --panel-icon-amber: #ecd9ae;
+  --panel-icon-pink: #e89ab8;
+  --panel-icon-green: #7fc99a;
+}
+
+[data-theme='titan'] .capsule__deco,
+[data-theme='titan'] .panel__deco {
+  display: block;
+}
+
+/* 金色扫光:周期性一道斜光掠过岩面 */
+[data-theme='titan'] .capsule__deco::after {
+  content: '';
+  position: absolute;
+  inset: -40%;
+  background: linear-gradient(115deg, transparent 42%, rgba(217, 164, 65, 0.13) 50%, transparent 58%);
+  transform: translateX(-70%);
+  animation: titan-gold-sweep 5.5s ease-in-out infinite;
+}
+
+[data-theme='titan'] .capsule--orb .capsule__deco::after {
+  background: linear-gradient(175deg, transparent 42%, rgba(217, 164, 65, 0.13) 50%, transparent 58%);
+  transform: translateY(-70%);
+  animation-name: titan-gold-sweep-y;
+}
+
+/* panel 顶棱:一条金色发丝线 */
+[data-theme='titan'] .panel__deco::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 6%;
+  right: 6%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(217, 164, 65, 0.75), transparent);
+  filter: drop-shadow(0 0 4px rgba(217, 164, 65, 0.4));
+}
+
+@keyframes titan-gold-sweep {
+  0%,
+  55% {
+    transform: translateX(-70%);
+  }
+  85%,
+  100% {
+    transform: translateX(70%);
+  }
+}
+
+@keyframes titan-gold-sweep-y {
+  0%,
+  55% {
+    transform: translateY(-70%);
+  }
+  85%,
+  100% {
+    transform: translateY(70%);
+  }
+}
+
+/* =====================================================================
+   各主题进度条形态覆盖
+   A:shimmer 流光;B:分段刻度10格;D:刻度线条;C/midnight:普通渐变(默认)
+   ===================================================================== */
+
+/* A 极光:shimmer 流光扫过填充条 */
+[data-theme='aurora'] .capsule__progress span::after,
+[data-theme='aurora'] .quota-card__progress span::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.75) 50%, transparent 70%);
+  transform: translateX(-110%);
+  animation: aurora-shimmer 2.8s ease-in-out infinite;
+  animation-delay: 1.2s;
+}
+
+[data-theme='aurora'] .capsule__progress span,
+[data-theme='aurora'] .quota-card__progress span {
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes aurora-shimmer {
+  to {
+    transform: translateX(230%);
+  }
+}
+
+/* B 赛博:分段刻度 10 格,用 repeating mask 把填充切成等宽亮段 */
+[data-theme='cyber'] .capsule__progress,
+[data-theme='cyber'] .quota-card__progress {
+  height: 6px;
+  background: rgba(0, 255, 213, 0.12);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 255, 213, 0.14);
+}
+
+[data-theme='cyber'] .capsule__progress span,
+[data-theme='cyber'] .quota-card__progress span {
+  background: var(--metric-accent, var(--capsule-accent));
+  box-shadow: 0 0 7px var(--metric-accent, var(--capsule-accent));
+  /* repeating-linear-gradient 模拟 10 格:亮段中间留 2px 间隙 */
+  -webkit-mask: repeating-linear-gradient(
+    90deg,
+    #000 0,
+    #000 calc(10% - 2px),
+    transparent calc(10% - 2px),
+    transparent 10%
+  );
+  mask: repeating-linear-gradient(
+    90deg,
+    #000 0,
+    #000 calc(10% - 2px),
+    transparent calc(10% - 2px),
+    transparent 10%
+  );
+}
+
+/* D 钛金:刻度线条,每 20% 一道竖线压在槽上 */
+[data-theme='titan'] .capsule__progress,
+[data-theme='titan'] .quota-card__progress {
+  height: 5px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #060608, #1a1a1f);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  position: relative;
+}
+
+[data-theme='titan'] .capsule__progress span,
+[data-theme='titan'] .quota-card__progress span {
+  background: linear-gradient(90deg, #8a6a2c, var(--capsule-accent) 60%, #f0cd82);
+  box-shadow: 0 0 8px rgba(217, 164, 65, 0.4);
+}
+
+[data-theme='titan'] .capsule__progress::after,
+[data-theme='titan'] .quota-card__progress::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 calc(20% - 1px),
+    rgba(0, 0, 0, 0.75) calc(20% - 1px) 20%
+  );
+  pointer-events: none;
+}
+
+/* =====================================================================
+   各主题强调色适配:percentage/weekly/credit/pick 文字色随主题
+   ===================================================================== */
+
+/* B 赛博:百分比/数值带霓虹辉光 */
+[data-theme='cyber'] .capsule__percent,
+[data-theme='cyber'] .capsule__weekly,
+[data-theme='cyber'] .capsule__stat-value {
+  text-shadow: 0 0 12px var(--metric-accent, var(--capsule-accent));
+}
+
+[data-theme='cyber'] .capsule__weekly {
+  color: #eafffb;
+  text-shadow: 0 0 10px rgba(0, 255, 213, 0.35);
+}
+
+[data-theme='cyber'] .capsule__stat-value {
+  color: #eafffb;
+}
+
+[data-theme='cyber'] .capsule__stat-label {
+  color: rgba(0, 255, 213, 0.5);
+}
+
+/* D 钛金:周重置大字用金属渐变文字 */
+[data-theme='titan'] .capsule__weekly,
+[data-theme='titan'] .panel__title {
+  background: linear-gradient(180deg, #f5f0e4, #c9cbd2);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+[data-theme='titan'] .capsule__percent {
+  text-shadow: 0 1px 8px rgba(217, 164, 65, 0.28);
+}
+
+/* =====================================================================
+   PANEL 组件结构覆盖(按主题逐组件还原 design-previews)
+   类名对齐项目真实 DOM:.panel__tabs/.panel__tab/.panel__title/.quota-card/
+   .usage-card/.detail-row/.team-row/.segmented/.toggle-switch/.ghost-button 等
+   ===================================================================== */
+
+/* ---------- tabs 容器 ---------- */
+[data-theme='aurora'] .panel__tabs {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+}
+[data-theme='aurora'] .panel__tab.is-active {
+  background: linear-gradient(135deg, rgba(88, 101, 242, 0.34), rgba(56, 232, 177, 0.26));
+  border-color: rgba(140, 180, 255, 0.35);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(88, 101, 242, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+[data-theme='aurora'] .panel__tab {
+  color: #93a1b5;
+}
+[data-theme='aurora'] .panel__tab:hover:not(.is-active) {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme='cyber'] .panel__tabs {
+  background: rgba(0, 255, 213, 0.03);
+  border: 1px solid rgba(0, 255, 213, 0.14);
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  gap: 6px;
+}
+[data-theme='cyber'] .panel__tab {
+  color: #4f7a70;
+  border: 1px solid rgba(0, 255, 213, 0.22);
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+[data-theme='cyber'] .panel__tab:hover:not(.is-active) {
+  color: #8af5df;
+  border-color: rgba(0, 255, 213, 0.5);
+  background: transparent;
+}
+[data-theme='cyber'] .panel__tab.is-active {
+  color: #031512;
+  background: linear-gradient(135deg, #00ffd5, #0ec9a8);
+  border-color: transparent;
+  box-shadow: 0 0 18px rgba(0, 255, 213, 0.35);
+}
+
+[data-theme='titan'] .panel__tabs {
+  background: linear-gradient(180deg, #0a0a0c, #141417);
+  border: 0;
+  border-radius: 12px;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+}
+[data-theme='titan'] .panel__tab {
+  color: #7d8089;
+  border: 0;
+  border-radius: 9px;
+}
+[data-theme='titan'] .panel__tab:hover:not(.is-active) {
+  color: #d5d6da;
+  background: transparent;
+}
+[data-theme='titan'] .panel__tab.is-active {
+  background: linear-gradient(180deg, #33333a, #232329);
+  color: #ecd9ae;
+  border: 0;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* ---------- panel__title ---------- */
+[data-theme='aurora'] .panel__title {
+  font-size: 21px;
+  font-weight: 720;
+  letter-spacing: 0.3px;
+}
+[data-theme='cyber'] .panel__title {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: #eafffb;
+}
+[data-theme='cyber'] .panel__title::before {
+  content: '> ';
+  color: #00ffd5;
+}
+[data-theme='cyber'] .panel__title::after {
+  content: '▮';
+  color: #00ffd5;
+  margin-left: 4px;
+  animation: cyber-blink 1.1s steps(1) infinite;
+}
+@keyframes cyber-blink {
+  50% {
+    opacity: 0;
+  }
+}
+[data-theme='titan'] .panel__title {
+  font-size: 20px;
+  font-weight: 720;
+  letter-spacing: 0.4px;
+}
+
+/* ---------- quota-card / usage-card ---------- */
+/* A 极光:玻璃卡 + hover 发光边 */
+[data-theme='aurora'] .quota-card,
+[data-theme='aurora'] .usage-card {
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+[data-theme='aurora'] .quota-card:hover {
+  border-color: rgba(140, 190, 255, 0.35);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.32), 0 0 22px rgba(88, 101, 242, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+[data-theme='aurora'] .usage-card:hover {
+  border-color: rgba(140, 190, 255, 0.35);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.32), 0 0 22px rgba(88, 101, 242, 0.14);
+}
+[data-theme='aurora'] .quota-card.is-accent {
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025));
+}
+[data-theme='aurora'] .quota-card.is-accent::before {
+  background: radial-gradient(58% 62% at 50% 0%, rgba(88, 232, 177, 0.1) 0%, transparent 72%);
+}
+[data-theme='aurora'] .quota-card__label {
+  font-weight: 660;
+}
+[data-theme='aurora'] .quota-card__value {
+  font-weight: 770;
+  text-shadow: 0 0 16px color-mix(in srgb, var(--metric-accent) 30%, transparent);
+}
+
+/* B 赛博:切角卡 + 括号标签 + 霓虹读数 */
+[data-theme='cyber'] .quota-card,
+[data-theme='cyber'] .usage-card {
+  border-radius: 0;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  border: 1px solid rgba(0, 255, 213, 0.2);
+  background: rgba(0, 255, 213, 0.028);
+  box-shadow: none;
+}
+[data-theme='cyber'] .usage-card {
+  border-color: rgba(0, 255, 213, 0.16);
+  background: rgba(0, 255, 213, 0.02);
+}
+[data-theme='cyber'] .quota-card:hover {
+  background: rgba(0, 255, 213, 0.06);
+  box-shadow: 0 0 22px rgba(0, 255, 213, 0.12), inset 0 0 18px rgba(0, 255, 213, 0.05);
+  transform: translateY(-2px);
+  border-color: rgba(0, 255, 213, 0.2);
+}
+[data-theme='cyber'] .usage-card:hover {
+  background: rgba(0, 255, 213, 0.05);
+  border-color: rgba(0, 255, 213, 0.3);
+  box-shadow: 0 0 18px rgba(0, 255, 213, 0.1);
+}
+[data-theme='cyber'] .quota-card.is-accent {
+  border-color: rgba(255, 179, 71, 0.38);
+  background: rgba(255, 179, 71, 0.04);
+}
+[data-theme='cyber'] .quota-card.is-accent:hover {
+  box-shadow: 0 0 22px rgba(255, 179, 71, 0.14), inset 0 0 18px rgba(255, 179, 71, 0.05);
+}
+[data-theme='cyber'] .quota-card__label {
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+[data-theme='cyber'] .quota-card__label::before {
+  content: '[ ';
+  color: #4f7a70;
+}
+[data-theme='cyber'] .quota-card__label::after {
+  content: ' ]';
+  color: #4f7a70;
+}
+[data-theme='cyber'] .quota-card__mode {
+  letter-spacing: 1px;
+}
+[data-theme='cyber'] .quota-card__value,
+[data-theme='cyber'] .usage-summary__value {
+  font-weight: 700;
+  text-shadow: 0 0 16px color-mix(in srgb, var(--metric-accent, #00ffd5) 60%, transparent);
+}
+[data-theme='cyber'] .usage-card__title {
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #8af5df;
+}
+[data-theme='cyber'] .usage-card__title::before {
+  content: '# ';
+  color: #4f7a70;
+}
+[data-theme='cyber'] .quota-card__reset {
+  color: #6da39a;
+}
+[data-theme='cyber'] .quota-card__expiry {
+  color: #43655e;
+}
+
+/* D 钛金:黑曜石卡 + 金顶饰 + 金属阴影 */
+[data-theme='titan'] .quota-card,
+[data-theme='titan'] .usage-card {
+  border-radius: 16px;
+  border: 0;
+  background: linear-gradient(170deg, #26262b 0%, #18181c 100%);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.045);
+}
+[data-theme='titan'] .usage-card {
+  background: linear-gradient(170deg, #222227 0%, #16161a 100%);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+[data-theme='titan'] .quota-card:hover {
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5),
+    0 0 24px color-mix(in srgb, var(--metric-accent, #d9a441) 10%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 0 0 1px color-mix(in srgb, var(--metric-accent, #d9a441) 30%, transparent);
+}
+[data-theme='titan'] .usage-card:hover {
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+[data-theme='titan'] .quota-card.is-accent::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 14%;
+  right: 14%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--metric-accent, #d9a441), transparent);
+  opacity: 0.9;
+}
+[data-theme='titan'] .quota-card__label {
+  font-weight: 700;
+  color: #d5d6da;
+}
+[data-theme='titan'] .quota-card__value {
+  font-weight: 770;
+  text-shadow: 0 1px 10px color-mix(in srgb, var(--metric-accent, #d9a441) 25%, transparent);
+}
+[data-theme='titan'] .usage-card__title {
+  font-weight: 700;
+  color: #d5d6da;
+}
+[data-theme='titan'] .quota-card__reset {
+  color: #8f939b;
+}
+[data-theme='titan'] .quota-card__expiry {
+  color: #63666e;
+}
+
+/* ---------- usage-summary 分类着色(各主题) ---------- */
+[data-theme='aurora'] .usage-summary__value--input {
+  color: #79c0ff;
+}
+[data-theme='aurora'] .usage-summary__value--output {
+  color: #b585ff;
+}
+[data-theme='aurora'] .usage-summary__value--cached {
+  color: #38e8b1;
+}
+[data-theme='aurora'] .usage-summary__value--cost {
+  color: #ffdf8e;
+}
+[data-theme='cyber'] .usage-summary__value--input {
+  color: #00ffd5;
+}
+[data-theme='cyber'] .usage-summary__value--output {
+  color: #ff2d78;
+}
+[data-theme='cyber'] .usage-summary__value--cached {
+  color: #9dff5e;
+}
+[data-theme='cyber'] .usage-summary__value--cost {
+  color: #ffb347;
+}
+[data-theme='titan'] .usage-summary__value {
+  color: #e8e8ea;
+}
+[data-theme='titan'] .usage-summary__value--input {
+  color: #9db4f8;
+}
+[data-theme='titan'] .usage-summary__value--output {
+  color: #e89a9a;
+}
+[data-theme='titan'] .usage-summary__value--cached {
+  color: #7fc99a;
+}
+[data-theme='titan'] .usage-summary__value--cost {
+  color: #d9a441;
+}
+
+/* ---------- usage-chart 柱状图 ---------- */
+[data-theme='aurora'] .usage-chart__bar {
+  background: linear-gradient(180deg, #79c0ff 0%, #5865f2 100%);
+}
+[data-theme='cyber'] .usage-chart__bar {
+  background: linear-gradient(180deg, rgba(0, 255, 213, 0.95), rgba(0, 255, 213, 0.25));
+  box-shadow: 0 0 10px rgba(0, 255, 213, 0.25);
+  border-radius: 4px 4px 2px 2px;
+}
+[data-theme='cyber'] .usage-chart__bar--stack .usage-chart__bar-seg.is-input {
+  background: rgba(0, 255, 213, 0.9);
+}
+[data-theme='titan'] .usage-chart__bar {
+  background: linear-gradient(180deg, #e3c078, #8a6a2c);
+  box-shadow: 0 0 10px rgba(217, 164, 65, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* ---------- detail-row ---------- */
+/* A 极光:玻璃底 + hover 发光位移 */
+[data-theme='aurora'] .detail-row {
+  border-radius: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.032);
+}
+[data-theme='aurora'] .detail-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(140, 190, 255, 0.28);
+  transform: translateX(3px);
+}
+[data-theme='aurora'] .detail-row__icon {
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--icon-tone, var(--panel-accent)) 22%, transparent);
+}
+[data-theme='aurora'] .detail-row__value {
+  text-shadow: 0 0 12px color-mix(in srgb, var(--icon-tone, var(--panel-accent)) 30%, transparent);
+}
+
+/* B 赛博:左色条 + 霓虹值 + hover 平移 */
+[data-theme='cyber'] .detail-row {
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  border: 1px solid rgba(0, 255, 213, 0.13);
+  border-left: 2px solid var(--icon-tone, var(--panel-accent));
+  background: rgba(0, 255, 213, 0.02);
+}
+[data-theme='cyber'] .detail-row:hover {
+  background: rgba(0, 255, 213, 0.055);
+  transform: translateX(4px);
+  box-shadow: 0 0 16px rgba(0, 255, 213, 0.08);
+  border-color: rgba(0, 255, 213, 0.13);
+  border-left-color: var(--icon-tone, var(--panel-accent));
+}
+[data-theme='cyber'] .detail-row__icon {
+  border-radius: 0;
+  background: transparent;
+}
+[data-theme='cyber'] .detail-row__icon svg {
+  filter: drop-shadow(0 0 5px var(--icon-tone, var(--panel-accent)));
+}
+[data-theme='cyber'] .detail-row__value {
+  color: var(--icon-tone, var(--panel-accent));
+  text-shadow: 0 0 8px color-mix(in srgb, var(--icon-tone, var(--panel-accent)) 60%, transparent);
+}
+[data-theme='cyber'] .detail-row__label {
+  letter-spacing: 0.5px;
+}
+
+/* D 钛金:金属行板 + 渐变 icon 底 */
+[data-theme='titan'] .detail-row {
+  border-radius: 13px;
+  border: 0;
+  background: linear-gradient(170deg, #202024 0%, #151518 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+    0 4px 10px rgba(0, 0, 0, 0.3);
+}
+[data-theme='titan'] .detail-row:hover {
+  transform: translateX(3px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 0 0 1px color-mix(in srgb, var(--icon-tone, var(--panel-accent)) 35%, transparent),
+    0 6px 16px rgba(0, 0, 0, 0.4);
+}
+[data-theme='titan'] .detail-row__icon {
+  border-radius: 10px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--icon-tone, var(--panel-accent)) 20%, #1a1a1e), #121215);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+[data-theme='titan'] .detail-row__label {
+  color: #d5d6da;
+}
+[data-theme='titan'] .detail-row__value {
+  color: #f0e6cf;
+}
+[data-theme='titan'] .detail-row__link {
+  color: #ecd9ae;
+}
+
+/* ---------- team-row ---------- */
+/* A 极光:玻璃底 */
+[data-theme='aurora'] .team-row {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+}
+[data-theme='aurora'] .team-row:hover {
+  border-color: rgba(140, 190, 255, 0.3);
+  transform: translateX(3px);
+  background: rgba(255, 255, 255, 0.06);
+}
+[data-theme='aurora'] .team-row__rank {
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+[data-theme='aurora'] .team-row.is-top-1 .team-row__rank {
+  color: #1a1d24;
+  background: linear-gradient(135deg, #ffd97a, #e8a53e);
+  box-shadow: 0 0 12px rgba(232, 165, 62, 0.4);
+}
+[data-theme='aurora'] .team-row.is-top-2 .team-row__rank {
+  color: #1a1d24;
+  background: linear-gradient(135deg, #e8edf4, #9faab8);
+}
+[data-theme='aurora'] .team-row.is-top-3 .team-row__rank {
+  color: #1a1d24;
+  background: linear-gradient(135deg, #f0b089, #c4713d);
+}
+
+/* B 赛博:左色条 + 切角排名 */
+[data-theme='cyber'] .team-row {
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  border: 1px solid rgba(0, 255, 213, 0.13);
+  border-left: 2px solid var(--rk, #33544c);
+  background: rgba(0, 255, 213, 0.02);
+}
+[data-theme='cyber'] .team-row:hover {
+  background: rgba(0, 255, 213, 0.05);
+  transform: translateX(3px);
+  box-shadow: 0 0 14px rgba(0, 255, 213, 0.08);
+}
+[data-theme='cyber'] .team-row__rank {
+  border-radius: 0;
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  background: rgba(0, 0, 0, 0.4);
+  color: #4f7a70;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+[data-theme='cyber'] .team-row.is-top-1 .team-row__rank {
+  color: #ffb347;
+  text-shadow: 0 0 8px rgba(255, 179, 71, 0.7);
+}
+[data-theme='cyber'] .team-row.is-top-2 .team-row__rank {
+  color: #9be8ff;
+  text-shadow: 0 0 8px rgba(155, 232, 255, 0.6);
+}
+[data-theme='cyber'] .team-row.is-top-3 .team-row__rank {
+  color: #ff9d76;
+  text-shadow: 0 0 8px rgba(255, 157, 118, 0.6);
+}
+
+/* D 钛金:金属行板 + 金属排名 */
+[data-theme='titan'] .team-row {
+  border-radius: 13px;
+  border: 0;
+  background: linear-gradient(170deg, #202024 0%, #151518 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+    0 4px 10px rgba(0, 0, 0, 0.3);
+}
+[data-theme='titan'] .team-row:hover {
+  transform: translateX(3px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 0 0 1px color-mix(in srgb, var(--metric-accent, #d9a441) 32%, transparent),
+    0 6px 16px rgba(0, 0, 0, 0.4);
+}
+[data-theme='titan'] .team-row__rank {
+  border-radius: 9px;
+  background: linear-gradient(180deg, #1a1a1e, #101013);
+  color: #6b6e76;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+[data-theme='titan'] .team-row.is-top-1 .team-row__rank {
+  background: linear-gradient(135deg, #f0cd82, #c9962e);
+  color: #1a140a;
+  box-shadow: 0 0 12px rgba(217, 164, 65, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+[data-theme='titan'] .team-row.is-top-2 .team-row__rank {
+  background: linear-gradient(135deg, #dfe3ea, #9aa2ae);
+  color: #1a1a1e;
+}
+[data-theme='titan'] .team-row.is-top-3 .team-row__rank {
+  background: linear-gradient(135deg, #e0a878, #b06a38);
+  color: #1f1208;
+}
+
+/* team-row 文字色适配 */
+[data-theme='cyber'] .team-row__name {
+  color: #eafffb;
+  letter-spacing: 0.5px;
+}
+[data-theme='cyber'] .team-row__value {
+  text-shadow: 0 0 10px color-mix(in srgb, var(--metric-accent, #00ffd5) 60%, transparent);
+}
+[data-theme='titan'] .team-row__name {
+  color: #d5d6da;
+}
+[data-theme='titan'] .team-row__value {
+  text-shadow: 0 1px 8px color-mix(in srgb, var(--metric-accent, #d9a441) 25%, transparent);
+}
+
+/* team-row bar 轨道(钛金/赛博刻度感) */
+[data-theme='titan'] .team-row__bar,
+[data-theme='titan'] .team-row__window-bar {
+  background: linear-gradient(180deg, #060608, #1a1a1f);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+[data-theme='cyber'] .team-row__bar,
+[data-theme='cyber'] .team-row__window-bar {
+  background: rgba(0, 255, 213, 0.08);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 255, 213, 0.15);
+}
+[data-theme='cyber'] .team-row__bar-fill,
+[data-theme='cyber'] .team-row__window-bar-fill {
+  box-shadow: 0 0 6px color-mix(in srgb, var(--metric-accent, #00ffd5) 60%, transparent);
+}
+[data-theme='titan'] .team-row__bar-fill,
+[data-theme='titan'] .team-row__window-bar-fill {
+  box-shadow: 0 0 6px color-mix(in srgb, var(--metric-accent, #d9a441) 40%, transparent);
+}
+
+/* ---------- segmented ---------- */
+/* A 极光:玻璃底 + 渐变 active */
+[data-theme='aurora'] .segmented {
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  min-height: 32px;
+}
+[data-theme='aurora'] .segmented button {
+  border-radius: 8px;
+  color: #8b98ac;
+  min-height: 24px;
+  padding: 4px 12px;
+  font-size: 11.5px;
+}
+[data-theme='aurora'] .segmented button.is-active {
+  color: #fff;
+  background: linear-gradient(135deg, rgba(88, 101, 242, 0.5), rgba(56, 232, 177, 0.36));
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(88, 101, 242, 0.3);
+}
+[data-theme='aurora'] .segmented button:hover:not(.is-active):not(:disabled) {
+  color: #fff;
+}
+
+/* B 赛博:切角按钮 + 霓虹 active */
+[data-theme='cyber'] .segmented {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  background: transparent;
+  border: 0;
+  gap: 4px;
+  min-height: 32px;
+}
+[data-theme='cyber'] .segmented button {
+  border-radius: 0;
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  border: 1px solid rgba(0, 255, 213, 0.2);
+  color: #4f7a70;
+  letter-spacing: 1px;
+  font-size: 10.5px;
+  min-height: 24px;
+  padding: 4px 11px;
+}
+[data-theme='cyber'] .segmented button.is-active {
+  color: #00ffd5;
+  background: rgba(0, 255, 213, 0.14);
+  border-color: rgba(0, 255, 213, 0.55);
+  text-shadow: 0 0 8px rgba(0, 255, 213, 0.6);
+}
+[data-theme='cyber'] .segmented button:hover:not(.is-active):not(:disabled) {
+  color: #8af5df;
+  border-color: rgba(0, 255, 213, 0.5);
+  background: transparent;
+}
+
+/* D 钛金:金属分段器 + 金色 active */
+[data-theme='titan'] .segmented {
+  border-radius: 10px;
+  background: linear-gradient(180deg, #0a0a0c, #141417);
+  border: 0;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7);
+  min-height: 32px;
+}
+[data-theme='titan'] .segmented button {
+  border-radius: 8px;
+  border: 0;
+  color: #7d8089;
+  min-height: 24px;
+  padding: 4px 12px;
+  font-size: 11.5px;
+}
+[data-theme='titan'] .segmented button.is-active {
+  color: #f0e6cf;
+  background: linear-gradient(180deg, #3a3325, #2a2519);
+  box-shadow: inset 0 1px 0 rgba(240, 205, 130, 0.25), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+[data-theme='titan'] .segmented button:hover:not(.is-active):not(:disabled) {
+  color: #d5d6da;
+  background: transparent;
+}
+
+/* ---------- toggle-switch ---------- */
+/* A 极光:渐变开态 */
+[data-theme='aurora'] .toggle-switch.is-checked .toggle-switch__track {
+  background: linear-gradient(135deg, #5865f2, #38b8a1);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2), 0 0 12px rgba(88, 101, 242, 0.35);
+}
+[data-theme='aurora'] .toggle-switch__thumb {
+  background: linear-gradient(180deg, #fff, #cfd6df);
+}
+
+/* B 赛博:切角 + 霓虹开 */
+[data-theme='cyber'] .toggle-switch__track {
+  border-radius: 0;
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  background: rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(0, 255, 213, 0.3);
+}
+[data-theme='cyber'] .toggle-switch.is-checked .toggle-switch__track {
+  background: rgba(0, 255, 213, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(0, 255, 213, 0.6), 0 0 12px rgba(0, 255, 213, 0.2);
+}
+[data-theme='cyber'] .toggle-switch__thumb {
+  background: #33544c;
+}
+[data-theme='cyber'] .toggle-switch.is-checked .toggle-switch__thumb {
+  background: #00ffd5;
+  box-shadow: 0 0 8px #00ffd5;
+}
+
+/* D 钛金:金属开 */
+[data-theme='titan'] .toggle-switch__track {
+  border-radius: 999px;
+  background: linear-gradient(180deg, #060608, #1a1a1f);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+}
+[data-theme='titan'] .toggle-switch.is-checked .toggle-switch__track {
+  background: linear-gradient(180deg, #8a6a2c, #6e521e);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 12px rgba(217, 164, 65, 0.3);
+}
+[data-theme='titan'] .toggle-switch__thumb {
+  background: linear-gradient(180deg, #3a3a41, #26262b);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+[data-theme='titan'] .toggle-switch.is-checked .toggle-switch__thumb {
+  background: linear-gradient(180deg, #f5e2b0, #e3bd6d);
+}
+
+/* ---------- ghost-button(收起/刷新/发送/检查更新) ---------- */
+/* A 极光:玻璃胶囊 */
+[data-theme='aurora'] .ghost-button {
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #dbe4ee;
+  padding: 7px 16px;
+  font-size: 12px;
+}
+[data-theme='aurora'] .ghost-button:hover {
+  background: rgba(88, 101, 242, 0.22);
+  border-color: rgba(140, 180, 255, 0.4);
+  color: #fff;
+}
+[data-theme='aurora'] .ghost-button--accent {
+  border-color: rgba(56, 232, 177, 0.35);
+  background: rgba(56, 232, 177, 0.1);
+  color: #5fe8bb;
+  padding: 6px 15px;
+  font-size: 11.5px;
+}
+[data-theme='aurora'] .ghost-button--accent:hover {
+  background: rgba(56, 232, 177, 0.22);
+  box-shadow: 0 0 14px rgba(56, 232, 177, 0.2);
+  color: #5fe8bb;
+}
+[data-theme='aurora'] .about-row__btn {
+  border-color: rgba(217, 164, 65, 0.4);
+  background: rgba(217, 164, 65, 0.1);
+  color: #ecd9ae;
+  padding: 7px 16px;
+  font-size: 11.5px;
+}
+[data-theme='aurora'] .about-row__btn:hover {
+  background: rgba(217, 164, 65, 0.22);
+  box-shadow: 0 0 14px rgba(217, 164, 65, 0.18);
+}
+
+/* B 赛博:切角 + 霓虹 */
+[data-theme='cyber'] .ghost-button {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid rgba(0, 255, 213, 0.35);
+  background: transparent;
+  color: #00ffd5;
+  letter-spacing: 1px;
+  padding: 7px 16px;
+  font-size: 11.5px;
+}
+[data-theme='cyber'] .ghost-button:hover {
+  background: rgba(0, 255, 213, 0.14);
+  box-shadow: 0 0 16px rgba(0, 255, 213, 0.3);
+  border-color: rgba(0, 255, 213, 0.35);
+  color: #00ffd5;
+}
+[data-theme='cyber'] .ghost-button--accent {
+  border-color: rgba(157, 255, 94, 0.35);
+  color: #9dff5e;
+  padding: 5px 14px;
+  font-size: 10.5px;
+}
+[data-theme='cyber'] .ghost-button--accent:hover {
+  background: rgba(157, 255, 94, 0.12);
+  box-shadow: 0 0 14px rgba(157, 255, 94, 0.22);
+  color: #9dff5e;
+}
+[data-theme='cyber'] .about-row__btn {
+  border-color: rgba(255, 179, 71, 0.4);
+  color: #ffb347;
+  padding: 6px 15px;
+  font-size: 10.5px;
+}
+[data-theme='cyber'] .about-row__btn:hover {
+  background: rgba(255, 179, 71, 0.12);
+  box-shadow: 0 0 14px rgba(255, 179, 71, 0.22);
+}
+
+/* D 钛金:金属按钮 */
+[data-theme='titan'] .ghost-button {
+  border-radius: 10px;
+  border: 0;
+  background: linear-gradient(180deg, #33333a, #232329);
+  color: #e8e8ea;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  padding: 7px 17px;
+  font-size: 12px;
+}
+[data-theme='titan'] .ghost-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 7px 16px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  background: linear-gradient(180deg, #33333a, #232329);
+  color: #e8e8ea;
+}
+[data-theme='titan'] .ghost-button--accent {
+  background: linear-gradient(180deg, #e3bd6d, #c9962e);
+  color: #241a08;
+  box-shadow: 0 4px 12px rgba(217, 164, 65, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  padding: 6px 15px;
+  font-size: 11.5px;
+}
+[data-theme='titan'] .ghost-button--accent:hover {
+  background: linear-gradient(180deg, #e3bd6d, #c9962e);
+  box-shadow: 0 7px 18px rgba(217, 164, 65, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  color: #241a08;
+}
+[data-theme='titan'] .about-row__btn {
+  background: linear-gradient(180deg, #e3bd6d, #c9962e);
+  color: #241a08;
+  box-shadow: 0 4px 12px rgba(217, 164, 65, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  padding: 7px 17px;
+  font-size: 11.5px;
+}
+[data-theme='titan'] .about-row__btn:hover {
+  box-shadow: 0 7px 18px rgba(217, 164, 65, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+/* ---------- panel__footer ---------- */
+[data-theme='aurora'] .panel__footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+[data-theme='aurora'] .panel__footer-meta {
+  color: #6f7d92;
+}
+[data-theme='cyber'] .panel__footer {
+  border-top: 1px solid rgba(0, 255, 213, 0.14);
+}
+[data-theme='cyber'] .panel__footer-meta {
+  color: #4f7a70;
+  letter-spacing: 0.5px;
+}
+[data-theme='titan'] .panel__footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.5);
+}
+[data-theme='titan'] .panel__footer-meta {
+  color: #6b6e76;
+}
+
+/* ---------- settings-section / setting-row / inline-input ---------- */
+[data-theme='aurora'] .settings-section {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: none;
+}
+[data-theme='aurora'] .settings-section__title {
+  color: #6f7d92;
+}
+[data-theme='aurora'] .settings-section__title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.1), transparent);
+}
+[data-theme='aurora'] .setting-row {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+}
+[data-theme='aurora'] .setting-row:hover {
+  background: rgba(255, 255, 255, 0.055);
+  border-color: rgba(140, 190, 255, 0.22);
+}
+[data-theme='aurora'] .inline-input {
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.26);
+}
+
+[data-theme='cyber'] .settings-section {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+[data-theme='cyber'] .settings-section__title {
+  color: #4f7a70;
+  letter-spacing: 2.5px;
+}
+[data-theme='cyber'] .settings-section__title::before {
+  content: '# ';
+  color: rgba(0, 255, 213, 0.67);
+}
+[data-theme='cyber'] .setting-row {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid rgba(0, 255, 213, 0.11);
+  border-left: 2px solid rgba(0, 255, 213, 0.35);
+  background: rgba(0, 255, 213, 0.02);
+}
+[data-theme='cyber'] .setting-row:hover {
+  background: rgba(0, 255, 213, 0.05);
+  transform: translateX(3px);
+}
+[data-theme='cyber'] .inline-input {
+  border-radius: 0;
+  border: 1px solid rgba(0, 255, 213, 0.22);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+[data-theme='titan'] .settings-section {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+[data-theme='titan'] .settings-section__title {
+  color: #6b6e76;
+}
+[data-theme='titan'] .settings-section__title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(217, 164, 65, 0.28), transparent);
+}
+[data-theme='titan'] .setting-row {
+  border-radius: 12px;
+  border: 0;
+  background: linear-gradient(170deg, #202024 0%, #151518 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+    0 4px 10px rgba(0, 0, 0, 0.3);
+}
+[data-theme='titan'] .setting-row:hover {
+  transform: translateX(3px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 0 0 1px rgba(217, 164, 65, 0.3), 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+[data-theme='titan'] .inline-input {
+  border-radius: 10px;
+  border: 0;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+/* inline-input input 聚焦态(各主题 accent 描边) */
+[data-theme='aurora'] .inline-input:focus-within {
+  border-color: rgba(121, 192, 255, 0.45);
+  box-shadow: 0 0 0 3px rgba(121, 192, 255, 0.1);
+}
+[data-theme='cyber'] .inline-input:focus-within {
+  border-color: rgba(0, 255, 213, 0.6);
+  box-shadow: 0 0 12px rgba(0, 255, 213, 0.15);
+}
+[data-theme='titan'] .inline-input:focus-within {
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(217, 164, 65, 0.55);
+}
+
+/* ---------- team-announcement ---------- */
+/* A 极光:蓝玻璃 + 左渐变条 */
+[data-theme='aurora'] .team-announcement {
+  border-radius: 18px;
+  border: 1px solid rgba(121, 192, 255, 0.28);
+  background: linear-gradient(165deg, rgba(121, 192, 255, 0.09), rgba(121, 192, 255, 0.03));
+}
+[data-theme='aurora'] .team-announcement::before {
+  top: 14%;
+  bottom: 14%;
+  width: 3px;
+  background: linear-gradient(180deg, #79c0ff, #5865f2);
+  box-shadow: 0 0 10px rgba(121, 192, 255, 0.5);
+}
+[data-theme='aurora'] .team-announcement__label {
+  color: #79c0ff;
+}
+[data-theme='aurora'] .team-announcement__acknowledge {
+  border-radius: 999px;
+  border: 1px solid rgba(121, 192, 255, 0.35);
+  background: rgba(121, 192, 255, 0.1);
+  color: #a8d4ff;
+  padding: 5px 15px;
+  font-size: 11.5px;
+}
+[data-theme='aurora'] .team-announcement__acknowledge:hover {
+  background: rgba(121, 192, 255, 0.22);
+}
+
+/* B 赛博:终端日志 + 切角 + 左青条 */
+[data-theme='cyber'] .team-announcement {
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  border: 1px solid rgba(0, 255, 213, 0.25);
+  border-left: 2px solid #00ffd5;
+  background: rgba(0, 255, 213, 0.03);
+  box-shadow: 0 0 18px rgba(0, 255, 213, 0.07), inset 0 0 16px rgba(0, 255, 213, 0.04);
+}
+[data-theme='cyber'] .team-announcement::before {
+  display: none;
+}
+[data-theme='cyber'] .team-announcement__label {
+  color: #00ffd5;
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(0, 255, 213, 0.6);
+}
+[data-theme='cyber'] .team-announcement__label::before {
+  content: '[ ';
+  color: #4f7a70;
+}
+[data-theme='cyber'] .team-announcement__label::after {
+  content: ' ]';
+  color: #4f7a70;
+}
+[data-theme='cyber'] .team-announcement__text {
+  color: #b8e8dc;
+}
+[data-theme='cyber'] .team-announcement__acknowledge {
+  border-radius: 0;
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  border: 1px solid rgba(0, 255, 213, 0.4);
+  background: transparent;
+  color: #00ffd5;
+  padding: 4px 14px;
+  font-size: 10.5px;
+  letter-spacing: 1px;
+}
+[data-theme='cyber'] .team-announcement__acknowledge:hover {
+  background: rgba(0, 255, 213, 0.14);
+  box-shadow: 0 0 12px rgba(0, 255, 213, 0.25);
+}
+
+/* D 钛金:金属卡 + 左金条 */
+[data-theme='titan'] .team-announcement {
+  border-radius: 14px;
+  border: 0;
+  background: linear-gradient(170deg, #222227 0%, #16161a 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), inset 0 0 0 1px rgba(217, 164, 65, 0.18),
+    0 6px 16px rgba(0, 0, 0, 0.35);
+}
+[data-theme='titan'] .team-announcement::before {
+  top: 16%;
+  bottom: 16%;
+  width: 3px;
+  background: linear-gradient(180deg, #d9a441, #8a6a2c);
+  box-shadow: 0 0 8px rgba(217, 164, 65, 0.4);
+}
+[data-theme='titan'] .team-announcement__label {
+  color: #ecd9ae;
+}
+[data-theme='titan'] .team-announcement__text {
+  color: #c9cbd2;
+}
+[data-theme='titan'] .team-announcement__acknowledge {
+  border-radius: 9px;
+  border: 0;
+  background: linear-gradient(180deg, #3a3325, #2a2519);
+  color: #f0e6cf;
+  box-shadow: inset 0 1px 0 rgba(240, 205, 130, 0.25), 0 3px 8px rgba(0, 0, 0, 0.4);
+  padding: 5px 17px;
+  font-size: 11.5px;
+}
+[data-theme='titan'] .team-announcement__acknowledge:hover {
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 rgba(240, 205, 130, 0.35), 0 6px 14px rgba(0, 0, 0, 0.5);
+}
+
+/* ---------- team-broadcast(消息流 + 输入框 + 发送) ---------- */
+/* A 极光:玻璃项 + 蓝聚焦输入 */
+[data-theme='aurora'] .team-broadcast__item {
+  border-radius: 14px 14px 14px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.05);
+}
+[data-theme='aurora'] .team-broadcast__input {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.28);
+}
+[data-theme='aurora'] .team-broadcast__input:focus {
+  border-color: rgba(121, 192, 255, 0.45);
+  box-shadow: 0 0 0 3px rgba(121, 192, 255, 0.1);
+}
+[data-theme='aurora'] .team-broadcast__send {
+  padding: 9px 18px;
+  font-size: 12px;
+  border-radius: 12px;
+}
+
+/* B 赛博:终端日志项 + 切角 */
+[data-theme='cyber'] .team-broadcast__item {
+  border-radius: 0;
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  border: 1px solid rgba(0, 255, 213, 0.14);
+  background: rgba(0, 0, 0, 0.34);
+}
+[data-theme='cyber'] .team-broadcast__name {
+  color: #00ffd5;
+}
+[data-theme='cyber'] .team-broadcast__input {
+  border-radius: 0;
+  border: 1px solid rgba(0, 255, 213, 0.25);
+  background: rgba(0, 0, 0, 0.4);
+}
+[data-theme='cyber'] .team-broadcast__input:focus {
+  border-color: rgba(0, 255, 213, 0.6);
+  box-shadow: 0 0 12px rgba(0, 255, 213, 0.15);
+}
+[data-theme='cyber'] .team-broadcast__send {
+  padding: 8px 17px;
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+
+/* D 钛金:金属消息卡 + 凹陷输入 */
+[data-theme='titan'] .team-broadcast__item {
+  border-radius: 12px 12px 12px 4px;
+  border: 0;
+  background: linear-gradient(170deg, #222227, #18181c);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+[data-theme='titan'] .team-broadcast__name {
+  color: #9aa2ae;
+}
+[data-theme='titan'] .team-broadcast__input {
+  border-radius: 11px;
+  border: 0;
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+[data-theme='titan'] .team-broadcast__input:focus {
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(217, 164, 65, 0.5);
+}
+[data-theme='titan'] .team-broadcast__send {
+  padding: 9px 19px;
+  font-size: 12px;
+  border-radius: 11px;
+}
+
+/* ---------- 滚动条(各主题) ---------- */
+[data-theme='aurora'] .panel__content::-webkit-scrollbar-thumb,
+[data-theme='aurora'] .team-broadcast__feed::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.06);
+}
+[data-theme='aurora'] .panel__content::-webkit-scrollbar-thumb:hover,
+[data-theme='aurora'] .team-broadcast__feed::-webkit-scrollbar-thumb:hover {
+  background: rgba(140, 190, 255, 0.22);
+}
+[data-theme='cyber'] .panel__content::-webkit-scrollbar-thumb,
+[data-theme='cyber'] .team-broadcast__feed::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 213, 0.1);
+}
+[data-theme='cyber'] .panel__content::-webkit-scrollbar-thumb:hover,
+[data-theme='cyber'] .team-broadcast__feed::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 213, 0.28);
+}
+[data-theme='titan'] .panel__content::-webkit-scrollbar-thumb,
+[data-theme='titan'] .team-broadcast__feed::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.06);
+}
+[data-theme='titan'] .panel__content::-webkit-scrollbar-thumb:hover,
+[data-theme='titan'] .team-broadcast__feed::-webkit-scrollbar-thumb:hover {
+  background: rgba(217, 164, 65, 0.22);
+}
+
+/* ---------- team-empty / team-broadcast__title 文字色 ---------- */
+[data-theme='cyber'] .team-empty,
+[data-theme='cyber'] .team-broadcast__empty {
+  color: #4f7a70;
+  border-color: rgba(0, 255, 213, 0.13);
+}
+[data-theme='titan'] .team-empty,
+[data-theme='titan'] .team-broadcast__empty {
+  color: #6b6e76;
+}
+
+/* =====================================================================
+   自定义时间面板(usage-range-panel) + 模型用量榜(model-board)
+   + 柱状图悬浮卡(usage-tooltip) 按主题结构覆盖
+   ===================================================================== */
+
+/* ---------- usage-range-panel ---------- */
+/* A 极光:玻璃凹陷底 */
+[data-theme='aurora'] .usage-range-panel {
+  border-radius: var(--panel-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+[data-theme='aurora'] .usage-range-field input {
+  border-radius: var(--panel-radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color-scheme: dark;
+}
+[data-theme='aurora'] .usage-range-field input:focus-visible {
+  border-color: rgba(121, 192, 255, 0.6);
+  box-shadow: 0 0 0 3px rgba(121, 192, 255, 0.1);
+}
+[data-theme='aurora'] .usage-range-apply {
+  border-radius: 999px;
+  background: linear-gradient(135deg, #5865f2, #38b8a1);
+  border: 0;
+  box-shadow: 0 4px 12px rgba(88, 101, 242, 0.3);
+}
+
+/* B 赛博:切角 + 终端输入 */
+[data-theme='cyber'] .usage-range-panel {
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  border: 1px solid rgba(0, 255, 213, 0.16);
+  background: rgba(0, 0, 0, 0.34);
+}
+[data-theme='cyber'] .usage-range-field input {
+  border-radius: 0;
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  border: 1px solid rgba(0, 255, 213, 0.2);
+  background: rgba(0, 255, 213, 0.05);
+  color-scheme: dark;
+}
+[data-theme='cyber'] .usage-range-field input:focus-visible {
+  border-color: rgba(0, 255, 213, 0.6);
+}
+[data-theme='cyber'] .usage-range-apply {
+  border-radius: 0;
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  background: linear-gradient(135deg, #00ffd5, #0ec9a8);
+  color: #031512;
+  border: 0;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+/* D 钛金:金属凹陷底 */
+[data-theme='titan'] .usage-range-panel {
+  border-radius: var(--panel-radius-md);
+  border: 0;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+[data-theme='titan'] .usage-range-field input {
+  border-radius: 7px;
+  border: 0;
+  background: #101013;
+  color-scheme: dark;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+[data-theme='titan'] .usage-range-field input:focus-visible {
+  box-shadow: inset 0 0 0 1px rgba(217, 164, 65, 0.55);
+}
+[data-theme='titan'] .usage-range-apply {
+  border-radius: 10px;
+  background: linear-gradient(180deg, #e3bd6d, #c9962e);
+  color: #241a08;
+  border: 0;
+  box-shadow: 0 4px 12px rgba(217, 164, 65, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* ---------- model-board ---------- */
+/* 各主题 fill / track 质感 */
+[data-theme='aurora'] .model-board__fill {
+  background: linear-gradient(90deg, rgba(121, 192, 255, 0.55), #79c0ff);
+  box-shadow: 0 0 8px rgba(121, 192, 255, 0.3);
+}
+[data-theme='aurora'] .model-board__track {
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+[data-theme='cyber'] .model-board__title {
+  letter-spacing: 1.5px;
+  color: #8af5df;
+}
+[data-theme='cyber'] .model-board__title::before {
+  content: '# ';
+  color: #4f7a70;
+}
+[data-theme='cyber'] .model-board__name {
+  color: #4f7a70;
+}
+[data-theme='cyber'] .model-board__fill {
+  background: var(--panel-accent);
+  box-shadow: 0 0 8px rgba(0, 255, 213, 0.45);
+}
+[data-theme='cyber'] .model-board__track {
+  background: rgba(0, 255, 213, 0.08);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 255, 213, 0.15);
+  border-radius: 0;
+}
+[data-theme='cyber'] .model-board__meta {
+  color: #8af5df;
+}
+
+[data-theme='titan'] .model-board__title {
+  background: linear-gradient(180deg, #f7f4ec, #b9bcc4);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+[data-theme='titan'] .model-board__track {
+  background: linear-gradient(180deg, #060608, #1a1a1f);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+[data-theme='titan'] .model-board__fill {
+  background: linear-gradient(90deg, #8a6a2c, #d9a441 60%, #f0cd82);
+  box-shadow: 0 0 8px rgba(217, 164, 65, 0.4);
+}
+[data-theme='titan'] .model-board__name {
+  color: #8f939b;
+}
+[data-theme='titan'] .model-board__meta {
+  color: #d5d6da;
+}
+
+/* ---------- model-board__tooltip(模型名过长悬浮) ---------- */
+[data-theme='aurora'] .model-board__tooltip {
+  border-radius: var(--panel-radius-md);
+  border: 1px solid rgba(140, 190, 255, 0.35);
+  background: rgba(20, 25, 33, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+[data-theme='cyber'] .model-board__tooltip {
+  border-radius: 0;
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  border: 1px solid rgba(0, 255, 213, 0.25);
+  background: rgba(0, 20, 16, 0.95);
+  box-shadow: 0 0 18px rgba(0, 255, 213, 0.12);
+}
+[data-theme='titan'] .model-board__tooltip {
+  border-radius: var(--panel-radius-sm);
+  border: 0;
+  background: linear-gradient(170deg, #26262b, #18181c);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.045),
+    0 8px 20px rgba(0, 0, 0, 0.45);
+}
+
+/* ---------- usage-tooltip(柱状图悬浮卡) ---------- */
+[data-theme='aurora'] .usage-tooltip {
+  border-radius: var(--panel-radius-md);
+  border: 1px solid rgba(140, 190, 255, 0.35);
+  background: rgba(20, 25, 33, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+[data-theme='cyber'] .usage-tooltip {
+  border-radius: 0;
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  border: 1px solid rgba(0, 255, 213, 0.25);
+  background: rgba(0, 20, 16, 0.95);
+}
+[data-theme='titan'] .usage-tooltip {
+  border-radius: var(--panel-radius-sm);
+  border: 0;
+  background: linear-gradient(170deg, #26262b, #18181c);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.045),
+    0 8px 20px rgba(0, 0, 0, 0.45);
+}
+

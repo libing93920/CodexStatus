@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scheme A · 极光玻璃 Aurora Glass</title>
+<style>
+  /* ============ 展示台(非产品 UI,仅预览环境) ============ */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root { --stage-wallpaper: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10'%3E%3C/svg%3E"); }
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(900px 500px at 85% -5%, rgba(64, 86, 161, .30), transparent 60%),
+      radial-gradient(700px 400px at 5% 105%, rgba(20, 120, 104, .20), transparent 60%),
+      #07090f;
+    color: #e8edf4;
+    font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+    padding-bottom: 80px;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; gap: 16px;
+    padding: 18px 32px;
+    background: rgba(7, 9, 15, .78);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid rgba(255,255,255,.07);
+  }
+  .topbar a.back { color: #79c0ff; text-decoration: none; font-size: 13px; }
+  .topbar h1 { font-size: 17px; font-weight: 650; letter-spacing: .4px; }
+  .topbar .desc { color: #8b98ac; font-size: 12.5px; margin-left: auto; }
+  .section-title {
+    padding: 44px 40px 14px;
+    font-size: 13px; letter-spacing: 3px; text-transform: uppercase;
+    color: #6f7d92;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .section-title::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(255,255,255,.12), transparent); }
+
+  /* ============ 壁纸样机:胶囊是透明悬浮窗,必须放在壁纸上评估观感 ============ */
+  .wallpaper {
+    position: relative;
+    width: min(1060px, calc(100% - 80px));
+    margin: 0 auto;
+    border-radius: 22px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.08);
+    transition: background .5s;
+    /* 默认深色壁纸 */
+    background:
+      radial-gradient(600px 300px at 75% 20%, #35548f 0%, transparent 55%),
+      radial-gradient(500px 320px at 20% 85%, #1c5c50 0%, transparent 55%),
+      radial-gradient(400px 260px at 45% 45%, #4a3060 0%, transparent 60%),
+      linear-gradient(150deg, #10141d 0%, #090b11 100%);
+  }
+  .wallpaper.is-light {
+    background:
+      radial-gradient(600px 300px at 75% 20%, #ffd9a8 0%, transparent 55%),
+      radial-gradient(500px 320px at 20% 85%, #a8d8ff 0%, transparent 55%),
+      radial-gradient(400px 260px at 45% 45%, #e0b8e8 0%, transparent 60%),
+      linear-gradient(150deg, #eef2f8 0%, #dde4ee 100%);
+  }
+  .wallpaper__grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
+    background-size: 44px 44px;
+    pointer-events: none;
+  }
+  .wallpaper__inner {
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    gap: 72px;
+    padding: 84px 40px;
+    min-height: 340px;
+  }
+  .wp-toolbar {
+    position: absolute; top: 14px; right: 14px; z-index: 5;
+    display: flex; gap: 8px;
+  }
+  .wp-toolbar button {
+    font-size: 12px; padding: 6px 14px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.22);
+    background: rgba(0,0,0,.28); color: #fff; cursor: pointer;
+    backdrop-filter: blur(8px);
+    transition: background .2s;
+  }
+  .wp-toolbar button:hover { background: rgba(0,0,0,.5); }
+  .replay-btn {
+    font-size: 12px; padding: 6px 14px; border-radius: 999px;
+    border: 1px solid rgba(121,192,255,.4);
+    background: rgba(121,192,255,.12); color: #79c0ff; cursor: pointer;
+  }
+  .replay-btn:hover { background: rgba(121,192,255,.24); }
+
+  /* ================================================================
+     方案 A · 极光玻璃 Aurora Glass
+     核心:玻璃拟态底 + 缓慢旋转的极光渐变描边 + shimmer 流光进度条
+     ================================================================ */
+  @property --aurora-angle {
+    syntax: "<angle>";
+    inherits: false;
+    initial-value: 0deg;
+  }
+  .cap-stage-label { position:absolute; font-size:11px; color:#ffffff88; letter-spacing:2px; top:-26px; left:50%; transform:translateX(-50%); white-space:nowrap; }
+
+  /* ---------- 横胶囊 250×50 ---------- */
+  .capsule {
+    --metric-accent: #58e8b1;
+    position: relative;
+    width: 250px; height: 50px;
+    border-radius: 20px;
+    cursor: grab;
+    isolation: isolate;
+  }
+  .capsule:active { cursor: grabbing; }
+  /* 极光描边层:conic 渐变随角度旋转,只露出 1.2px 的环 */
+  .capsule::before {
+    content: "";
+    position: absolute; inset: 0;
+    border-radius: inherit;
+    padding: 1.2px;
+    background: conic-gradient(from var(--aurora-angle),
+      #5865f2 0deg, #38e8b1 80deg, #79c0ff 160deg,
+      #b585ff 240deg, #5865f2 360deg);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    animation: aurora-spin 7s linear infinite;
+    z-index: 2;
+    pointer-events: none;
+  }
+  @keyframes aurora-spin { to { --aurora-angle: 360deg; } }
+  /* 玻璃底 */
+  .capsule__glass {
+    position: absolute; inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(168deg, rgba(30, 38, 54, .60) 0%, rgba(12, 16, 26, .68) 100%);
+    backdrop-filter: blur(14px) saturate(1.5);
+    box-shadow:
+      0 10px 28px rgba(0, 0, 0, .38),
+      inset 0 1px 0 rgba(255, 255, 255, .10);
+  }
+  /* 内部极光雾气:左下角一团缓慢漂移的柔光 */
+  .capsule__mist {
+    position: absolute; inset: 0;
+    border-radius: inherit;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .capsule__mist::before {
+    content: "";
+    position: absolute;
+    width: 130%; height: 220%;
+    left: -30%; bottom: -120%;
+    background: radial-gradient(closest-side, rgba(88, 232, 177, .17), transparent 72%);
+    animation: mist-drift 9s ease-in-out infinite alternate;
+  }
+  @keyframes mist-drift {
+    from { transform: translate(-8%, 6%) rotate(-6deg); opacity:.7; }
+    to   { transform: translate(10%, -4%) rotate(5deg);  opacity:1; }
+  }
+  .capsule__layout {
+    position: relative; z-index: 1;
+    width: 100%; height: 100%;
+    display: grid;
+    grid-template-columns: auto minmax(0,1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 12px;
+    color: rgba(238, 244, 250, .95);
+  }
+  .capsule__weekly {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 21px; font-weight: 750; line-height: 1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-shadow: 0 1px 6px rgba(0,0,0,.4);
+  }
+  .capsule__weekly svg { width: 13px; height: 13px; color: #9fd8ff; filter: drop-shadow(0 0 4px rgba(121,192,255,.5)); }
+  .capsule__col-metric { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .capsule__percent {
+    font-size: 19px; font-weight: 740; line-height: 1;
+    color: var(--metric-accent);
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 12px color-mix(in srgb, var(--metric-accent) 45%, transparent);
+  }
+  .capsule__progress {
+    width: 100%; height: 3.5px;
+    display:block; overflow:hidden;
+    border-radius: 999px;
+    background: rgba(230, 238, 246, .14);
+  }
+  .capsule__progress i {
+    display:block; height:100%;
+    width: var(--w, 42%);
+    border-radius: inherit;
+    background: linear-gradient(90deg,
+      color-mix(in srgb, var(--metric-accent) 65%, transparent),
+      var(--metric-accent));
+    position: relative;
+    transition: width 1s cubic-bezier(.22,.9,.3,1);
+  }
+  /* shimmer 流光:一条高光扫过填充条 */
+  .capsule__progress i::after {
+    content:"";
+    position:absolute; inset:0;
+    background: linear-gradient(105deg, transparent 30%, rgba(255,255,255,.75) 50%, transparent 70%);
+    transform: translateX(-110%);
+    animation: shimmer 2.8s ease-in-out infinite;
+    animation-delay: 1.2s;
+  }
+  @keyframes shimmer { to { transform: translateX(230%); } }
+  .capsule__col-right { display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
+  .chip {
+    display:inline-flex; align-items:center; gap:4px;
+    padding: 2.5px 7px;
+    border-radius: 8px;
+    font-size: 9.5px; font-weight: 620; line-height: 1;
+    white-space: nowrap;
+    background: rgba(4, 8, 14, .52);
+    border: 1px solid rgba(255,255,255,.07);
+    backdrop-filter: blur(6px);
+  }
+  .chip--credit { color: #ffdf8e; }
+  .chip--pick { color: #ffa27b; }
+  .chip svg { width: 10px; height: 10px; }
+
+  /* ---------- 竖 Orb 50×165 ---------- */
+  .orb {
+    --metric-accent: #ffb347;
+    position: relative;
+    width: 50px; height: 165px;
+    border-radius: 17px;
+    cursor: grab;
+    isolation: isolate;
+  }
+  .orb::before {
+    content: "";
+    position: absolute; inset: 0;
+    border-radius: inherit;
+    padding: 1.2px;
+    background: conic-gradient(from var(--aurora-angle),
+      #5865f2 0deg, #38e8b1 80deg, #79c0ff 160deg,
+      #b585ff 240deg, #5865f2 360deg);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    animation: aurora-spin 7s linear infinite;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .orb .capsule__glass {
+    background: linear-gradient(180deg, rgba(30, 38, 54, .62) 0%, rgba(12, 16, 26, .70) 100%);
+  }
+  .orb__layout {
+    position: relative; z-index: 1;
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 5px;
+    padding: 8px 4px;
+    color: rgba(238, 244, 250, .95);
+  }
+  .orb__weekly {
+    display:inline-flex; align-items:center; gap:3px;
+    font-size: 17px; font-weight: 740; line-height: 1;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 6px rgba(0,0,0,.4);
+  }
+  .orb__weekly svg { width: 11px; height: 11px; color:#9fd8ff; }
+  .orb .chip { font-size: 8.5px; padding: 2px 5px; }
+  .orb__percent {
+    font-size: 15px; font-weight: 740; line-height: 1;
+    color: var(--metric-accent);
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 10px color-mix(in srgb, var(--metric-accent) 45%, transparent);
+  }
+  .orb__progress { width: 34px; }
+
+  /* ================================================================
+     Panel 480×600 · 极光玻璃风
+     ================================================================ */
+  .panel-zone { display:flex; justify-content:center; padding: 10px 40px 0; }
+  .panel {
+    width: 480px; height: 600px;
+    position: relative;
+    display: flex; flex-direction: column;
+    border-radius: 26px;
+    clip-path: inset(0 round 26px);
+    border: 1px solid rgba(255,255,255,.09);
+    background:
+      radial-gradient(circle at 22% 0%, rgba(88, 232, 177, .06) 0%, transparent 46%),
+      radial-gradient(circle at 90% 8%, rgba(88, 101, 242, .08) 0%, transparent 42%),
+      linear-gradient(168deg, #0d1118 0%, #131926 100%);
+    box-shadow:
+      0 32px 72px rgba(0,0,0,.5),
+      inset 0 1px 0 rgba(255,255,255,.07);
+    overflow: hidden;
+    color: #e6edf3;
+    /* panel 顶部也有一条极光细线 */
+  }
+  .panel::before {
+    content:"";
+    position:absolute; top:0; left:8%; right:8%; height:1px;
+    background: linear-gradient(90deg, transparent, #5865f2, #38e8b1, #79c0ff, transparent);
+    opacity:.8;
+    animation: panel-topline-hue 6s linear infinite;
+  }
+  @keyframes panel-topline-hue {
+    0%,100% { filter: hue-rotate(0deg); opacity:.55; }
+    50%     { filter: hue-rotate(36deg); opacity:.95; }
+  }
+  .panel__content {
+    flex: 1; overflow-y: auto;
+    padding: 20px 24px 0;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,.16) transparent;
+  }
+  .panel__content::-webkit-scrollbar { width: 6px; }
+  .panel__content::-webkit-scrollbar-thumb { border-radius:999px; background:rgba(255,255,255,.14); }
+
+  /* Tabs:极光胶囊滑块 */
+  .tabs {
+    position: relative;
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    padding: 4px;
+    border-radius: 14px;
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.07);
+    margin-bottom: 18px;
+  }
+  .tabs__glider {
+    position: absolute;
+    top: 4px; left: 4px;
+    width: calc((100% - 8px) / 3);
+    height: calc(100% - 8px);
+    border-radius: 11px;
+    background: linear-gradient(135deg, rgba(88,101,242,.34), rgba(56,232,177,.26));
+    border: 1px solid rgba(140, 180, 255, .35);
+    box-shadow: 0 4px 14px rgba(88, 101, 242, .25), inset 0 1px 0 rgba(255,255,255,.14);
+    transition: transform .32s cubic-bezier(.34,1.4,.5,1);
+  }
+  .tabs[data-active="1"] .tabs__glider { transform: translateX(100%); }
+  .tabs[data-active="2"] .tabs__glider { transform: translateX(200%); }
+  .tabs button {
+    position: relative; z-index: 1;
+    padding: 8px 0;
+    background: none; border: none;
+    color: #93a1b5; font-size: 13px; font-weight: 600;
+    cursor: pointer;
+    transition: color .2s;
+    font-family: inherit;
+  }
+  .tabs button.on { color: #fff; }
+
+  .panel__title { font-size: 21px; font-weight: 720; letter-spacing:.3px; margin: 2px 0 14px; }
+
+  /* 额度卡:玻璃卡 + hover 发光 */
+  .quota-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .qcard {
+    position: relative;
+    padding: 13px 15px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,.08);
+    background: linear-gradient(165deg, rgba(255,255,255,.055), rgba(255,255,255,.02));
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 24px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.07);
+    transition: transform .22s cubic-bezier(.22,.9,.3,1), border-color .22s, box-shadow .22s;
+    overflow: hidden;
+  }
+  .qcard:hover {
+    transform: translateY(-3px);
+    border-color: rgba(140, 190, 255, .35);
+    box-shadow: 0 16px 34px rgba(0,0,0,.32), 0 0 22px rgba(88, 101, 242, .14), inset 0 1px 0 rgba(255,255,255,.1);
+  }
+  .qcard--accent::before {
+    content:""; position:absolute; inset:-46% -22% auto; height:88%;
+    background: radial-gradient(58% 62% at 50% 0%, rgba(88, 232, 177, .10) 0%, transparent 72%);
+    pointer-events:none;
+  }
+  .qcard__head { display:flex; justify-content:space-between; align-items:baseline; }
+  .qcard__label { font-size:13px; font-weight:660; }
+  .qcard__mode { font-size:10px; color:#6f7d92; }
+  .qcard__value {
+    font-size: 28px; font-weight: 770; line-height:1.15;
+    font-variant-numeric: tabular-nums;
+    color: var(--tone, #94a3b8);
+    text-shadow: 0 0 16px color-mix(in srgb, var(--tone, #94a3b8) 30%, transparent);
+  }
+  .qcard__bar {
+    height: 4px; border-radius: 999px;
+    background: rgba(255,255,255,.07);
+    overflow:hidden;
+  }
+  .qcard__bar i {
+    display:block; height:100%; width: var(--w, 50%);
+    border-radius:inherit;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--tone) 60%, transparent), var(--tone));
+    position:relative;
+    transition: width 1.1s cubic-bezier(.22,.9,.3,1);
+  }
+  .qcard__bar i::after {
+    content:""; position:absolute; inset:0;
+    background: linear-gradient(105deg, transparent 30%, rgba(255,255,255,.7) 50%, transparent 70%);
+    transform: translateX(-110%);
+    animation: shimmer 3.2s ease-in-out infinite;
+    animation-delay: 1.4s;
+  }
+  .qcard__reset { font-size:12px; color:#8b98ac; margin-top:7px; }
+  .qcard__expiry { font-size:11px; color:#5f6c80; margin-top:4px; }
+
+  /* 用量统计卡 */
+  .ucard {
+    margin-top: 14px;
+    padding: 13px 15px 15px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,.08);
+    background: linear-gradient(165deg, rgba(255,255,255,.05), rgba(255,255,255,.018));
+    box-shadow: 0 10px 24px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  .ucard__title { font-size:13px; font-weight:660; margin-bottom:10px; }
+  .seg {
+    display:inline-grid; grid-auto-flow: column; gap:2px;
+    padding:3px; border-radius: 10px;
+    background: rgba(0,0,0,.28);
+    border: 1px solid rgba(255,255,255,.06);
+  }
+  .seg button {
+    padding: 4px 12px; border:none; border-radius: 8px;
+    background:none; color:#8b98ac; font-size:11.5px; font-weight:600;
+    cursor:pointer; font-family:inherit;
+    transition: all .18s;
+  }
+  .seg button.on {
+    color:#fff;
+    background: linear-gradient(135deg, rgba(88,101,242,.5), rgba(56,232,177,.36));
+    box-shadow: 0 2px 8px rgba(88,101,242,.3);
+  }
+  .usage-summary {
+    display:grid; grid-template-columns: repeat(5, auto); justify-content:space-between;
+    margin: 12px 2px 4px;
+  }
+  .us-item { display:flex; flex-direction:column; gap:3px; }
+  .us-item b { font-size:13.5px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .us-item span { font-size:9.5px; color:#6f7d92; }
+  .us-item--in b { color:#79c0ff; } .us-item--out b { color:#b585ff; }
+  .us-item--cache b { color:#38e8b1; } .us-item--cost b { color:#ffdf8e; }
+  .chart {
+    display:flex; align-items:flex-end; gap:5px;
+    height: 74px; margin-top: 12px;
+    padding-bottom: 16px;
+    position: relative;
+  }
+  .chart__col { flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; height:100%; justify-content:flex-end; position:relative; }
+  .chart__barwrap { width:100%; max-width:22px; flex:1; display:flex; align-items:flex-end; }
+  .chart__bar {
+    width:100%;
+    height: var(--h, 40%);
+    border-radius: 5px 5px 2px 2px;
+    background: linear-gradient(180deg, #79c0ff 0%, #5865f2 100%);
+    position:relative; overflow:hidden;
+    transform-origin: bottom;
+    animation: bar-rise .7s cubic-bezier(.22,.9,.3,1) backwards;
+  }
+  .chart__bar em {
+    position:absolute; left:0; right:0; bottom:0;
+    height: var(--seg, 30%);
+    background: rgba(56, 232, 177, .75);
+  }
+  @keyframes bar-rise { from { transform: scaleY(0); } }
+  .chart__date { position:absolute; bottom:-15px; font-size:8.5px; color:#5f6c80; }
+
+  /* 明细行 */
+  .rows { margin-top: 16px; display:flex; flex-direction:column; gap:9px; }
+  .row {
+    display:flex; align-items:center; gap:11px;
+    padding: 11px 14px;
+    border-radius: 15px;
+    border: 1px solid rgba(255,255,255,.07);
+    background: rgba(255,255,255,.032);
+    transition: all .2s;
+    cursor: default;
+  }
+  .row:hover { background: rgba(255,255,255,.06); border-color: rgba(140,190,255,.28); transform: translateX(3px); }
+  .row__icon {
+    width: 30px; height: 30px; flex-shrink:0;
+    display:grid; place-items:center;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--ic) 14%, transparent);
+    color: var(--ic);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ic) 22%, transparent);
+  }
+  .row__icon svg { width:15px; height:15px; }
+  .row__label { font-size:12.5px; font-weight:600; }
+  .row__label a { color:#79c0ff; text-decoration:none; }
+  .row__value { margin-left:auto; font-size:12.5px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .row__hint { font-size:10.5px; color:#6f7d92; font-variant-numeric:tabular-nums; }
+
+  .panel__footer {
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 13px 24px 16px;
+    border-top: 1px solid rgba(255,255,255,.06);
+  }
+  .panel__footer-meta { font-size:11px; color:#6f7d92; }
+  .btn-close {
+    display:inline-flex; align-items:center; gap:6px;
+    padding: 7px 16px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.14);
+    background: rgba(255,255,255,.05);
+    color:#dbe4ee; font-size:12px; font-weight:600;
+    cursor:pointer; font-family:inherit;
+    transition: all .2s;
+  }
+  .btn-close:hover { background: rgba(88,101,242,.22); border-color: rgba(140,180,255,.4); }
+
+  /* ============ 视图切换 ============ */
+  .view[hidden] { display: none; }
+
+  /* ============ 团队页 · 极光玻璃风 ============ */
+  .team-announcement {
+    position: relative;
+    padding: 13px 15px;
+    border-radius: 18px;
+    border: 1px solid rgba(121, 192, 255, .28);
+    background: linear-gradient(165deg, rgba(121,192,255,.09), rgba(121,192,255,.03));
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+  .team-announcement::before {
+    content:""; position:absolute; left:0; top:14%; bottom:14%; width:3px;
+    border-radius:99px;
+    background:linear-gradient(180deg,#79c0ff,#5865f2);
+    box-shadow:0 0 10px rgba(121,192,255,.5);
+  }
+  .ta-topline { display:flex; justify-content:space-between; align-items:center; margin-bottom:7px; }
+  .ta-label { font-size:11px; font-weight:700; letter-spacing:2px; color:#79c0ff; }
+  .ta-meta { font-size:10.5px; color:#6f7d92; }
+  .ta-text { font-size:12.5px; line-height:1.65; color:#dbe4ee; }
+  .ta-ack {
+    margin-top:10px; padding:5px 15px;
+    border-radius:999px; border:1px solid rgba(121,192,255,.35);
+    background:rgba(121,192,255,.1); color:#a8d4ff;
+    font-size:11.5px; font-weight:600; cursor:pointer; font-family:inherit;
+    transition:all .2s;
+  }
+  .ta-ack:hover { background:rgba(121,192,255,.22); }
+
+  .board-head { display:flex; align-items:center; justify-content:space-between; margin:4px 0 12px; }
+  .board-head h3 { font-size:15px; font-weight:700; letter-spacing:.3px; }
+  .btn-refresh {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:6px 15px; border-radius:999px;
+    border:1px solid rgba(56,232,177,.35);
+    background:rgba(56,232,177,.1); color:#5fe8bb;
+    font-size:11.5px; font-weight:600; cursor:pointer; font-family:inherit;
+    transition:all .2s;
+  }
+  .btn-refresh:hover { background:rgba(56,232,177,.22); box-shadow:0 0 14px rgba(56,232,177,.2); }
+
+  .trow {
+    display:flex; align-items:center; gap:11px;
+    padding:11px 13px;
+    border-radius:16px;
+    border:1px solid rgba(255,255,255,.07);
+    background:linear-gradient(165deg, rgba(255,255,255,.045), rgba(255,255,255,.015));
+    margin-bottom:8px;
+    transition:all .2s;
+  }
+  .trow:hover { border-color:rgba(140,190,255,.3); transform:translateX(3px); background:rgba(255,255,255,.06); }
+  .rank {
+    width:26px; height:26px; flex-shrink:0;
+    display:grid; place-items:center;
+    border-radius:9px;
+    font-size:12px; font-weight:800;
+    background:rgba(255,255,255,.06);
+    color:#93a1b5;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+  }
+  .rank--1 { color:#1a1d24; background:linear-gradient(135deg,#ffd97a,#e8a53e); box-shadow:0 0 12px rgba(232,165,62,.4); }
+  .rank--2 { color:#1a1d24; background:linear-gradient(135deg,#e8edf4,#9faab8); }
+  .rank--3 { color:#1a1d24; background:linear-gradient(135deg,#f0b089,#c4713d); }
+  .trow__main { flex:1; min-width:0; }
+  .trow__name-line { display:flex; align-items:center; gap:6px; margin-bottom:5px; }
+  .trow__name { font-size:12.5px; font-weight:650; }
+  .badge-self {
+    font-size:8.5px; font-weight:700; padding:1.5px 6px; border-radius:99px;
+    background:rgba(88,101,242,.3); color:#b3c0ff;
+    box-shadow:inset 0 0 0 1px rgba(140,150,255,.35);
+  }
+  .dot-ver { width:6px; height:6px; border-radius:50%; }
+  .twin { display:flex; align-items:center; gap:7px; }
+  .twin__label { font-size:9.5px; color:#6f7d92; width:20px; flex-shrink:0; }
+  .twin__bar { flex:1; height:4px; border-radius:99px; background:rgba(255,255,255,.07); overflow:hidden; }
+  .twin__bar i { display:block; height:100%; width:var(--w,50%); border-radius:inherit; background:linear-gradient(90deg,color-mix(in srgb,var(--tone,#79c0ff) 60%,transparent),var(--tone,#79c0ff)); }
+  .twin__val { font-size:10px; color:#aab6c6; width:32px; text-align:right; font-variant-numeric:tabular-nums; flex-shrink:0; }
+  .trow__side { display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0; }
+  .trow__pct { font-size:17px; font-weight:750; font-variant-numeric:tabular-nums; color:var(--tone,#79c0ff); }
+  .chip-mini {
+    display:inline-flex; align-items:center; gap:3px;
+    font-size:9px; font-weight:600; color:#ffdf8e;
+    padding:1.5px 6px; border-radius:99px;
+    background:rgba(217,164,65,.12);
+    box-shadow:inset 0 0 0 1px rgba(217,164,65,.25);
+  }
+  .like-btn {
+    display:inline-flex; align-items:center; gap:3px;
+    padding:3px 9px; border-radius:99px; border:none;
+    background:rgba(255,123,161,.1); color:#ff7ba1;
+    font-size:10px; font-weight:700; cursor:pointer; font-family:inherit;
+    transition:all .18s;
+  }
+  .like-btn:hover { background:rgba(255,123,161,.24); transform:scale(1.08); }
+  .like-btn.liked { background:rgba(255,123,161,.3); box-shadow:0 0 10px rgba(255,123,161,.3); }
+
+  /* 广播消息 */
+  .broadcast { margin-top:16px; }
+  .broadcast__title { font-size:12px; font-weight:700; color:#8b98ac; margin-bottom:9px; letter-spacing:.5px; }
+  .feed {
+    display:flex; flex-direction:column; gap:7px;
+    max-height:130px; overflow-y:auto;
+    padding-right:4px;
+    scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.14) transparent;
+  }
+  .msg {
+    max-width:86%;
+    padding:8px 12px;
+    border-radius:14px 14px 14px 4px;
+    background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.07);
+    font-size:11.5px; line-height:1.55;
+  }
+  .msg--self { align-self:flex-end; border-radius:14px 14px 4px 14px; background:linear-gradient(135deg,rgba(88,101,242,.28),rgba(88,101,242,.16)); border-color:rgba(140,150,255,.3); }
+  .msg__meta { display:flex; gap:7px; font-size:9px; color:#6f7d92; margin-bottom:3px; }
+  .composer { display:flex; gap:8px; margin-top:10px; }
+  .composer input {
+    flex:1; padding:9px 14px;
+    border-radius:12px; border:1px solid rgba(255,255,255,.1);
+    background:rgba(0,0,0,.28); color:#e6edf3;
+    font-size:12px; font-family:inherit; outline:none;
+    transition:border-color .2s;
+  }
+  .composer input:focus { border-color:rgba(121,192,255,.45); box-shadow:0 0 0 3px rgba(121,192,255,.1); }
+  .btn-send {
+    padding:9px 18px; border-radius:12px; border:none;
+    background:linear-gradient(135deg,#5865f2,#38b8a1);
+    color:#fff; font-size:12px; font-weight:700; cursor:pointer; font-family:inherit;
+    box-shadow:0 4px 12px rgba(88,101,242,.3);
+    transition:all .2s;
+  }
+  .btn-send:hover { transform:translateY(-1px); box-shadow:0 7px 18px rgba(88,101,242,.4); }
+
+  /* ============ 设置页 · 极光玻璃风 ============ */
+  .settings-section { margin-bottom:18px; }
+  .settings-section__title {
+    font-size:10.5px; font-weight:700; letter-spacing:2.5px;
+    color:#6f7d92; text-transform:uppercase;
+    margin-bottom:9px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .settings-section__title::after { content:""; flex:1; height:1px; background:linear-gradient(90deg,rgba(255,255,255,.1),transparent); }
+  .setting-row {
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:11px 14px;
+    border-radius:14px;
+    border:1px solid rgba(255,255,255,.06);
+    background:rgba(255,255,255,.03);
+    margin-bottom:7px;
+    transition:all .2s;
+  }
+  .setting-row:hover { background:rgba(255,255,255,.055); border-color:rgba(140,190,255,.22); }
+  .setting-row > span:first-child { font-size:12.5px; font-weight:600; }
+  .inline-input {
+    display:inline-flex; align-items:center; gap:8px;
+    padding:6px 12px;
+    border-radius:11px;
+    border:1px solid rgba(255,255,255,.1);
+    background:rgba(0,0,0,.26);
+  }
+  .inline-input span { font-size:11px; color:#8b98ac; }
+  .inline-input input {
+    width:56px; padding:4px 7px;
+    border-radius:8px; border:1px solid rgba(255,255,255,.1);
+    background:rgba(255,255,255,.05); color:#e6edf3;
+    font-size:12px; font-family:inherit; outline:none; text-align:right;
+  }
+  .inline-input input:focus { border-color:rgba(121,192,255,.45); }
+  .inline-input em { font-style:normal; font-size:10.5px; color:#6f7d92; }
+  .toggle {
+    width:40px; height:23px; border-radius:999px;
+    background:rgba(255,255,255,.12);
+    position:relative; cursor:pointer; flex-shrink:0;
+    transition:background .25s;
+    box-shadow:inset 0 1px 3px rgba(0,0,0,.3);
+  }
+  .toggle::after {
+    content:""; position:absolute; top:2.5px; left:3px;
+    width:18px; height:18px; border-radius:50%;
+    background:linear-gradient(180deg,#fff,#cfd6df);
+    box-shadow:0 2px 5px rgba(0,0,0,.35);
+    transition:transform .28s cubic-bezier(.34,1.56,.64,1);
+  }
+  .toggle.on { background:linear-gradient(135deg,#5865f2,#38b8a1); box-shadow:inset 0 1px 3px rgba(0,0,0,.2), 0 0 12px rgba(88,101,242,.35); }
+  .toggle.on::after { transform:translateX(16px); }
+  .about-row { }
+  .about-row__info { display:flex; flex-direction:column; gap:2px; }
+  .about-row__label { font-size:12.5px; font-weight:600; }
+  .about-row__version { font-size:10.5px; color:#6f7d92; font-variant-numeric:tabular-nums; }
+  .btn-check {
+    padding:7px 16px; border-radius:999px;
+    border:1px solid rgba(217,164,65,.4);
+    background:rgba(217,164,65,.1); color:#ecd9ae;
+    font-size:11.5px; font-weight:600; cursor:pointer; font-family:inherit;
+    transition:all .2s;
+  }
+  .btn-check:hover { background:rgba(217,164,65,.22); box-shadow:0 0 14px rgba(217,164,65,.18); }
+
+  /* 入场 stagger */
+  .rise { animation: rise-in .55s cubic-bezier(.22,.9,.3,1) backwards; }
+  @keyframes rise-in { from { opacity:0; transform: translateY(16px); } }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="back" href="./index.html">← 返回方案列表</a>
+  <h1>Scheme A · 极光玻璃 Aurora Glass</h1>
+  <span class="desc">极光流光描边 · 玻璃拟态 · shimmer 进度 · 悬浮发光卡片</span>
+</div>
+
+<!-- 横竖胶囊 -->
+<div class="section-title">Capsule · 横胶囊 250×50 &nbsp;/&nbsp; Orb · 竖胶囊 50×165</div>
+<div class="wallpaper" id="wp1">
+  <div class="wallpaper__grid"></div>
+  <div class="wp-toolbar">
+    <button onclick="toggleWp('wp1', this)">浅色壁纸</button>
+    <button class="replay-btn" onclick="replay(document.getElementById('wp1'))">↻ 重播动效</button>
+  </div>
+  <div class="wallpaper__inner">
+    <!-- 横胶囊 -->
+    <div style="position:relative">
+      <span class="cap-stage-label">CAPSULE · H</span>
+      <div class="capsule">
+        <div class="capsule__glass"></div>
+        <div class="capsule__mist"></div>
+        <div class="capsule__layout">
+          <span class="capsule__weekly">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h12M6 22h12M7 2v4l5 6-5 6v4M17 2v4l-5 6 5 6v4"/></svg>
+            <span data-count="6" data-suffix="D">0D</span>
+          </span>
+          <div class="capsule__col-metric">
+            <span class="capsule__percent" data-count="42" data-suffix="%">0%</span>
+            <span class="capsule__progress"><i style="--w:42%"></i></span>
+          </div>
+          <div class="capsule__col-right">
+            <span class="chip chip--credit">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1a2 2 0 0 0 0 4v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1a2 2 0 0 0 0-4z"/><path d="M13 7v2m0 6v2"/></svg>
+              2天
+            </span>
+            <span class="chip chip--pick">Terra Mx</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- 竖 orb -->
+    <div style="position:relative">
+      <span class="cap-stage-label">ORB · V</span>
+      <div class="orb">
+        <div class="capsule__glass"></div>
+        <div class="capsule__mist"></div>
+        <div class="orb__layout">
+          <span class="chip chip--credit">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1a2 2 0 0 0 0 4v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1a2 2 0 0 0 0-4z"/><path d="M13 7v2m0 6v2"/></svg>
+            1天
+          </span>
+          <span class="chip chip--pick">Terra Mx</span>
+          <span class="orb__weekly">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h12M6 22h12M7 2v4l5 6-5 6v4M17 2v4l-5 6 5 6v4"/></svg>
+            <span data-count="6" data-suffix="D">0D</span>
+          </span>
+          <span class="orb__percent" data-count="10" data-suffix="%">0%</span>
+          <span class="capsule__progress orb__progress"><i style="--w:10%"></i></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Panel -->
+<div class="section-title">Panel · 详情页 480×600</div>
+<div class="panel-zone">
+  <div class="panel rise">
+    <div class="panel__content">
+      <nav class="tabs" data-active="0">
+        <span class="tabs__glider"></span>
+        <button class="on">详情</button>
+        <button>团队</button>
+        <button>设置</button>
+      </nav>
+      <h2 class="panel__title" id="panelTitle">详情</h2>
+
+      <div class="view" id="view-details">
+      <div class="quota-grid">
+        <div class="qcard qcard--accent" style="--tone:#ffb347">
+          <div class="qcard__head"><span class="qcard__label">5h</span><span class="qcard__mode">剩余</span></div>
+          <div class="qcard__value"><span data-count="42" data-suffix="%">0%</span></div>
+          <div class="qcard__bar"><i style="--w:42%"></i></div>
+          <p class="qcard__reset">2小时30分后重置</p>
+          <p class="qcard__expiry">到期时间: 18:36</p>
+        </div>
+        <div class="qcard" style="--tone:#38e8b1">
+          <div class="qcard__head"><span class="qcard__label">1周</span><span class="qcard__mode">剩余</span></div>
+          <div class="qcard__value"><span data-count="98" data-suffix="%">0%</span></div>
+          <div class="qcard__bar"><i style="--w:98%"></i></div>
+          <p class="qcard__reset">6天22小时后重置</p>
+          <p class="qcard__expiry">到期时间: 8/5 14:52</p>
+        </div>
+      </div>
+
+      <div class="ucard">
+        <div class="ucard__title">用量统计</div>
+        <div class="seg">
+          <button class="on">1天</button><button>7天</button><button>30天</button><button>自定义</button>
+        </div>
+        <div class="usage-summary">
+          <div class="us-item"><b>1.2M</b><span>总 Token</span></div>
+          <div class="us-item us-item--in"><b>860K</b><span>输入</span></div>
+          <div class="us-item us-item--out"><b>142K</b><span>输出</span></div>
+          <div class="us-item us-item--cache"><b>71%</b><span>缓存命中</span></div>
+          <div class="us-item us-item--cost"><b>$3.82</b><span>花费</span></div>
+        </div>
+        <div class="chart">
+          <div class="chart__col"><div class="chart__barwrap"><div class="chart__bar" style="--h:46%; animation-delay:.05s"><em style="--seg:64%"></em></div></div><span class="chart__date">8/15</span></div>
+          <div class="chart__col"><div class="chart__barwrap"><div class="chart__bar" style="--h:72%; animation-delay:.1s"><em style="--seg:58%"></em></div></div><span class="chart__date">8/16</span></div>
+          <div class="chart__col"><div class="chart__barwrap"><div class="chart__bar" style="--h:34%; animation-delay:.15s"><em style="--seg:70%"></em></div></div><span class="chart__date">8/17</span></div>
+          <div class="chart__col"><div class="chart__barwrap"><div class="chart__bar" style="--h:88%; animation-delay:.2s"><em style="--seg:52%"></em></div></div><span class="chart__date">8/18</span></div>
+          <div class="chart__col"><div class="chart__barwrap"><div class="chart__bar" style="--h:58%; animation-delay:.25s"><em style="--seg:66%"></em></div></div><span class="chart__date">8/19</span></div>
+          <div class="chart__col"><div class="chart__barwrap"><div class="chart__bar" style="--h:96%; animation-delay:.3s"><em style="--seg:61%"></em></div></div><span class="chart__date">昨天</span></div>
+          <div class="chart__col"><div class="chart__barwrap"><div class="chart__bar" style="--h:64%; animation-delay:.35s"><em style="--seg:71%"></em></div></div><span class="chart__date">今天</span></div>
+        </div>
+      </div>
+
+      <div class="rows">
+        <div class="row" style="--ic:#fc92c8">
+          <span class="row__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1a2 2 0 0 0 0 4v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1a2 2 0 0 0 0-4z"/><path d="M13 7v2m0 6v2"/></svg></span>
+          <span class="row__label">重置卡</span>
+          <span class="row__value">2天</span>
+          <span class="row__hint">8月1日 04:11</span>
+        </div>
+        <div class="row" style="--ic:#b585ff">
+          <span class="row__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.8L20 10l-5 3.9L16.5 20 12 16.6 7.5 20 9 13.9 4 10l6.1-1.2z"/></svg></span>
+          <span class="row__label"><a href="#">雷达推荐模型</a></span>
+          <span class="row__value" style="color:#ffa27b">Sol Xh</span>
+          <span class="row__hint">IQ 106.3 · $6.33/题</span>
+        </div>
+        <div class="row" style="--ic:#38e8b1">
+          <span class="row__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 3v6h-6"/></svg></span>
+          <span class="row__label"><a href="#">额度重置监测</a></span>
+        </div>
+      </div>
+      </div><!-- /view-details -->
+
+      <!-- ============ 团队视图 ============ -->
+      <div class="view" id="view-team" hidden>
+        <section class="team-announcement">
+          <div class="ta-topline">
+            <span class="ta-label">公告</span>
+            <span class="ta-meta">管理员 · 10:24</span>
+          </div>
+          <p class="ta-text">本周六晚 22:00-23:00 官方额度窗口重置,期间可能出现短暂数据延迟,请知悉。</p>
+          <button class="ta-ack">已知</button>
+        </section>
+
+        <div style="margin-bottom:12px">
+          <div class="seg">
+            <button class="on">额度</button><button>Token消耗</button>
+          </div>
+        </div>
+
+        <div class="board-head">
+          <h3>额度排行榜</h3>
+          <button class="btn-refresh">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 3v6h-6"/></svg>
+            刷新
+          </button>
+        </div>
+
+        <div class="trow">
+          <span class="rank rank--1">1</span>
+          <div class="trow__main">
+            <div class="trow__name-line"><span class="trow__name">阿宁</span><span class="badge-self">我</span></div>
+            <div class="twin"><span class="twin__label">5h</span><span class="twin__bar"><i style="--w:42%; --tone:#ffb347"></i></span><span class="twin__val">42%</span></div>
+            <div class="twin"><span class="twin__label">7d</span><span class="twin__bar"><i style="--w:98%; --tone:#38e8b1"></i></span><span class="twin__val">98%</span></div>
+          </div>
+          <div class="trow__side">
+            <span class="trow__pct" style="--tone:#38e8b1">98%</span>
+            <span class="chip-mini">🎫 2张</span>
+          </div>
+        </div>
+
+        <div class="trow">
+          <span class="rank rank--2">2</span>
+          <div class="trow__main">
+            <div class="trow__name-line"><span class="trow__name">老王</span><span class="dot-ver" style="background:#38e8b1" title="最新版本"></span></div>
+            <div class="twin"><span class="twin__label">5h</span><span class="twin__bar"><i style="--w:67%; --tone:#ffb347"></i></span><span class="twin__val">67%</span></div>
+            <div class="twin"><span class="twin__label">7d</span><span class="twin__bar"><i style="--w:81%; --tone:#38e8b1"></i></span><span class="twin__val">81%</span></div>
+          </div>
+          <div class="trow__side">
+            <span class="trow__pct" style="--tone:#79c0ff">81%</span>
+            <button class="like-btn liked">♥ 3</button>
+          </div>
+        </div>
+
+        <div class="trow">
+          <span class="rank rank--3">3</span>
+          <div class="trow__main">
+            <div class="trow__name-line"><span class="trow__name">小柒</span><span class="dot-ver" style="background:#e3b341" title="版本落后"></span></div>
+            <div class="twin"><span class="twin__label">5h</span><span class="twin__bar"><i style="--w:23%; --tone:#f87171"></i></span><span class="twin__val">23%</span></div>
+            <div class="twin"><span class="twin__label">7d</span><span class="twin__bar"><i style="--w:55%; --tone:#38e8b1"></i></span><span class="twin__val">55%</span></div>
+          </div>
+          <div class="trow__side">
+            <span class="trow__pct" style="--tone:#79c0ff">55%</span>
+            <button class="like-btn">♡ 0</button>
+          </div>
+        </div>
+
+        <div class="broadcast">
+          <div class="broadcast__title">团队消息</div>
+          <div class="feed">
+            <div class="msg">
+              <div class="msg__meta"><span>老王</span><span>10:31</span></div>
+              谁还有重置卡?我 5h 快见底了
+            </div>
+            <div class="msg msg--self">
+              <div class="msg__meta"><span>我</span><span>10:33</span></div>
+              我还剩 2 张,周六给你留一张
+            </div>
+          </div>
+          <div class="composer">
+            <input placeholder="发送一条消息,同组成员可见…" type="text">
+            <button class="btn-send">发送</button>
+          </div>
+        </div>
+      </div><!-- /view-team -->
+
+      <!-- ============ 设置视图 ============ -->
+      <div class="view" id="view-settings" hidden>
+        <div class="settings-section">
+          <p class="settings-section__title">工具</p>
+          <div class="setting-row">
+            <span>监控工具</span>
+            <div class="seg">
+              <button class="on">Codex</button><button>Claude Code</button><button>OpenCode</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">刷新</p>
+          <div class="setting-row">
+            <span>刷新模式</span>
+            <div class="seg">
+              <button class="on">自动</button><button>手动</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span>刷新间隔</span>
+            <div class="seg">
+              <button>15s</button><button class="on">30s</button><button>60s</button><button>120s</button><button>自定义</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">显示</p>
+          <div class="setting-row">
+            <span>百分比口径</span>
+            <div class="seg">
+              <button class="on">剩余</button><button>已使用</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">推荐策略</p>
+          <div class="setting-row">
+            <span>推荐模型 IQ 阈值</span>
+            <label class="inline-input"><span>阈值</span><input type="number" value="90"><em>IQ</em></label>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">通用</p>
+          <div class="setting-row">
+            <span>开机自启动</span>
+            <span class="toggle on" onclick="this.classList.toggle('on')"></span>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">语言与区域</p>
+          <div class="setting-row">
+            <span>语种</span>
+            <div class="seg">
+              <button class="on">简中</button><button>English</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">团队</p>
+          <div class="setting-row">
+            <span>团队昵称</span>
+            <label class="inline-input"><input type="text" value="阿宁" style="width:88px; text-align:left"></label>
+          </div>
+          <div class="setting-row">
+            <span>团队口令</span>
+            <label class="inline-input"><input type="text" value="••••••" style="width:88px; text-align:left"></label>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">关于</p>
+          <div class="setting-row about-row">
+            <div class="about-row__info">
+              <span class="about-row__label">当前版本</span>
+              <span class="about-row__version">v1.1.6</span>
+            </div>
+            <button class="btn-check">检查更新</button>
+          </div>
+        </div>
+      </div><!-- /view-settings -->
+    </div>
+    <div class="panel__footer">
+      <span class="panel__footer-meta">chatgpt.com · 最近刷新 · 1分钟前</span>
+      <button class="btn-close">✕ 收起</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 壁纸切换:胶囊是透明悬浮窗,需在深/浅两种桌面下检查可读性
+  function toggleWp(id, btn) {
+    const wp = document.getElementById(id);
+    const light = wp.classList.toggle('is-light');
+    btn.textContent = light ? '深色壁纸' : '浅色壁纸';
+  }
+  // 数字滚动:从 0 数到目标值,带后缀
+  function countUp(el) {
+    const target = Number(el.dataset.count);
+    const suffix = el.dataset.suffix || '';
+    const dur = 900;
+    const t0 = performance.now();
+    function tick(t) {
+      const p = Math.min(1, (t - t0) / dur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * eased) + suffix;
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  // 重播:重启全部数字与进度条动画
+  function replay(scope) {
+    scope.querySelectorAll('[data-count]').forEach(countUp);
+    scope.querySelectorAll('.capsule__progress i, .qcard__bar i').forEach(bar => {
+      const w = bar.style.getPropertyValue('--w');
+      bar.style.transition = 'none';
+      bar.style.setProperty('--w', '0%');
+      void bar.offsetWidth;
+      bar.style.transition = '';
+      bar.style.setProperty('--w', w);
+    });
+    scope.querySelectorAll('.chart__bar').forEach(b => {
+      b.style.animation = 'none';
+      void b.offsetWidth;
+      b.style.animation = '';
+    });
+  }
+  // Tab 切换:滑块移动 + 视图切换 + 标题联动
+  const TAB_VIEWS = ['details', 'team', 'settings'];
+  const TAB_TITLES = ['详情', '团队', '设置'];
+  document.querySelectorAll('.tabs button').forEach((btn, i) => {
+    btn.addEventListener('click', () => {
+      const tabsNav = btn.closest('.tabs');
+      tabsNav.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      tabsNav.dataset.active = i;
+      document.querySelectorAll('.view').forEach(v => { v.hidden = true; });
+      document.getElementById('view-' + TAB_VIEWS[i]).hidden = false;
+      document.getElementById('panelTitle').textContent = TAB_TITLES[i];
+    });
+  });
+  // 首次进入自动播放
+  window.addEventListener('load', () => replay(document));
+</script>
+</body>
+</html>

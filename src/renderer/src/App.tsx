@@ -23,6 +23,7 @@ import {
   type ReactionMessage,
   type RendererWindowRole,
   type SpendUsage,
+  type ThemeId,
   type TokenUsageDay,
   type TokenUsageOverview,
   type UsageSnapshot,
@@ -65,6 +66,14 @@ const HEART_EFFECT_KINDS = [
 ] as const
 type HeartEffectKind = (typeof HEART_EFFECT_KINDS)[number]
 // 点赞过期按本地自然日(与 token 榜 1d 窗口同为自然日),跨天即清零,避免滚动24h与榜单错位
+
+// 外观主题:顺序与 THEME_IDS 一致,标签供设置页 SegmentedControl 展示
+const THEME_OPTIONS: ReadonlyArray<{ label: string; value: ThemeId }> = [
+  { label: '星夜', value: 'midnight' },
+  { label: '极光', value: 'aurora' },
+  { label: '赛博', value: 'cyber' },
+  { label: '钛金', value: 'titan' }
+]
 
 interface CapsulePointerState {
   pointerId: number
@@ -183,7 +192,10 @@ const COPY = {
     usageEstimated: '本地估算',
     groupAgent: '工具',
     agentId: '监控工具',
-    agentIdHint: '选择要统计用量与花费的 Agent 工具'
+    agentIdHint: '选择要统计用量与花费的 Agent 工具',
+    groupAppearance: '外观',
+    theme: '主题',
+    themeHint: '切换胶囊与面板的整体风格'
   },
   'en-US': {
     noData: 'No data',
@@ -292,7 +304,10 @@ const COPY = {
     usageEstimated: 'Estimated',
     groupAgent: 'Agent',
     agentId: 'Agent tool',
-    agentIdHint: 'Choose which agent tool to monitor'
+    agentIdHint: 'Choose which agent tool to monitor',
+    groupAppearance: 'Appearance',
+    theme: 'Theme',
+    themeHint: 'Switch the overall capsule and panel style'
   }
 } as const
 
@@ -1432,7 +1447,7 @@ function App(): React.JSX.Element {
 
   if (windowRole === 'capsule') {
     return (
-      <div className="app-shell app-shell--capsule">
+      <div className="app-shell app-shell--capsule" data-theme={settings.theme}>
         <main className="widget">
           <section
             ref={capsuleRef}
@@ -1455,6 +1470,7 @@ function App(): React.JSX.Element {
             role="button"
             tabIndex={0}
           >
+            <span className="capsule__deco" aria-hidden="true" />
             {heartEffect ? <HeartEffect key={heartEffect.id} kind={heartEffect.kind} /> : null}
             {capsuleMessage ? (
               <div
@@ -1588,8 +1604,9 @@ function App(): React.JSX.Element {
   const teamBoardMotionClass = teamBoardMotionActive ? ' is-team-switching' : ''
 
   return (
-    <div className="app-shell app-shell--panel">
+    <div className="app-shell app-shell--panel" data-theme={settings.theme}>
       <section className={`panel panel--${panelView}`}>
+        <span className="panel__deco" aria-hidden="true" />
         {panelView === 'details' ? (
           <div className={`panel__body panel__body--details${panelTabMotionClass}`}>
             <div className="panel__content" ref={panelContentRef}>
@@ -1879,6 +1896,22 @@ function App(): React.JSX.Element {
               </div>
 
               <div className="settings-list">
+                <div className="settings-section">
+                  <p className="settings-section__title">{copy.groupAppearance}</p>
+                  <SettingField label={copy.theme} hint={copy.themeHint}>
+                    <SegmentedControl
+                      onChange={(value) => {
+                        void handleSettingsPatch({ theme: value as ThemeId })
+                      }}
+                      options={THEME_OPTIONS.map((option) => ({
+                        label: option.label,
+                        value: option.value
+                      }))}
+                      value={settings.theme}
+                    />
+                  </SettingField>
+                </div>
+
                 <div className="settings-section">
                   <p className="settings-section__title">{copy.groupAgent}</p>
                   <SettingField label={copy.agentId} hint={copy.agentIdHint}>

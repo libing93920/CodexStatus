@@ -11,6 +11,10 @@ export type DockEdge = 'left' | 'right'
 export type RendererCommandType = 'show-panel-view'
 export type PanelFocusTarget = 'announcement' | 'messages'
 
+/** 外观主题:4 套,midnight=默认深色青蓝(现状),其余 3 套对应 design-previews */
+export type ThemeId = 'midnight' | 'aurora' | 'cyber' | 'titan'
+export const THEME_IDS: readonly ThemeId[] = ['midnight', 'aurora', 'cyber', 'titan'] as const
+
 export interface RateLimitWindowSnapshot {
   id: string
   label: string
@@ -215,6 +219,8 @@ export interface AppSettings {
   teamNickname?: string
   /** 团队组口令(同口令的 peer 才互见);空表示未加入团队 */
   teamGroup?: string
+  /** 外观主题;midnight=默认深色青蓝 */
+  theme: ThemeId
 }
 
 export interface WindowPreferences {
@@ -377,7 +383,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   locale: 'zh-CN',
   agentId: 'codex',
   launchAtLogin: false,
-  iqThreshold: DEFAULT_IQ_THRESHOLD
+  iqThreshold: DEFAULT_IQ_THRESHOLD,
+  theme: 'midnight'
 }
 
 export const DEFAULT_WINDOW_PREFERENCES: WindowPreferences = {
@@ -433,7 +440,8 @@ export function normalizeSettings(input: Partial<AppSettings> | undefined): AppS
         : DEFAULT_SETTINGS.launchAtLogin,
     iqThreshold: normalizeIqThreshold(input?.iqThreshold),
     teamNickname: normalizeOptionalString(input?.teamNickname),
-    teamGroup: normalizeOptionalString(input?.teamGroup)
+    teamGroup: normalizeOptionalString(input?.teamGroup),
+    theme: isThemeId(input?.theme) ? input.theme : DEFAULT_SETTINGS.theme
   }
 }
 
@@ -508,4 +516,13 @@ function isDockEdge(value: unknown): value is DockEdge {
 
 function isAgentId(value: unknown): value is AgentId {
   return value === 'codex' || value === 'claude' || value === 'opencode'
+}
+
+function isThemeId(value: unknown): value is ThemeId {
+  return (
+    value === 'midnight' ||
+    value === 'aurora' ||
+    value === 'cyber' ||
+    value === 'titan'
+  )
 }
