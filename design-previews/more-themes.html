@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CodexStatus · UI 风格方案预览 II</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height:100vh;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(217,93,24,.14), transparent 60%),
+      radial-gradient(900px 500px at 10% 110%, rgba(52,68,255,.12), transparent 60%),
+      #0d0c10;
+    color:#e8edf4;
+    font-family:"Segoe UI","Microsoft YaHei UI",sans-serif;
+    display:flex; flex-direction:column; align-items:center;
+    padding:72px 24px; gap:14px;
+  }
+  h1 { font-size:30px; font-weight:700; letter-spacing:.5px; }
+  .sub { color:#93a1b5; font-size:14px; margin-bottom:34px; }
+  .grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+    gap:22px;
+    width:min(1240px,100%);
+  }
+  a.card {
+    display:block; text-decoration:none; color:inherit;
+    border-radius:20px; padding:26px 26px 22px;
+    position:relative; overflow:hidden;
+    border:1px solid rgba(255,255,255,.09);
+    transition:transform .25s cubic-bezier(.22,.9,.3,1), box-shadow .25s;
+    min-height:236px;
+    display:flex; flex-direction:column; justify-content:flex-end; gap:8px;
+  }
+  a.card:hover { transform:translateY(-4px); box-shadow:0 24px 48px rgba(0,0,0,.45); }
+  a.card .tag { font-size:11px; letter-spacing:3px; opacity:.75; text-transform:uppercase; }
+  a.card h2 { font-size:22px; font-weight:700; }
+  a.card p { font-size:13px; line-height:1.7; opacity:.82; }
+  a.card .swatches { display:flex; gap:6px; margin-top:10px; }
+  a.card .swatches i { width:22px; height:22px; border-radius:7px; border:1px solid rgba(255,255,255,.18); }
+
+  /* E · 复古旅行海报 */
+  .card--poster {
+    background:
+      radial-gradient(circle at 82% 18%, #ffd889 0 26px, transparent 27px),
+      repeating-conic-gradient(from 0deg at 82% 18%, rgba(255,216,137,.35) 0deg 6deg, transparent 6deg 14deg) no-repeat,
+      linear-gradient(165deg,#f3ecd8 0%,#e9c98f 46%,#d9712f 78%,#b23f0a 100%);
+    color:#22333b;
+  }
+  .card--poster .tag,.card--poster p{opacity:.85;}
+  .card--poster .swatches i{border-color:rgba(34,51,59,.45);}
+
+  /* F · 街机 CRT */
+  .card--arcade {
+    background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,.28) 0 1px, transparent 1px 3px),
+      radial-gradient(360px 200px at 50% 42%, rgba(52,68,255,.32), transparent 62%),
+      #0b0b16;
+    font-family:Consolas,monospace;
+  }
+  .card--arcade::after{
+    content:"▶ INSERT COIN"; position:absolute; top:20px; left:24px;
+    font-family:'Press Start 2P',Consolas,monospace; font-size:10px; color:#ffd21f;
+    animation:coin-blink 1.1s steps(2) infinite;
+  }
+  @keyframes coin-blink{50%{opacity:.15;}}
+
+  /* I · 孟菲斯派对 */
+  .card--memphis{
+    background:
+      radial-gradient(circle at 12px 12px,#ff5c8a 4px,transparent 4.6px) 0 0/52px 52px,
+      conic-gradient(from 135deg at 50% 72%,#1c1a17 90deg,transparent 0) 0 100%/36px 18px repeat-x,
+      linear-gradient(160deg,#fdf6ec,#fbeeda);
+    color:#1c1a17;
+  }
+  .card--memphis h2{font-family:"Arial Black","Microsoft YaHei UI",sans-serif;text-transform:uppercase;letter-spacing:-.5px;}
+  .card--memphis .tag{color:#ff5c8a;opacity:1;font-weight:800;}
+  .card--memphis .swatches i{border-color:rgba(28,26,23,.5);}
+  .card--memphis::after{
+    content:""; position:absolute; top:18px; right:20px;
+    width:0;height:0;
+    border-left:15px solid transparent;border-right:15px solid transparent;
+    border-bottom:26px solid #00c2b2;
+    filter:drop-shadow(3px 3px 0 #1c1a17);
+    transform:rotate(14deg);
+  }
+
+  /* K · 蒸汽朋克 */
+  .card--steam{
+    background:
+      repeating-conic-gradient(from 0deg at 86% 16%, rgba(201,151,74,.45) 0deg 10deg, transparent 10deg 18deg) 86% -30px/150px 150px no-repeat,
+      linear-gradient(168deg,#40301c 0%,#241a10 60%,#181008 100%);
+  }
+  .card--steam::after{
+    content:"⚙"; position:absolute; top:14px; right:18px;
+    width:44px; height:44px;
+    display:grid; place-items:center;
+    border-radius:50%;
+    background:radial-gradient(circle at 36% 32%, #e8c883, #c9974a 55%, #8a6530);
+    box-shadow:inset 0 -3px 5px rgba(0,0,0,.4), 0 3px 8px rgba(0,0,0,.4);
+    font-size:22px; color:#3a2c1a;
+    animation:gear-rot 14s linear infinite;
+  }
+  @keyframes gear-rot{to{transform:rotate(360deg);}}
+
+  /* L · 浮世绘 */
+  .card--ukiyo{
+    background:
+      radial-gradient(circle at 74% 22%, #d94436 0 34px, transparent 35px),
+      radial-gradient(circle at 50% 118%, #2f5494 34%, transparent 36%) 0 100%/26px 13px repeat-x,
+      linear-gradient(178deg,#22406f 0%,#182c55 48%,#101d3c 100%);
+  }
+  .card--ukiyo h2{letter-spacing:6px;font-family:"Noto Serif SC","Songti SC",SimSun,serif;}
+  .card--ukiyo .tag{color:#e8a08f;opacity:1;}
+  .card--ukiyo::after{
+    content:"浪"; position:absolute; bottom:18px; right:20px;
+    width:34px; height:34px;
+    display:grid; place-items:center;
+    background:#f2ead8; color:#16294e;
+    font-family:"Noto Serif SC","Songti SC",SimSun,serif;
+    font-size:17px; font-weight:700;
+    box-shadow:inset 0 0 0 1.5px #16294e;
+    border-radius:2px;
+    transform:rotate(-3deg);
+  }
+
+  /* M · 手账涂鸦 */
+  .card--doodle{
+    background:
+      linear-gradient(rgba(58,110,165,.14) 1px,transparent 1px) 0 0/24px 24px,
+      linear-gradient(90deg,rgba(58,110,165,.14) 1px,transparent 1px) 0 0/24px 24px,
+      linear-gradient(170deg,#fffef8,#f7f6ea);
+    color:#333a4d;
+    font-family:"Comic Sans MS","Segoe UI","Microsoft YaHei UI",sans-serif;
+  }
+  .card--doodle h2{color:#2b45a0;transform:rotate(-1.2deg);}
+  .card--doodle .tag{color:#e05a8c;opacity:1;font-weight:700;}
+  .card--doodle .swatches i{border-color:rgba(43,69,160,.4);}
+  .card--doodle::after{
+    content:"✎"; position:absolute; top:14px; right:20px;
+    font-size:26px; color:#e05a8c;
+    transform:rotate(-8deg);
+    text-shadow:2px 2px 0 rgba(255,230,107,.8);
+  }
+
+  /* N · 包豪斯 */
+  .card--bauhaus{
+    background:
+      radial-gradient(circle at 82% 20%, var(--r,#d93a26) 0 42px, transparent 43px),
+      conic-gradient(from -90deg at 8% 92%, #1f4fa3 0 90deg, transparent 90deg) no-repeat,
+      linear-gradient(160deg,#faf8f0,#efece0);
+    color:#1a1a1a;
+    --r:#d93a26;
+  }
+  .card--bauhaus h2{
+    font-family:"Century Gothic","Trebuchet MS","Microsoft YaHei UI",sans-serif;
+    text-transform:uppercase; letter-spacing:2px;
+  }
+  .card--bauhaus .tag{color:#1f4fa3;opacity:1;font-weight:800;}
+  .card--bauhaus .swatches i{border-color:rgba(26,26,26,.4);}
+  .card--bauhaus::after{
+    content:""; position:absolute; bottom:64px; left:24px;
+    width:0;height:0;
+    border-left:14px solid transparent;border-right:14px solid transparent;
+    border-bottom:24px solid #f2b705;
+  }
+
+  /* O · 哥特纹章 */
+  .card--gothic{
+    background:
+      radial-gradient(circle at 76% 20%, rgba(201,162,39,.22) 0 36px, transparent 37px),
+      linear-gradient(172deg,#231c38 0%,#161128 55%,#0f0b1d 100%);
+  }
+  .card--gothic h2{
+    font-family:Georgia,"Noto Serif SC","Microsoft YaHei UI",serif;
+    letter-spacing:5px; text-transform:uppercase;
+    color:#ecd28a; text-shadow:0 0 14px rgba(201,162,39,.4);
+  }
+  .card--gothic .tag{color:#c9a227;opacity:1;letter-spacing:4px;}
+  .card--gothic::after{
+    content:"⚜"; position:absolute; top:14px; right:20px;
+    font-size:30px; color:#c9a227;
+    text-shadow:0 0 12px rgba(201,162,39,.6);
+  }
+
+  .foot{margin-top:40px; font-size:12px; color:#647082; display:flex; gap:18px; align-items:center; flex-wrap:wrap; justify-content:center;}
+  .foot a{color:#93a1b5; text-decoration:none;}
+  .foot a:hover{color:#cdd8e6; text-decoration:underline;}
+</style>
+</head>
+<body>
+  <h1>CodexStatus · UI 风格重设计方案 II</h1>
+  <p class="sub">横胶囊 / 竖 Orb / Panel 三件套 × 新增 8 套风格 · 均含动效演示 · 点击进入</p>
+  <div class="grid">
+    <a class="card card--poster" href="./sunset-dune.html">
+      <span class="tag">Scheme E</span>
+      <h2>复古旅行海报 Retro Poster</h2>
+      <p>胶囊是一张带打孔虚线的公园门票，太阳射线徽章旋转指示进度；Panel 是国家公园招贴——报头横幅、半调网点、条带落日天空、按钮按压回弹。</p>
+      <div class="swatches"><i style="background:#f3ecd8"></i><i style="background:#d95d18"></i><i style="background:#dfa32b"></i><i style="background:#22333b"></i></div>
+    </a>
+    <a class="card card--arcade" href="./synthwave-drive.html">
+      <span class="tag">Scheme F</span>
+      <h2>街机 CRT Arcade Cabinet</h2>
+      <p>整个 Panel 是一台显像管街机：机壳边框、CRT 暗角与滚动刷新亮带、光栅三色纹。额度即血条——分段能量槽、低血量红闪、零填充计分、开机点亮动画。</p>
+      <div class="swatches"><i style="background:#0b0b16"></i><i style="background:#ffd21f"></i><i style="background:#ff3355"></i><i style="background:#26f7fd"></i></div>
+    </a>
+    <a class="card card--memphis" href="./memphis-party.html">
+      <span class="tag">Scheme I</span>
+      <h2>孟菲斯派对 Memphis Party</h2>
+      <p>大胆撞色的几何狂欢：粗黑描边 + 彩色错位实心阴影，三角纸屑/锯齿/圆环满屏漂动，卡片歪斜如贴纸，进度条滚泡泡，一切元素拒绝横平竖直。</p>
+      <div class="swatches"><i style="background:#fdf6ec"></i><i style="background:#ff5c8a"></i><i style="background:#ffc93c"></i><i style="background:#00c2b2"></i></div>
+    </a>
+    <a class="card card--steam" href="./steampunk-gauge.html">
+      <span class="tag">Scheme K</span>
+      <h2>蒸汽朋克 Steampunk Gauge</h2>
+      <p>黄铜气压计胶囊：铆钉四角 + 指针表盘随额度摆动。齿轮组咬合转动、蒸汽升腾、铜管柱状图带法兰环，Panel 是皮革内衬的机器控制台。</p>
+      <div class="swatches"><i style="background:#2e2115"></i><i style="background:#c9974a"></i><i style="background:#4e8578"></i><i style="background:#b06a3b"></i></div>
+    </a>
+    <a class="card card--ukiyo" href="./ukiyo-e.html">
+      <span class="tag">Scheme L</span>
+      <h2>浮世绘 Ukiyo-e Wave</h2>
+      <p>藍染分阶 + 朱红点睛：红日、富士山与两层错位摇摆的大浪剪影。进度条是白沫翻滚的浪头，图表为浪柱，右侧竖排「額度図録」题字配落款朱印。</p>
+      <div class="swatches"><i style="background:#16294e"></i><i style="background:#2f5494"></i><i style="background:#d94436"></i><i style="background:#f2ead8"></i></div>
+    </a>
+    <a class="card card--doodle" href="./doodle-journal.html">
+      <span class="tag">Scheme M</span>
+      <h2>手账涂鸦 Doodle Journal</h2>
+      <p>方格纸上的学生手账：手绘歪线框(border-radius 技法)、和纸胶带贴角、荧光笔涂抹大数字、蜡笔斜纹进度条、线圈装订页边，Comic Sans 全程乱入。</p>
+      <div class="swatches"><i style="background:#fcfbf3"></i><i style="background:#2b45a0"></i><i style="background:#ffe66b"></i><i style="background:#ffb3c8"></i></div>
+    </a>
+    <a class="card card--bauhaus" href="./bauhaus-blocks.html">
+      <span class="tag">Scheme N</span>
+      <h2>包豪斯 Bauhaus Blocks</h2>
+      <p>红黄蓝黑原色平面构成：胶囊是色域拼接(方/带/半圆)，主百分比是半圆表盘扇形，图表由矩形+半圆柱顶叠成，零描边零阴影的秩序几何。</p>
+      <div class="swatches"><i style="background:#f2efe6"></i><i style="background:#d93a26"></i><i style="background:#f2b705"></i><i style="background:#1f4fa3"></i></div>
+    </a>
+    <a class="card card--gothic" href="./gothic-crest.html">
+      <span class="tag">Scheme O</span>
+      <h2>哥特纹章 Gothic Crest</h2>
+      <p>暗紫夜幕下的主教座堂：玫瑰花窗烛光摇曳、尖拱连排剪影；进度条是分格彩玻璃，名次是盾徽，按钮是火漆印，Panel 顶部还有一排三叶拱饰。</p>
+      <div class="swatches"><i style="background:#131020"></i><i style="background:#3a2a5c"></i><i style="background:#c9a227"></i><i style="background:#7a1f2b"></i></div>
+    </a>
+  </div>
+  <p class="foot">
+    <a href="./index.html">← 第一批方案 A–D</a>
+    <span>预览用静态页 · 数据为示意 · 确认风格后再落地到 Electron 项目</span>
+  </p>
+</body>
+</html>

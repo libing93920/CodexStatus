@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scheme O · 哥特纹章 Gothic Crest</title>
+<style>
+  /* ================================================================
+     方案 O · 哥特纹章 GOTHIC CREST
+     形态语言:暗紫夜幕 + 古金细线雕饰 + 尖拱窗造型
+             + 盾徽纹章 + 玫瑰花窗进度 + 烛光摇曳
+     ================================================================ */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --night: #131020;
+    --night-2: #1b1629;
+    --royal: #3a2a5c;
+    --royal-lo: #241a3d;
+    --gold: #c9a227;
+    --gold-hi: #ecd28a;
+    --gold-dim: #8a6d1f;
+    --crimson: #7a1f2b;
+    --parchment: #d8d2c4;
+    --parchment-dim: #948d7e;
+    --serif: Georgia, "Times New Roman", "Noto Serif SC", "Microsoft YaHei UI", serif;
+  }
+  body {
+    min-height:100vh;
+    background:
+      radial-gradient(1000px 520px at 76% -12%, rgba(201,162,39,.09), transparent 60%),
+      radial-gradient(800px 460px at 4% 112%, rgba(122,31,43,.10), transparent 60%),
+      var(--night);
+    color:var(--parchment);
+    font-family:var(--serif);
+    padding-bottom:90px;
+  }
+
+  .topbar {
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; justify-content:center; gap:18px;
+    padding:15px 32px;
+    background:
+      linear-gradient(180deg,#221b36,#171126);
+    border-top:1px solid rgba(201,162,39,.35);
+    border-bottom:2.5px solid var(--gold-dim);
+    box-shadow:0 4px 16px rgba(0,0,0,.55);
+  }
+  .topbar a.back {
+    position:absolute; left:26px;
+    color:var(--gold); text-decoration:none; font-size:13px; letter-spacing:1px;
+  }
+  .topbar a.back:hover { color:var(--gold-hi); }
+  /* 尖拱小窗装饰 */
+  .arch-mini {
+    width:14px; height:22px;
+    clip-path:polygon(50% 0, 100% 32%, 100% 100%, 0 100%, 0 32%);
+    background:linear-gradient(180deg,var(--gold) 0 30%, rgba(201,162,39,.25) 30%);
+  }
+  .topbar h1 {
+    font-size:19px; letter-spacing:7px; text-transform:uppercase; font-weight:600;
+    color:var(--gold-hi);
+    text-shadow:0 0 16px rgba(201,162,39,.45), 0 1px 0 rgba(0,0,0,.8);
+  }
+  .topbar .desc { position:absolute; right:26px; font-size:10.5px; letter-spacing:4px; color:#8d8578; text-transform:uppercase; }
+
+  .section-title {
+    margin:48px 40px 18px;
+    display:flex; align-items:center; gap:16px;
+    font-size:13px; letter-spacing:6px; color:var(--gold);
+    text-transform:uppercase;
+  }
+  .section-title i {
+    font-style:normal; color:var(--crimson);
+    text-shadow:0 0 8px rgba(122,31,43,.8);
+  }
+  /* 饰金分隔线 */
+  .section-title::after {
+    content:""; flex:1; height:7px;
+    background:
+      linear-gradient(90deg, transparent, var(--gold-dim) 12%, transparent 13%) 0 3px/26px 1px repeat-x,
+      linear-gradient(90deg, transparent, var(--gold-dim) 50%, transparent 51%) 13px 0/26px 7px no-repeat;
+  }
+
+  /* ============ 壁纸样机:大教堂之夜 ============ */
+  .wallpaper {
+    position:relative;
+    width:min(1060px, calc(100% - 80px));
+    margin:0 auto;
+    overflow:hidden;
+    border-radius:3px;
+    border:1px solid rgba(201,162,39,.3);
+    outline:1px solid rgba(201,162,39,.14);
+    outline-offset:5px;
+    transition:background .5s;
+    background:
+      radial-gradient(640px 320px at 74% 22%, rgba(201,162,39,.10), transparent 58%),
+      radial-gradient(500px 300px at 14% 88%, rgba(122,31,43,.12), transparent 58%),
+      linear-gradient(172deg,#231c38 0%,#161128 55%,#0f0b1d 100%);
+  }
+  .wallpaper.is-light {
+    background:
+      radial-gradient(640px 320px at 74% 22%, rgba(255,240,200,.65), transparent 58%),
+      linear-gradient(172deg,#e9e2d2 0%,#d8cfba 60%,#c4b89e 100%);
+  }
+  /* 玫瑰花窗 */
+  .rose-window {
+    position:absolute; left:70%; top:14%;
+    width:120px; height:120px;
+    border-radius:50%;
+    border:3px solid var(--gold-dim);
+    background:
+      conic-gradient(from 0deg,
+        rgba(201,162,39,.5) 0 30deg, rgba(122,31,43,.55) 30deg 60deg,
+        rgba(58,42,92,.6) 60deg 90deg, rgba(201,162,39,.5) 90deg 120deg,
+        rgba(122,31,43,.55) 120deg 150deg, rgba(58,42,92,.6) 150deg 180deg,
+        rgba(201,162,39,.5) 180deg 210deg, rgba(122,31,43,.55) 210deg 240deg,
+        rgba(58,42,92,.6) 240deg 270deg, rgba(201,162,39,.5) 270deg 300deg,
+        rgba(122,31,43,.55) 300deg 330deg, rgba(58,42,92,.6) 330deg 360deg),
+      radial-gradient(circle, #0d0a17 0 40%, transparent 41%);
+    box-shadow:0 0 34px rgba(201,162,39,.28), inset 0 0 0 3px #0d0a17, inset 0 0 0 5px var(--gold-dim);
+    animation:candle-flicker 4s ease-in-out infinite alternate;
+    pointer-events:none;
+  }
+  @keyframes candle-flicker {
+    0%,100% { filter:brightness(.92); }
+    38%     { filter:brightness(1.08); }
+    61%     { filter:brightness(.96); }
+    80%     { filter:brightness(1.04); }
+  }
+  .wallpaper.is-light .rose-window { opacity:.4; }
+  /* 尖拱连排剪影 */
+  .arcades { position:absolute; inset:auto 0 0 0; height:150px; pointer-events:none; opacity:.5; }
+  .arcades::before {
+    content:""; position:absolute; inset:0;
+    background:
+      repeating-linear-gradient(90deg, transparent 0 46px, rgba(10,7,20,.75) 46px 62px);
+    -webkit-mask:
+      linear-gradient(#000,#000) 0 100%/100% 44px no-repeat,
+      radial-gradient(circle at 23px 44px, transparent 0 22px, #000 23px) 0 0/108px 108px repeat-x;
+            mask:
+      linear-gradient(#000,#000) 0 100%/100% 44px no-repeat,
+      radial-gradient(circle at 23px 44px, transparent 0 22px, #000 23px) 0 0/108px 108px repeat-x;
+  }
+
+  .wallpaper__inner {
+    position:relative;
+    display:flex; align-items:center; justify-content:center;
+    gap:84px;
+    padding:92px 40px 130px;
+    min-height:370px;
+  }
+  .wp-toolbar {
+    position:absolute; top:14px; right:14px; z-index:5;
+    display:flex; gap:9px;
+  }
+  .wp-toolbar button {
+    font-family:var(--serif); font-size:11px; letter-spacing:3px; text-transform:uppercase;
+    padding:8px 16px;
+    color:var(--gold-hi);
+    background:rgba(19,16,32,.72);
+    border:1px solid var(--gold-dim);
+    cursor:pointer;
+    transition:all .25s;
+  }
+  .wp-toolbar button:hover { color:#fff; border-color:var(--gold); box-shadow:0 0 12px rgba(201,162,39,.35); }
+
+  .cap-stage-label {
+    position:absolute; top:-33px; left:0;
+    font-size:10.5px; letter-spacing:5px; text-transform:uppercase;
+    color:var(--parchment-dim);
+  }
+  .cap-stage-label b {
+    font-weight:400; color:var(--gold);
+    margin-right:10px;
+  }
+
+  /* ---------- 胶囊 = 祭坛横匾 ---------- */
+  .capsule, .orb {
+    position:relative; cursor:grab;
+    filter:drop-shadow(0 12px 24px rgba(0,0,0,.6));
+  }
+  .capsule { width:256px; height:58px; }
+  .orb { width:58px; height:176px; }
+  .capsule:active, .orb:active { cursor:grabbing; }
+  /* 横匾面:尖拱端头 */
+  .plaque-face {
+    position:absolute; inset:0;
+    border-radius:29px / 50%;
+    background:
+      linear-gradient(170deg,#2c2344 0%,#1c1630 60%,#141024 100%);
+    box-shadow:
+      inset 0 0 0 1px rgba(201,162,39,.4),
+      inset 0 0 0 3.5px rgba(19,16,32,.9),
+      inset 0 0 0 4.5px rgba(201,162,39,.25),
+      inset 0 -8px 16px rgba(0,0,0,.55);
+    overflow:hidden;
+  }
+  /* 匾内烛光辉光 */
+  .plaque-face::before {
+    content:""; position:absolute; left:-20%; bottom:-60%;
+    width:80%; height:160%;
+    background:radial-gradient(closest-side, rgba(201,162,39,.16), transparent 70%);
+    animation:candle-flicker 5s ease-in-out infinite alternate;
+  }
+  .crest-layout {
+    position:relative; z-index:1;
+    width:100%; height:100%;
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr) auto;
+    align-items:center;
+    gap:12px;
+    padding:7px 20px;
+    color:var(--parchment);
+  }
+  /* 盾徽章 */
+  .shield {
+    width:36px; height:42px; flex-shrink:0;
+    clip-path:polygon(50% 0, 100% 18%, 100% 62%, 50% 100%, 0 62%, 0 18%);
+    background:
+      linear-gradient(135deg, var(--crimson) 0 49%, var(--royal) 51%);
+    display:grid; place-items:center;
+    box-shadow:inset 0 0 0 1.5px var(--gold);
+    position:relative;
+  }
+  .shield::after {
+    content:"⚜";
+    font-size:14px; color:var(--gold-hi);
+    text-shadow:0 0 6px rgba(201,162,39,.6);
+  }
+  .goth-pct {
+    font-size:22px; letter-spacing:1px; line-height:1;
+    color:var(--gold-hi);
+    text-shadow:0 0 12px rgba(201,162,39,.5), 0 1px 0 rgba(0,0,0,.7);
+  }
+  .goth-metric { display:flex; flex-direction:column; align-items:center; gap:5px; min-width:0; }
+  /* 花窗进度:分格彩玻璃填充 */
+  .glass-track {
+    width:100%; height:10px;
+    display:flex; gap:2px;
+    padding:0 2px;
+    border-radius:2px;
+    background:rgba(10,7,20,.7);
+    box-shadow:inset 0 0 0 1px rgba(138,109,31,.5);
+  }
+  .glass-track s {
+    flex:1; text-decoration:none;
+    background:rgba(201,162,39,.1);
+    transition:background .3s, box-shadow .3s;
+    clip-path:polygon(50% 0, 100% 26%, 100% 100%, 0 100%, 0 26%);
+  }
+  .glass-track s.f {
+    background:linear-gradient(180deg,var(--gold-hi),var(--gold));
+    box-shadow:0 0 7px rgba(201,162,39,.65);
+  }
+  .goth-side { display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
+  .scroll-tag {
+    display:inline-flex; align-items:center; gap:5px;
+    font-size:9.5px; letter-spacing:2px;
+    color:var(--parchment);
+    padding:2.5px 10px;
+    background:linear-gradient(180deg,var(--crimson),#5c1620);
+    border-radius:2px;
+    box-shadow:inset 0 0 0 1px rgba(216,210,196,.3), 0 2px 5px rgba(0,0,0,.45);
+    white-space:nowrap;
+  }
+  .scroll-tag--gold { color:var(--ink2,#2a2208); background:linear-gradient(180deg,var(--gold-hi),var(--gold)); box-shadow:inset 0 0 0 1px rgba(255,245,215,.5), 0 2px 5px rgba(0,0,0,.45); }
+  .goth-weekly {
+    display:inline-flex; align-items:center; gap:4px;
+    font-size:19px; white-space:nowrap;
+  }
+  .goth-weekly svg { width:13px; height:13px; stroke-width:2.6; color:var(--gold); filter:drop-shadow(0 0 4px rgba(201,162,39,.6)); }
+  /* 竖匾:尖拱顶 */
+  .vface {
+    position:absolute; inset:0;
+    border-radius:29px 29px 12px 12px;
+    clip-path:polygon(50% 0, 100% 14%, 100% 94%, 50% 100%, 0 94%, 0 14%);
+    background:linear-gradient(178deg,#2c2344 0%,#1c1630 55%,#141024 100%);
+    box-shadow:inset 0 0 0 1px rgba(201,162,39,.4), inset 0 0 0 3.5px rgba(19,16,32,.9), inset 0 0 0 4.5px rgba(201,162,39,.22);
+  }
+  .orb-layout {
+    position:relative; z-index:1;
+    width:100%; height:100%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:7px; padding:26px 6px 18px;
+  }
+  .vglass {
+    width:14px; height:66px;
+    display:flex; flex-direction:column-reverse; gap:2px;
+  }
+  .vglass s {
+    flex:1; text-decoration:none;
+    background:rgba(201,162,39,.1);
+    clip-path:polygon(50% 0, 100% 22%, 100% 100%, 0 100%, 0 22%);
+    transition:background .3s;
+  }
+  .vglass s.f {
+    background:linear-gradient(180deg,var(--gold-hi),var(--crimson));
+    box-shadow:0 0 6px rgba(201,162,39,.5);
+  }
+  .orb-pct { font-size:15px; color:var(--gold-hi); text-shadow:0 0 9px rgba(201,162,39,.5); }
+  .orb-layout .shield { width:26px; height:30px; }
+  .orb-layout .scroll-tag { font-size:8px; padding:2px 7px; max-width:52px; overflow:hidden; text-overflow:ellipsis; }
+
+  /* ================================================================
+     Panel = 主教座堂中殿
+     ================================================================ */
+  .panel-zone { display:flex; justify-content:center; padding:26px 40px 0; }
+  .panel {
+    width:480px; height:600px;
+    position:relative;
+    display:flex; flex-direction:column;
+    border-radius:4px;
+    clip-path:polygon(50% 0, calc(100% - 40px) 0, 100% 5%, 100% 99%, calc(100% - 6px) 100%, 6px 100%, 0 99%, 0 5%);
+    background:
+      radial-gradient(circle at 50% 0%, rgba(201,162,39,.08), transparent 40%),
+      linear-gradient(174deg,#241d3a 0%,#181230 55%,#110d20 100%);
+    box-shadow:
+      inset 0 0 0 1px rgba(201,162,39,.35),
+      inset 0 0 0 4px rgba(15,11,29,.9),
+      inset 0 0 0 5px rgba(138,109,31,.5),
+      inset 0 0 70px rgba(0,0,0,.6),
+      0 26px 60px rgba(0,0,0,.6);
+    overflow:hidden;
+    color:var(--parchment);
+  }
+  .panel::before {
+    content:""; position:absolute; left:50%; top:-70px; transform:translateX(-50%);
+    width:340px; height:190px;
+    background:radial-gradient(closest-side, rgba(201,162,39,.14), transparent 72%);
+    animation:candle-flicker 6s ease-in-out infinite alternate;
+    pointer-events:none; z-index:0;
+  }
+  /* 中殿尖拱列饰(顶部一排) */
+  .triforium {
+    flex-shrink:0;
+    display:flex; justify-content:center; gap:7px;
+    padding:16px 0 12px;
+    position:relative; z-index:1;
+  }
+  .triforium span {
+    width:26px; height:34px;
+    clip-path:polygon(50% 0, 100% 30%, 100% 100%, 0 100%, 0 30%);
+    background:linear-gradient(180deg, rgba(201,162,39,.4), rgba(58,42,92,.5));
+    border-radius:2px;
+  }
+  .panel__content {
+    flex:1; overflow-y:auto;
+    padding:6px 26px 0;
+    scrollbar-width:thin;
+    scrollbar-color:var(--gold-dim) rgba(0,0,0,.3);
+    position:relative; z-index:1;
+  }
+  .panel__content::-webkit-scrollbar{width:8px;}
+  .panel__content::-webkit-scrollbar-thumb{background:var(--gold-dim);border-radius:99px;}
+
+  /* Tabs:祭坛龛位 */
+  .tabs {
+    display:grid; grid-template-columns:repeat(3,1fr); gap:9px;
+    margin-bottom:19px;
+  }
+  .tabs button {
+    font-family:var(--serif);
+    font-size:12.5px; letter-spacing:4px; text-transform:uppercase;
+    padding:12px 0 10px;
+    color:var(--parchment-dim);
+    background:linear-gradient(180deg,#241d3c,#171129);
+    border:none;
+    clip-path:polygon(50% 0, 100% 22%, 100% 100%, 0 100%, 0 22%);
+    cursor:pointer;
+    transition:all .25s;
+    position:relative;
+    top:0;
+  }
+  .tabs button:hover { color:var(--parchment); }
+  .tabs button.on {
+    color:var(--ink2,#241d06);
+    background:linear-gradient(180deg,var(--gold-hi),var(--gold));
+    top:4px;
+  }
+  .view[hidden]{display:none;}
+
+  /* 主铭文区:经文式排版 */
+  .scripture {
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:16px;
+    align-items:start;
+    margin-bottom:16px;
+    padding:16px 18px;
+    background:
+      linear-gradient(170deg, rgba(201,162,39,.06), rgba(201,162,39,.01));
+    box-shadow:inset 0 0 0 1px rgba(201,162,39,.28), inset 0 0 24px rgba(0,0,0,.4);
+  }
+  .verse-num { display:flex; align-items:baseline; gap:8px; }
+  .verse-num b {
+    font-size:54px; line-height:.95; letter-spacing:1px; font-weight:600;
+    color:var(--gold-hi);
+    text-shadow:0 0 18px rgba(201,162,39,.5);
+  }
+  .verse-num s { text-decoration:none; font-size:16px; color:var(--parchment-dim); }
+  .verse-cap { margin-top:10px; font-size:12px; letter-spacing:1px; line-height:1.95; color:var(--parchment); }
+  .verse-cap b { color:var(--gold-hi); font-weight:600; }
+  /* 右侧竖排拉丁箴言 */
+  .latin-v {
+    writing-mode:vertical-rl;
+    font-size:10.5px; letter-spacing:5px;
+    color:#8d8578;
+    border-left:1px solid rgba(201,162,39,.35);
+    padding-left:12px;
+    max-height:150px;
+  }
+
+  /* 次要指标:横幅卷轴 */
+  .second-plaque {
+    display:flex; align-items:center; gap:14px;
+    padding:12px 16px;
+    margin-bottom:16px;
+    background:linear-gradient(170deg,#2a2142,#191330);
+    box-shadow:inset 0 0 0 1px rgba(201,162,39,.3);
+    border-radius:2px;
+  }
+  .second-plaque__num { font-size:27px; color:var(--gold-hi); letter-spacing:1px; text-shadow:0 0 12px rgba(201,162,39,.4); }
+  .second-plaque__track { flex:1; height:10px; }
+  .second-plaque__meta { font-size:10px; color:#8d8578; letter-spacing:1px; text-align:right; line-height:1.75; }
+  .second-plaque__meta b { display:block; font-size:11.5px; color:var(--parchment); }
+
+  /* 用量统计:圣器账簿 */
+  .reliquary {
+    margin-bottom:16px;
+    padding:14px 16px 16px;
+    background:linear-gradient(170deg, rgba(58,42,92,.28), rgba(27,22,41,.4));
+    box-shadow:inset 0 0 0 1px rgba(201,162,39,.26);
+  }
+  .reliquary__title {
+    font-size:13.5px; letter-spacing:5px; text-transform:uppercase;
+    color:var(--gold-hi); margin-bottom:11px;
+    display:flex; align-items:center; gap:9px;
+  }
+  .reliquary__title::before { content:"✠"; color:var(--crimson); text-shadow:0 0 7px rgba(122,31,43,.8); }
+  .seg {
+    display:inline-grid; grid-auto-flow:column; gap:2px;
+    padding:3px; background:rgba(0,0,0,.4);
+    box-shadow:inset 0 0 0 1px rgba(138,109,31,.45);
+    border-radius:2px;
+  }
+  .seg button {
+    font-family:var(--serif);
+    padding:4px 12px; font-size:12px; letter-spacing:2px;
+    background:none; border:none; border-radius:1.5px;
+    color:var(--parchment-dim); cursor:pointer; transition:all .2s;
+  }
+  .seg button.on {
+    color:var(--ink2,#241d06);
+    background:linear-gradient(180deg,var(--gold-hi),var(--gold));
+  }
+  .usage-summary {
+    display:grid; grid-template-columns:repeat(5,auto); justify-content:space-between;
+    margin:13px 2px 4px;
+  }
+  .us-item { display:flex; flex-direction:column; gap:3px; }
+  .us-item b { font-size:14.5px; color:#efe8d5; letter-spacing:.5px; }
+  .us-item span { font-size:8.5px; letter-spacing:2px; color:#8d8578; text-transform:uppercase; }
+  .us-item--in b{color:#a9c4b8;} .us-item--out b{color:#bfa8d9;}
+  .us-item--cache b{color:#98b5aa;} .us-item--cost b{color:#e0a86a;}
+  /* 花窗柱图 */
+  .chart {
+    display:flex; align-items:flex-end; gap:8px;
+    height:84px; margin-top:13px;
+    padding:0 4px 20px;
+    position:relative;
+    border-bottom:2px solid var(--gold-dim);
+  }
+  .chart__col { flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end; position:relative; }
+  .chart__barwrap { width:100%; max-width:22px; flex:1; display:flex; align-items:flex-end; }
+  /* 尖拱花窗柱 */
+  .chart__lance {
+    width:100%;
+    height:var(--h,40%);
+    clip-path:polygon(50% 0, 100% 12%, 100% 100%, 0 100%, 0 12%);
+    background:
+      repeating-conic-gradient(from 0deg at 50% 118%,
+        rgba(201,162,39,.4) 0 9deg, rgba(122,31,43,.45) 9deg 18deg,
+        rgba(58,42,92,.5) 18deg 27deg, rgba(201,162,39,.4) 27deg 36deg),
+      linear-gradient(180deg,#241d3a,#151027);
+    box-shadow:0 0 9px rgba(201,162,39,.22);
+    position:relative;
+    transform-origin:bottom;
+    animation:lance-rise .7s cubic-bezier(.22,.9,.3,1) backwards;
+  }
+  /* 朱砂花费段 */
+  .chart__lance em {
+    position:absolute; left:0; right:0; bottom:0;
+    height:var(--seg,30%);
+    background:linear-gradient(180deg, rgba(217,68,54,.75), rgba(122,31,43,.9));
+  }
+  @keyframes lance-rise { from{transform:scaleY(0);} }
+  .chart__date { position:absolute; bottom:-16px; font-size:9px; letter-spacing:1px; color:#8d8578; }
+
+  /* 明细行:圣物名录 */
+  .rows { margin-top:17px; display:flex; flex-direction:column; gap:8px; }
+  .row {
+    display:flex; align-items:center; gap:12px;
+    padding:11px 14px;
+    border-radius:2px;
+    background:linear-gradient(170deg, rgba(58,42,92,.24), rgba(27,22,41,.36));
+    box-shadow:inset 0 0 0 1px rgba(201,162,39,.22);
+    transition:all .2s;
+    cursor:default;
+  }
+  .row:hover { box-shadow:inset 0 0 0 1px var(--gold), 0 0 14px rgba(201,162,39,.14); transform:translateX(3px); }
+  .row__icon {
+    width:30px; height:34px; flex-shrink:0;
+    display:grid; place-items:center;
+    color:var(--gold-hi);
+    clip-path:polygon(50% 0, 100% 16%, 100% 84%, 50% 100%, 0 84%, 0 16%);
+    background:linear-gradient(180deg, rgba(122,31,43,.55), rgba(58,42,92,.55));
+    box-shadow:inset 0 0 0 1px rgba(201,162,39,.4);
+  }
+  .row__icon svg { width:14px; height:14px; stroke-width:2.4; stroke:currentColor; fill:none; }
+  .row__label { font-size:13px; letter-spacing:1px; }
+  .row__label a { color:inherit; text-decoration:none; border-bottom:1px solid rgba(201,162,39,.5); }
+  .row__label a:hover { color:var(--gold-hi); }
+  .row__value { margin-left:auto; font-size:13.5px; color:var(--gold-hi); letter-spacing:1px; }
+  .row__hint { font-size:10px; color:#8d8578; letter-spacing:1px; }
+
+  .panel__footer {
+    flex-shrink:0;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:13px 26px 15px;
+    background:linear-gradient(180deg,#221b36,#151027);
+    border-top:2px solid var(--gold-dim);
+    box-shadow:inset 0 1px 0 rgba(201,162,39,.25);
+    position:relative; z-index:1;
+  }
+  .panel__footer-meta { font-size:10px; letter-spacing:2px; color:#8d8578; text-transform:uppercase; }
+  /* 火漆印按钮 */
+  .btn-close {
+    font-family:var(--serif);
+    font-size:12px; letter-spacing:3px;
+    padding:10px 20px;
+    color:var(--paper-wax,#f3e6dc);
+    background:radial-gradient(circle at 38% 32%, #a63b47, var(--crimson) 58%, #571119);
+    border:none; border-radius:50% 44% 52% 48%;
+    box-shadow:0 3px 9px rgba(87,17,25,.55), inset 0 0 0 2px rgba(243,230,220,.25);
+    cursor:pointer; transition:all .2s;
+    transform:rotate(-2deg);
+  }
+  .btn-close:hover { transform:rotate(-2deg) scale(1.05); box-shadow:0 5px 14px rgba(87,17,25,.7), inset 0 0 0 2px rgba(243,230,220,.4); }
+  .btn-close:active { transform:rotate(-2deg) scale(.97); }
+
+  /* ============ 团队页 ============ */
+  .team-announcement {
+    position:relative;
+    padding:13px 16px 13px 52px;
+    margin-bottom:15px;
+    border-radius:2px;
+    background:linear-gradient(170deg,#2a2142,#191330);
+    box-shadow:inset 0 0 0 1px rgba(122,31,43,.5);
+  }
+  .team-announcement::before {
+    content:"敕令";
+    position:absolute; left:0; top:0; bottom:0; width:38px;
+    writing-mode:vertical-rl;
+    display:grid; place-items:center;
+    background:linear-gradient(180deg,var(--crimson),#571119);
+    color:#f3e6dc;
+    font-size:12px; letter-spacing:7px;
+    border-right:1px solid rgba(201,162,39,.4);
+  }
+  .ta-topline { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+  .ta-label { font-size:10px; letter-spacing:3px; color:var(--gold); text-transform:uppercase; }
+  .ta-meta { font-size:10px; color:#8d8578; letter-spacing:1px; }
+  .ta-text { font-size:12.5px; line-height:1.75; }
+  .ta-ack {
+    margin-top:9px; padding:5px 17px;
+    font-family:var(--serif); font-size:12px; letter-spacing:3px;
+    color:var(--ink2,#241d06);
+    background:linear-gradient(180deg,var(--gold-hi),var(--gold));
+    border:none; border-radius:2px;
+    box-shadow:0 0 0 1px rgba(138,109,31,.6);
+    cursor:pointer; transition:all .2s;
+  }
+  .ta-ack:hover { box-shadow:0 0 12px rgba(201,162,39,.4), inset 0 0 0 1px rgba(138,109,31,.6); }
+
+  .board-head { display:flex; align-items:center; justify-content:space-between; margin:2px 0 13px; }
+  .board-head h3 {
+    font-size:14.5px; letter-spacing:5px; text-transform:uppercase; color:var(--gold-hi);
+    display:flex; align-items:center; gap:10px;
+  }
+  .board-head h3::before { content:"⚔"; color:var(--crimson); text-shadow:0 0 7px rgba(122,31,43,.7); }
+  .btn-refresh {
+    font-family:var(--serif);
+    font-size:11px; letter-spacing:2px;
+    padding:7px 15px;
+    color:var(--gold-hi);
+    background:transparent;
+    border:1px solid var(--gold-dim);
+    cursor:pointer; transition:all .25s;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  .btn-refresh:hover { border-color:var(--gold); box-shadow:0 0 10px rgba(201,162,39,.3); }
+
+  .trow {
+    display:flex; align-items:center; gap:12px;
+    padding:11px 14px;
+    margin-bottom:9px;
+    border-radius:2px;
+    background:linear-gradient(170deg, rgba(58,42,92,.22), rgba(27,22,41,.34));
+    box-shadow:inset 0 0 0 1px rgba(201,162,39,.18);
+    transition:all .2s;
+  }
+  .trow:hover { box-shadow:inset 0 0 0 1px var(--gold); transform:translateX(3px); }
+  /* 名次纹章盾 */
+  .rank {
+    width:32px; height:37px; flex-shrink:0;
+    display:grid; place-items:center;
+    font-size:13px; font-weight:700;
+    color:var(--gold-hi);
+    clip-path:polygon(50% 0, 100% 16%, 100% 64%, 50% 100%, 0 64%, 0 16%);
+    background:linear-gradient(135deg, var(--rc-a,#3a2a5c) 0 49%, var(--rc-b,#241a3d) 51%);
+    box-shadow:inset 0 0 0 1.5px var(--gold-dim);
+  }
+  .rank--1 { --rc-a:#a63b47; --rc-b:#7a1f2b; box-shadow:inset 0 0 0 1.5px var(--gold), 0 0 12px rgba(166,59,71,.5); }
+  .rank--2 { --rc-a:#4a4a58; --rc-b:#2e2e38; }
+  .rank--3 { --rc-a:#8a6d3f; --rc-b:#5c4522; }
+  .trow__main { flex:1; min-width:0; }
+  .trow__name-line { display:flex; align-items:center; gap:7px; margin-bottom:5px; }
+  .trow__name { font-size:13px; letter-spacing:2px; }
+  .badge-self {
+    font-size:8.5px; letter-spacing:2px; padding:2px 8px;
+    color:var(--ink2,#241d06);
+    background:linear-gradient(180deg,var(--gold-hi),var(--gold));
+    border-radius:2px;
+    box-shadow:0 0 8px rgba(201,162,39,.4);
+  }
+  .dot-ver { width:7px; height:7px; border-radius:50% 44% 52% 48%; box-shadow:0 0 6px currentColor, inset 0 -1px 1px rgba(0,0,0,.4); }
+  .twin { display:flex; align-items:center; gap:8px; }
+  .twin__label { font-size:9px; color:#8d8578; width:20px; letter-spacing:1px; }
+  .twin__bar {
+    flex:1; height:8px;
+    display:flex; gap:2px;
+  }
+  .twin__bar s {
+    flex:1; text-decoration:none;
+    background:rgba(201,162,39,.1);
+    clip-path:polygon(50% 0, 100% 30%, 100% 100%, 0 100%, 0 30%);
+    transition:background .25s;
+  }
+  .twin__bar s.f {
+    background:linear-gradient(180deg,color-mix(in srgb,var(--tone,#c9a227) 70%,#fff) 0%,var(--tone,#c9a227));
+    box-shadow:0 0 5px color-mix(in srgb,var(--tone,#c9a227) 55%,transparent);
+  }
+  .twin__val { font-size:10px; color:var(--parchment-dim); width:32px; text-align:right; }
+  .trow__side { display:flex; flex-direction:column; align-items:flex-end; gap:3px; flex-shrink:0; }
+  .trow__pct { font-size:17px; color:var(--tone,#efe8d5); letter-spacing:1px; text-shadow:0 0 9px rgba(201,162,39,.35); }
+  .chip-mini {
+    font-size:8.5px; letter-spacing:1px;
+    padding:2px 8px;
+    color:var(--parchment);
+    box-shadow:inset 0 0 0 1px rgba(138,109,31,.55);
+    border-radius:2px;
+  }
+  .like-btn {
+    font-family:var(--serif);
+    display:inline-flex; align-items:center; gap:3px;
+    padding:2.5px 10px;
+    font-size:10.5px; letter-spacing:1px;
+    color:#e0a0ac;
+    background:transparent;
+    box-shadow:inset 0 0 0 1px rgba(176,85,106,.55);
+    border:none; border-radius:2px;
+    cursor:pointer; transition:all .2s;
+  }
+  .like-btn:hover { color:#fff; box-shadow:inset 0 0 0 1px #b0556a; }
+  .like-btn.liked { background:linear-gradient(135deg,#a63b47,#7a1f2b); color:#f3e6dc; box-shadow:0 0 10px rgba(122,31,43,.55), inset 0 0 0 1px rgba(243,230,220,.3); }
+
+  /* 广播消息:羊皮信笺 */
+  .broadcast { margin-top:16px; }
+  .broadcast__title { font-size:12px; letter-spacing:4px; color:#8d8578; text-transform:uppercase; margin-bottom:9px; }
+  .feed {
+    display:flex; flex-direction:column; gap:8px;
+    max-height:132px; overflow-y:auto;
+    padding-right:4px;
+    scrollbar-width:thin; scrollbar-color:var(--gold-dim) transparent;
+  }
+  .msg {
+    max-width:86%;
+    padding:9px 14px;
+    border-radius:2px;
+    background:linear-gradient(170deg, rgba(216,210,196,.07), rgba(216,210,196,.02));
+    box-shadow:inset 0 0 0 1px rgba(201,162,39,.24);
+    font-size:12.5px; line-height:1.7;
+  }
+  .msg--self {
+    align-self:flex-end;
+    background:linear-gradient(170deg, rgba(122,31,43,.3), rgba(87,17,25,.36));
+    box-shadow:inset 0 0 0 1px rgba(217,68,54,.45);
+  }
+  .msg__meta { display:flex; gap:8px; font-size:9px; letter-spacing:2px; color:#8d8578; margin-bottom:3px; text-transform:uppercase; }
+  .composer { display:flex; gap:9px; margin-top:11px; }
+  .composer input {
+    flex:1; padding:10px 15px;
+    font-family:var(--serif);
+    font-size:12.5px; letter-spacing:1px;
+    color:var(--parchment);
+    background:rgba(10,7,20,.5);
+    border:1px solid rgba(138,109,31,.5);
+    border-radius:2px; outline:none;
+    transition:border-color .25s, box-shadow .25s;
+  }
+  .composer input:focus { border-color:var(--gold); box-shadow:0 0 0 3px rgba(201,162,39,.12); }
+  .composer input::placeholder { color:#6e675a; }
+  .btn-send {
+    font-family:var(--serif);
+    padding:10px 21px;
+    font-size:12px; letter-spacing:3px;
+    color:var(--ink2,#241d06);
+    background:linear-gradient(180deg,var(--gold-hi),var(--gold));
+    border:none; border-radius:2px;
+    box-shadow:inset 0 0 0 1px rgba(255,245,215,.5), 0 3px 8px rgba(0,0,0,.4);
+    cursor:pointer; transition:all .2s;
+  }
+  .btn-send:hover { box-shadow:0 0 14px rgba(201,162,39,.45), inset 0 0 0 1px rgba(255,245,215,.5); }
+
+  /* ============ 设置页 ============ */
+  .settings-section { margin-bottom:18px; }
+  .settings-section__title {
+    font-size:10.5px; letter-spacing:5px; text-transform:uppercase;
+    color:#8d8578; margin-bottom:9px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .settings-section__title::before { content:"✚"; color:var(--crimson); }
+  .settings-section__title::after {
+    content:""; flex:1; height:5px;
+    background:
+      linear-gradient(90deg, transparent, var(--gold-dim) 12%, transparent 13%) 0 2px/22px 1px repeat-x,
+      linear-gradient(90deg, transparent, var(--gold-dim) 50%, transparent 51%) 11px 0/22px 5px no-repeat;
+    opacity:.7;
+  }
+  .setting-row {
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:11px 14px;
+    margin-bottom:7px;
+    border-radius:2px;
+    background:linear-gradient(170deg, rgba(58,42,92,.2), rgba(27,22,41,.32));
+    box-shadow:inset 0 0 0 1px rgba(201,162,39,.16);
+    transition:all .2s;
+  }
+  .setting-row:hover { box-shadow:inset 0 0 0 1px rgba(201,162,39,.36); }
+  .setting-row > span:first-child { font-size:12.5px; letter-spacing:1px; }
+  .inline-input {
+    display:inline-flex; align-items:center; gap:7px;
+    padding:5px 12px;
+    border-radius:2px;
+    background:rgba(10,7,20,.45);
+    box-shadow:inset 0 0 0 1px rgba(138,109,31,.45);
+  }
+  .inline-input span { font-size:9.5px; letter-spacing:1px; color:#8d8578; text-transform:uppercase; }
+  .inline-input input {
+    width:46px; padding:3px 6px;
+    font-family:var(--serif);
+    font-size:13px; letter-spacing:1px;
+    background:transparent; color:var(--gold-hi);
+    border:none; outline:none; text-align:right;
+    border-bottom:1px solid rgba(201,162,39,.45);
+  }
+  .inline-input input:focus { border-color:var(--gold-hi); }
+  .inline-input em { font-style:normal; font-size:9.5px; color:#8d8578; }
+  /* 开关:烛台拨杆 */
+  .toggle {
+    width:46px; height:24px;
+    border-radius:2px;
+    background:rgba(10,7,20,.6);
+    box-shadow:inset 0 0 0 1px rgba(138,109,31,.45), inset 0 2px 4px rgba(0,0,0,.6);
+    position:relative; cursor:pointer; flex-shrink:0;
+    transition:background .25s;
+  }
+  .toggle::after {
+    content:"🕯";
+    position:absolute; top:1px; left:3px;
+    width:22px; height:19px;
+    display:grid; place-items:center;
+    font-size:11px;
+    background:rgba(58,42,92,.5);
+    border-radius:2px;
+    box-shadow:inset 0 0 0 1px rgba(201,162,39,.3);
+    filter:grayscale(.4) brightness(.8);
+    transition:transform .22s cubic-bezier(.34,1.5,.64,1), filter .22s;
+  }
+  .toggle.on::after { transform:translateX(18px); filter:none; }
+  .toggle.on { box-shadow:inset 0 0 0 1px var(--gold), inset 0 2px 4px rgba(0,0,0,.5), 0 0 10px rgba(201,162,39,.25); }
+  .about-row {}
+  .about-row__info { display:flex; flex-direction:column; gap:2px; }
+  .about-row__label { font-size:12.5px; letter-spacing:1px; }
+  .about-row__version { font-size:9.5px; letter-spacing:2px; color:#8d8578; }
+  .btn-check {
+    font-family:var(--serif);
+    font-size:11px; letter-spacing:3px;
+    padding:8px 17px;
+    color:var(--gold-hi);
+    background:transparent;
+    border:1px solid var(--gold-dim);
+    border-radius:2px;
+    cursor:pointer; transition:all .25s;
+  }
+  .btn-check:hover { border-color:var(--gold); box-shadow:0 0 12px rgba(201,162,39,.3); }
+
+  /* 入场:烛火点亮 */
+  .rise { animation:wake .55s ease-out backwards; }
+  @keyframes wake {
+    from { opacity:0; filter:brightness(.3) sepia(.6); transform:translateY(10px); }
+    to   { opacity:1; filter:brightness(1) sepia(0); transform:translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="arch-mini"></span>
+  <a class="back" href="./more-themes.html">← Index</a>
+  <h1>Quota Cathedral</h1>
+  <span class="desc">ANNO MMXXVI · CHAPTER VIII</span>
+  <span class="arch-mini"></span>
+</div>
+
+<!-- 横竖胶囊 -->
+<div class="section-title"><i>✠</i> Capsule · Orb — Reliquary Plaques</div>
+<div class="wallpaper" id="wp1">
+  <div class="rose-window"></div>
+  <div class="arcades"></div>
+  <div class="wp-toolbar">
+    <button onclick="toggleWp('wp1', this)">浅色壁纸</button>
+    <button onclick="replay(document.getElementById('wp1'))">↻ Replay</button>
+  </div>
+  <div class="wallpaper__inner">
+    <!-- 横匾 -->
+    <div style="position:relative">
+      <span class="cap-stage-label"><b>✦</b>Reliquary · H</span>
+      <div class="capsule">
+        <div class="plaque-face"></div>
+        <div class="crest-layout">
+          <span class="shield"></span>
+          <div class="goth-metric">
+            <span class="goth-pct" data-count="42" data-suffix="%">0%</span>
+            <span class="glass-track"><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s></s><s></s><s></s><s></s><s></s><s></s></span>
+          </div>
+          <span class="goth-side">
+            <span class="goth-weekly">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h12M6 22h12M7 2v4l5 6-5 6v4M17 2v4l-5 6 5 6v4"/></svg>
+              <span data-count="6" data-suffix="D">0D</span>
+            </span>
+            <span class="scroll-tag">🎫 重置 2天</span>
+            <span class="scroll-tag scroll-tag--gold">✦ Terra Mx</span>
+          </span>
+        </div>
+      </div>
+    </div>
+    <!-- 竖匾 -->
+    <div style="position:relative">
+      <span class="cap-stage-label"><b>✦</b>Lance · V</span>
+      <div class="orb">
+        <div class="vface"></div>
+        <div class="orb-layout">
+          <span class="shield"></span>
+          <span class="scroll-tag">🎫 重置 1天</span>
+          <span class="vglass"><s class="f"></s><s></s><s></s><s></s><s></s><s></s><s></s><s></s><s></s><s></s></span>
+          <span class="orb-pct" data-count="10" data-suffix="%">0%</span>
+          <span class="scroll-tag scroll-tag--gold">✦ Terra Mx</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Panel -->
+<div class="section-title"><i>✠</i> Panel — Nave 480×600</div>
+<div class="panel-zone">
+  <div class="panel rise">
+    <div class="triforium"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+
+    <div class="panel__content">
+      <nav class="tabs">
+        <button class="on">详情 Scripture</button>
+        <button>团队 Order</button>
+        <button>设置 Rites</button>
+      </nav>
+
+      <div class="view" id="view-details">
+        <!-- 经文主区 -->
+        <div class="scripture">
+          <div>
+            <div class="verse-num"><b data-count="42">0</b><s>% 余韵</s></div>
+            <p class="verse-cap">五时之限,尚存四成有二。<br>重置之钟将于 <b>二时三十分</b> 后敲响,至 <b>18:36</b>。</p>
+          </div>
+          <div class="latin-v">LUX QUOTA IN TENEBRIS</div>
+        </div>
+
+        <!-- 横幅卷轴 -->
+        <div class="second-plaque">
+          <span class="second-plaque__num"><span data-count="98">0</span>%</span>
+          <span class="glass-track second-plaque__track"><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s></span>
+          <span class="second-plaque__meta"><b>一周之限 · 98%</b>六日廿二时后重置<br>至 8/5 14:52</span>
+        </div>
+
+        <!-- 圣器账簿 -->
+        <div class="reliquary">
+          <div class="reliquary__title">用度圣账 Ledger</div>
+          <div class="seg">
+            <button class="on">一日</button><button>七日</button><button>三十日</button><button>自定义</button>
+          </div>
+          <div class="usage-summary">
+            <div class="us-item"><b>1.2M</b><span>TOKEN 总量</span></div>
+            <div class="us-item us-item--in"><b>860K</b><span>输入 IN</span></div>
+            <div class="us-item us-item--out"><b>142K</b><span>输出 OUT</span></div>
+            <div class="us-item us-item--cache"><b>71%</b><span>CACHE</span></div>
+            <div class="us-item us-item--cost"><b>$3.82</b><span>献金 GOLD</span></div>
+          </div>
+          <div class="chart">
+            <div class="chart__col"><div class="chart__barwrap"><div class="chart__lance" style="--h:46%; animation-delay:.05s"><em style="--seg:64%"></em></div></div><span class="chart__date">8/15</span></div>
+            <div class="chart__col"><div class="chart__barwrap"><div class="chart__lance" style="--h:72%; animation-delay:.1s"><em style="--seg:58%"></em></div></div><span class="chart__date">8/16</span></div>
+            <div class="chart__col"><div class="chart__barwrap"><div class="chart__lance" style="--h:34%; animation-delay:.15s"><em style="--seg:70%"></em></div></div><span class="chart__date">8/17</span></div>
+            <div class="chart__col"><div class="chart__barwrap"><div class="chart__lance" style="--h:88%; animation-delay:.2s"><em style="--seg:52%"></em></div></div><span class="chart__date">8/18</span></div>
+            <div class="chart__col"><div class="chart__barwrap"><div class="chart__lance" style="--h:58%; animation-delay:.25s"><em style="--seg:66%"></em></div></div><span class="chart__date">8/19</span></div>
+            <div class="chart__col"><div class="chart__barwrap"><div class="chart__lance" style="--h:96%; animation-delay:.3s"><em style="--seg:61%"></em></div></div><span class="chart__date">昨日</span></div>
+            <div class="chart__col"><div class="chart__barwrap"><div class="chart__lance" style="--h:64%; animation-delay:.35s"><em style="--seg:71%"></em></div></div><span class="chart__date">今日</span></div>
+          </div>
+        </div>
+
+        <!-- 圣物名录 -->
+        <div class="rows">
+          <div class="row" style="--ic:#e0a86a">
+            <span class="row__icon"><svg viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1a2 2 0 0 0 0 4v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1a2 2 0 0 0 0-4z"/><path d="M13 7v2m0 6v2"/></svg></span>
+            <span class="row__label">赦免券 Indulgence ×2</span>
+            <span class="row__value">二日</span>
+            <span class="row__hint">颁于 8月1日 04:11</span>
+          </div>
+          <div class="row" style="--ic:#bfa8d9">
+            <span class="row__icon"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.8L20 10l-5 3.9L16.5 20 12 16.6 7.5 20 9 13.9 4 10l6.1-1.2z"/></svg></span>
+            <span class="row__label"><a href="#">星象荐模 Astrolabe Pick</a></span>
+            <span class="row__value">SOL XH</span>
+            <span class="row__hint">IQ 106.3 · $6.33/题</span>
+          </div>
+          <div class="row" style="--ic:#98b5aa">
+            <span class="row__icon"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 3v6h-6"/></svg></span>
+            <span class="row__label"><a href="#">额度巡礼 Vigil</a></span>
+            <span class="row__value">ETERNAL</span>
+          </div>
+        </div>
+      </div><!-- /view-details -->
+
+      <!-- ============ 团队视图 ============ -->
+      <div class="view" id="view-team" hidden>
+        <section class="team-announcement">
+          <div class="ta-topline">
+            <span class="ta-label">公告 Decree</span>
+            <span class="ta-meta">主教 BISHOP · 10:24</span>
+          </div>
+          <p class="ta-text">本周六晚 22:00-23:00 官方额度窗口重置,期间可能出现短暂数据延迟,请知悉。</p>
+          <button class="ta-ack">领受 SO BE IT</button>
+        </section>
+
+        <div style="margin-bottom:13px">
+          <div class="seg">
+            <button class="on">额度 GRACE</button><button>TOKEN TRIBUTE</button>
+          </div>
+        </div>
+
+        <div class="board-head">
+          <h3>骑士团骑士榜 Knight Board</h3>
+          <button class="btn-refresh">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 3v6h-6"/></svg>
+            巡阅 SURVEY
+          </button>
+        </div>
+
+        <div class="trow">
+          <span class="rank rank--1">Ⅰ</span>
+          <div class="trow__main">
+            <div class="trow__name-line"><span class="trow__name">阿宁</span><span class="badge-self">我 SELF</span></div>
+            <div class="twin"><span class="twin__label">5h</span><span class="twin__bar" style="--tone:#c9a227"><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s></s><s></s><s></s><s></s><s></s><s></s></span><span class="twin__val">42%</span></div>
+            <div class="twin"><span class="twin__label">7d</span><span class="twin__bar" style="--tone:#efe8d5"><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s></span><span class="twin__val">98%</span></div>
+          </div>
+          <div class="trow__side">
+            <span class="trow__pct">98%</span>
+            <span class="chip-mini">🎫 ×2</span>
+          </div>
+        </div>
+
+        <div class="trow">
+          <span class="rank rank--2">Ⅱ</span>
+          <div class="trow__main">
+            <div class="trow__name-line"><span class="trow__name">老王</span><span class="dot-ver" style="color:#98b5aa" title="最新版本"></span></div>
+            <div class="twin"><span class="twin__label">5h</span><span class="twin__bar" style="--tone:#c9a227"><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s></s><s></s><s></s><s></s></span><span class="twin__val">67%</span></div>
+            <div class="twin"><span class="twin__label">7d</span><span class="twin__bar" style="--tone:#efe8d5"><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s></s><s></s></span><span class="twin__val">81%</span></div>
+          </div>
+          <div class="trow__side">
+            <span class="trow__pct">81%</span>
+            <button class="like-btn liked">♥ 3</button>
+          </div>
+        </div>
+
+        <div class="trow">
+          <span class="rank rank--3">Ⅲ</span>
+          <div class="trow__main">
+            <div class="trow__name-line"><span class="trow__name">小柒</span><span class="dot-ver" style="color:#e0a86a" title="版本落后"></span></div>
+            <div class="twin"><span class="twin__label">5h</span><span class="twin__bar" style="--tone:#5c4a78"><s class="f"></s><s class="f"></s><s></s><s></s><s></s><s></s><s></s><s></s><s></s><s></s></span><span class="twin__val">23%</span></div>
+            <div class="twin"><span class="twin__label">7d</span><span class="twin__bar" style="--tone:#efe8d5"><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s></s><s></s><s></s><s></s><s></s></span><span class="twin__val">55%</span></div>
+          </div>
+          <div class="trow__side">
+            <span class="trow__pct">55%</span>
+            <button class="like-btn">♡ 0</button>
+          </div>
+        </div>
+
+        <div class="broadcast">
+          <div class="broadcast__title">羊皮信笺 Parchments</div>
+          <div class="feed">
+            <div class="msg">
+              <div class="msg__meta"><span>老王</span><span>10:31</span></div>
+              谁还有重置卡?我 5h 快见底了
+            </div>
+            <div class="msg msg--self">
+              <div class="msg__meta"><span>我</span><span>10:33</span></div>
+              我还剩 2 张,周六给你留一张
+            </div>
+          </div>
+          <div class="composer">
+            <input placeholder="修书一封,同会可见…" type="text">
+            <button class="btn-send">缄封 SEAL</button>
+          </div>
+        </div>
+      </div><!-- /view-team -->
+
+      <!-- ============ 设置视图 ============ -->
+      <div class="view" id="view-settings" hidden>
+        <div class="settings-section">
+          <p class="settings-section__title">法器 Instrument</p>
+          <div class="setting-row">
+            <span>监控工具</span>
+            <div class="seg">
+              <button class="on">Codex</button><button>Claude Code</button><button>OpenCode</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">钟鸣 Winding</p>
+          <div class="setting-row">
+            <span>刷新模式 MODE</span>
+            <div class="seg">
+              <button class="on">自动 AUTO</button><button>手动 MANU</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span>刷新间隔 INTERVAL</span>
+            <div class="seg">
+              <button>一刻钟</button><button class="on">半时辰</button><button>一时辰</button><button>两时辰</button><button>自定义</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">显像 Vision</p>
+          <div class="setting-row">
+            <span>百分比口径 METRIC</span>
+            <div class="seg">
+              <button class="on">所余 LEFT</button><button>所用 USED</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">星荐 Astrolabe</p>
+          <div class="setting-row">
+            <span>IQ 门槛 THRESHOLD</span>
+            <label class="inline-input"><span>≥</span><input type="number" value="90"><em>IQ</em></label>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">常例 Ordinary</p>
+          <div class="setting-row">
+            <span>开机自启 AUTORUN</span>
+            <span class="toggle on" onclick="this.classList.toggle('on')"></span>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">语言 Tongue</p>
+          <div class="setting-row">
+            <span>语种 LANG</span>
+            <div class="seg">
+              <button class="on">简中 ZH</button><button>EN</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">修会 ORDER</p>
+          <div class="setting-row">
+            <span>团队名号 NAME</span>
+            <label class="inline-input"><input type="text" value="阿宁" style="width:88px; text-align:left; color:#efe8d5"></label>
+          </div>
+          <div class="setting-row">
+            <span>会规密语 PASSPHRASE</span>
+            <label class="inline-input"><input type="text" value="••••••" style="width:88px; text-align:left; color:#efe8d5"></label>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">纪年 Chronicle</p>
+          <div class="setting-row about-row">
+            <div class="about-row__info">
+              <span class="about-row__label">当前版本 EDITION</span>
+              <span class="about-row__version">CH.I · VER 1.1.7</span>
+            </div>
+            <button class="btn-check">寻访新典 QUEST ↗</button>
+          </div>
+        </div>
+      </div><!-- /view-settings -->
+    </div>
+    <div class="panel__footer">
+      <span class="panel__footer-meta">chatgpt.com · candle lit · 1 min ago</span>
+      <button class="btn-close">✕ 合拢 Seal</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 壁纸切换:胶囊是透明悬浮窗,需在深/浅两种桌面下检查可读性
+  function toggleWp(id, btn) {
+    const wp = document.getElementById(id);
+    const light = wp.classList.toggle('is-light');
+    btn.textContent = light ? '深色壁纸' : '浅色壁纸';
+  }
+  function countUp(el) {
+    const target = Number(el.dataset.count);
+    const suffix = el.dataset.suffix || '';
+    const dur = 900;
+    const t0 = performance.now();
+    function tick(t) {
+      const p = Math.min(1, (t - t0) / dur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * eased) + suffix;
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  function replay(scope) {
+    scope.querySelectorAll('[data-count]').forEach(countUp);
+    scope.querySelectorAll('.vglass').forEach(g => {
+      g.querySelectorAll('s').forEach((s, idx) => s.classList.toggle('f', idx >= g.children.length - 1));
+    });
+    scope.querySelectorAll('.chart__lance').forEach(b => {
+      b.style.animation = 'none';
+      void b.offsetWidth;
+      b.style.animation = '';
+    });
+  }
+  // 主 Tab 切换
+  const TAB_VIEWS = ['details', 'team', 'settings'];
+  document.querySelectorAll('.panel__content > .tabs button').forEach((btn, i) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.panel__content > .tabs button').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      document.querySelectorAll('.view').forEach(v => { v.hidden = true; });
+      document.getElementById('view-' + TAB_VIEWS[i]).hidden = false;
+    });
+  });
+  document.querySelectorAll('.view .seg').forEach(group => {
+    group.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        group.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+        btn.classList.add('on');
+      });
+    });
+  });
+  window.addEventListener('load', () => replay(document));
+</script>
+</body>
+</html>

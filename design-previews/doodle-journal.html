@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scheme M · 手账涂鸦 Doodle Journal</title>
+<style>
+  /* ================================================================
+     方案 M · 手账涂鸦 DOODLE JOURNAL
+     形态语言:方格纸底 + 手绘歪线框(border-radius 技法)
+             + 和纸胶带贴角 + 荧光笔涂抹 + 线圈装订
+             + 圆珠笔蓝 · 涂鸦符号散落
+     ================================================================ */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --page: #fcfbf3;
+    --grid: rgba(58,110,165,.14);
+    --margin-red: rgba(224,90,90,.5);
+    --ballpen: #2b45a0;
+    --ink: #333a4d;
+    --pencil: #7a8296;
+    --hl-yellow: #ffe66b;
+    --hl-pink: #ffb3c8;
+    --hl-mint: #9ff0c8;
+    --hl-blue: #9ecbff;
+    --tape-pink: rgba(255,179,200,.75);
+    --tape-yellow: rgba(255,230,107,.72);
+    --tape-mint: rgba(159,240,200,.7);
+    /* 手绘歪框圆角公式 */
+    --wobble: 255px 15px 225px 15px / 15px 225px 15px 255px;
+    --wobble2: 15px 225px 15px 255px / 225px 15px 255px 15px;
+    --hand: "Comic Sans MS", "Segoe Print", var(--body-fallback);
+    --body-fallback: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+    --scribble: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='46' height='9' viewBox='0 0 46 9'%3E%3Cpath d='M1 5 Q 4 1 7.5 5 T 14.5 5 T 21.5 5 T 28.5 5 T 35.5 5 T 42.5 5' fill='none' stroke='%232b45a0' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+  }
+  body {
+    min-height:100vh;
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px) 0 0/24px 24px,
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0/24px 24px,
+      var(--page);
+    color:var(--ink);
+    font-family:var(--hand);
+    padding-bottom:90px;
+  }
+
+  .topbar {
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; gap:16px;
+    padding:16px 32px;
+    background:
+      linear-gradient(rgba(58,110,165,.08) 1px, transparent 1px) 0 -6px/24px 24px,
+      linear-gradient(90deg, rgba(58,110,165,.08) 1px, transparent 1px) -6px 0/24px 24px,
+      #fffef8;
+    border-bottom:2px solid var(--ballpen);
+    box-shadow:0 3px 10px rgba(43,69,160,.12);
+  }
+  .topbar a.back {
+    color:#fff; text-decoration:none; font-size:13px;
+    background:var(--ballpen);
+    padding:6px 15px;
+    border-radius:var(--wobble);
+    transform:rotate(-2deg);
+    box-shadow:2px 3px 0 rgba(43,69,160,.25);
+  }
+  .topbar a.back:hover { transform:rotate(-2deg) scale(1.05); }
+  .topbar h1 { font-size:20px; letter-spacing:2px; color:var(--ballpen); position:relative; display:inline-block; transform:rotate(-.5deg); }
+  .topbar h1::after {
+    content:""; position:absolute; left:-2%; right:-2%; bottom:-4px; height:9px;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='46' height='9' viewBox='0 0 46 9'%3E%3Cpath d='M1 5 Q 4 1 7.5 5 T 14.5 5 T 21.5 5 T 28.5 5 T 35.5 5 T 42.5 5' fill='none' stroke='%23ffb3c8' stroke-width='4'/%3E%3C/svg%3E") repeat-x;
+    background-size:auto 100%;
+  }
+  .topbar .desc { margin-left:auto; font-size:11.5px; letter-spacing:2px; color:var(--pencil); }
+
+  .section-title {
+    margin:48px 40px 18px;
+    display:flex; align-items:center; gap:14px;
+    font-size:14px; letter-spacing:2px; color:var(--ballpen);
+    transform:rotate(-.4deg);
+  }
+  .section-title b {
+    font-weight:700;
+    background:linear-gradient(transparent 42%, var(--hl-yellow) 42% 88%, transparent 88%);
+    padding:0 4px;
+  }
+  .section-title i { font-style:normal; font-size:17px; }
+  .section-title::after {
+    content:"✂ ─ ─ ─";
+    flex:1; text-align:left;
+    color:var(--pencil); font-size:13px; letter-spacing:2px;
+    overflow:hidden; white-space:nowrap; opacity:.55;
+  }
+
+  /* ============ 壁纸样机 ============ */
+  .wallpaper {
+    position:relative;
+    width:min(1060px, calc(100% - 80px));
+    margin:0 auto;
+    overflow:hidden;
+    border-radius:var(--wobble);
+    border:2.5px solid var(--ballpen);
+    transition:background .5s;
+    background:
+      linear-gradient(rgba(58,110,165,.1) 1px, transparent 1px) 0 0/26px 26px,
+      linear-gradient(90deg, rgba(58,110,165,.1) 1px, transparent 1px) 0 0/26px 26px,
+      linear-gradient(170deg,#fffefa 0%,#f7f6ea 100%);
+  }
+  .wallpaper.is-light {
+    background:
+      linear-gradient(rgba(120,150,190,.12) 1px, transparent 1px) 0 0/26px 26px,
+      linear-gradient(90deg, rgba(120,150,190,.12) 1px, transparent 1px) 0 0/26px 26px,
+      linear-gradient(170deg,#ffffff 0%,#fbfaef 100%);
+  }
+  /* 散落涂鸦 */
+  .doodles { position:absolute; inset:0; pointer-events:none; font-size:19px; opacity:.65; }
+  .doodles span { position:absolute; animation:doodle-bob 4s ease-in-out infinite alternate; }
+  .doodles span:nth-child(2){ animation-delay:-1s; } .doodles span:nth-child(3){ animation-delay:-2s; }
+  .doodles span:nth-child(4){ animation-delay:-3s; } .doodles span:nth-child(5){ animation-delay:-1.6s; }
+  @keyframes doodle-bob { to { transform:translateY(-8px) rotate(8deg); } }
+
+  .wallpaper__inner {
+    position:relative;
+    display:flex; align-items:center; justify-content:center;
+    gap:88px;
+    padding:96px 40px 116px;
+    min-height:370px;
+  }
+  .wp-toolbar {
+    position:absolute; top:16px; right:18px; z-index:5;
+    display:flex; gap:10px;
+  }
+  .wp-toolbar button {
+    font-family:var(--hand); font-size:12px;
+    padding:7px 15px;
+    background:#fff; color:var(--ballpen);
+    border:2.5px solid var(--ballpen);
+    border-radius:var(--wobble2);
+    cursor:pointer;
+    box-shadow:3px 3px 0 rgba(43,69,160,.2);
+    transition:all .15s;
+  }
+  .wp-toolbar button:hover { background:var(--hl-blue); }
+  .wp-toolbar button:active { transform:translate(2px,2px); box-shadow:1px 1px 0 rgba(43,69,160,.2); }
+
+  /* 胶带标签 */
+  .cap-stage-label {
+    position:absolute; top:-16px; left:22px;
+    font-size:13px; letter-spacing:2px;
+    color:var(--ballpen);
+    background:var(--tape-yellow);
+    padding:6px 22px;
+    transform:rotate(-3deg);
+    box-shadow:0 2px 5px rgba(120,100,30,.25);
+  }
+  .cap-stage-label::before, .cap-stage-label::after {
+    content:""; position:absolute; top:3px; bottom:3px; width:5px;
+    background:repeating-linear-gradient(180deg, rgba(255,255,255,.6) 0 4px, transparent 4px 8px);
+  }
+  .cap-stage-label::before{ left:3px; } .cap-stage-label::after{ right:3px; }
+
+  /* ---------- 胶囊 = 手账便签 ---------- */
+  .capsule, .orb {
+    position:relative; cursor:grab;
+    filter:drop-shadow(3px 5px 0 rgba(43,69,160,.14));
+  }
+  .capsule { width:256px; height:60px; }
+  .orb { width:58px; height:178px; }
+  .capsule:active, .orb:active { cursor:grabbing; }
+  .note-face {
+    position:absolute; inset:0;
+    display:flex;
+    background:#fffef7;
+    border:2.5px solid var(--ink);
+    border-radius:var(--wobble);
+  }
+  .capsule .note-face { transform:rotate(-1.4deg); }
+  .orb .note-face { flex-direction:column; border-radius:var(--wobble2); transform:rotate(1.6deg); }
+  .note-main {
+    flex:1; min-width:0;
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr) auto;
+    align-items:center;
+    gap:10px;
+    padding:6px 16px;
+  }
+  .orb .note-main {
+    grid-template-columns:none; grid-template-rows:repeat(5,auto);
+    justify-items:center; align-content:center; gap:6px; padding:10px 5px;
+  }
+  /* 圆珠笔圈圈章 */
+  .circle-scribble {
+    width:34px; height:34px; flex-shrink:0;
+    border:2.5px solid var(--pink-c,#e05a8c);
+    border-radius:48% 52% 50% 50% / 52% 48% 54% 46%;
+    display:grid; place-items:center;
+    font-size:15px;
+    transform:rotate(-6deg);
+    color:var(--pink-c,#e05a8c);
+  }
+  .orb .circle-scribble { width:27px; height:27px; font-size:12px; }
+  .ntk-metric { display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
+  /* 荧光笔大数字 */
+  .hl-num {
+    font-family:var(--heavy-fallback, "Comic Sans MS", var(--body-fallback));
+    font-weight:700;
+    font-size:20px; line-height:1.15;
+    color:var(--ink);
+    background:linear-gradient(104deg, transparent 2%, var(--hl-yellow) 6% 94%, transparent 98%);
+    padding:0 6px;
+    transform:rotate(-1deg);
+    display:inline-block;
+  }
+  /* 涂鸦进度条:蜡笔描线 */
+  .crayon-track {
+    width:100%; height:10px;
+    border-radius:var(--wobble);
+    border:2px solid var(--ink);
+    background:#fffdf2;
+    position:relative;
+    overflow:hidden;
+  }
+  .crayon-fill {
+    display:block; height:100%;
+    width:var(--w,42%);
+    background:repeating-linear-gradient(-78deg,
+      var(--crayon,#e05a8c) 0 3px, transparent 3px 5px,
+      color-mix(in srgb, var(--crayon,#e05a8c) 80%, #fff) 5px 8px, transparent 8px 9px);
+    border-right:2.5px solid var(--ink);
+    transition:width 1s cubic-bezier(.22,.9,.3,1);
+  }
+  .note-side {
+    width:64px; flex-shrink:0;
+    display:flex; flex-direction:column; align-items:flex-end; gap:4px;
+    padding-right:14px;
+  }
+  .sticky-tag {
+    font-size:9.5px;
+    color:var(--ink);
+    background:var(--st,var(--hl-mint));
+    padding:3px 9px;
+    transform:rotate(2deg);
+    box-shadow:1px 2px 3px rgba(100,90,40,.25);
+    white-space:nowrap;
+  }
+  .sticky-tag:nth-of-type(2) { --st:var(--hl-pink); transform:rotate(-1.5deg); }
+  .ntk-weekly {
+    display:inline-flex; align-items:center; gap:4px;
+    font-size:18px; font-weight:700; white-space:nowrap;
+    color:var(--ballpen);
+  }
+  .ntk-weekly svg { width:13px; height:13px; stroke-width:2.8; }
+  .orb-layout-x {
+    position:relative; z-index:1;
+    width:100%; height:100%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:7px; padding:11px 5px;
+  }
+  .vcrayon {
+    width:13px; height:64px;
+    border-radius:var(--wobble);
+    border:2px solid var(--ink);
+    background:#fffdf2;
+    display:flex; flex-direction:column-reverse;
+    overflow:hidden;
+  }
+  .vcrayon b {
+    display:block; width:100%; height:var(--w,10%);
+    background:repeating-linear-gradient(168deg, #e05a8c 0 3px, transparent 3px 5px, #f08aab 5px 8px, transparent 8px 9px);
+    border-top:2.5px solid var(--ink);
+    transition:height 1s cubic-bezier(.22,.9,.3,1);
+  }
+  .orb-pct {
+    font-family:var(--heavy-fallback,"Comic Sans MS",var(--body-fallback));
+    font-weight:700; font-size:14px;
+    background:linear-gradient(104deg, transparent 3%, var(--hl-pink) 7% 93%, transparent 97%);
+    padding:0 5px; transform:rotate(-2deg);
+  }
+  .orb-layout-x .sticky-tag { font-size:8px; padding:2px 7px; max-width:50px; overflow:hidden; text-overflow:ellipsis; }
+
+  /* ================================================================
+     Panel = 线圈笔记本内页
+     ================================================================ */
+  .panel-zone { display:flex; justify-content:center; padding:28px 40px 0; }
+  .panel {
+    width:480px; height:600px;
+    position:relative;
+    display:flex; flex-direction:column;
+    background:
+      linear-gradient(rgba(58,110,165,.09) 1px, transparent 1px) 0 0/24px 24px,
+      linear-gradient(90deg, rgba(58,110,165,.09) 1px, transparent 1px) 0 0/24px 24px,
+      #fffef8;
+    border:2.5px solid var(--ink);
+    border-radius:var(--wobble);
+    box-shadow:8px 10px 0 rgba(43,69,160,.12);
+    overflow:hidden;
+    transform:rotate(.3deg);
+    color:var(--ink);
+  }
+  /* 左侧线圈装订 */
+  .spiral {
+    position:absolute; left:0; top:0; bottom:0; width:34px; z-index:10;
+    background:
+      radial-gradient(circle at 17px 24px, transparent 4px, var(--pencil) 4.5px 6px, transparent 6.5px) 0 0/100% 44px repeat-y,
+      linear-gradient(#fdfcf5,#fdfcf5);
+    border-right:1.5px dashed rgba(122,130,150,.4);
+  }
+  /* 红色页边线 */
+  .margin-line {
+    position:absolute; left:46px; top:0; bottom:0; width:1.5px;
+    background:var(--margin-red); z-index:5; pointer-events:none;
+  }
+  .panel__content {
+    flex:1; overflow-y:auto;
+    padding:20px 24px 0 56px;
+    scrollbar-width:thin;
+    scrollbar-color:var(--ballpen) #f0efe2;
+    position:relative; z-index:2;
+  }
+  .panel__content::-webkit-scrollbar{width:9px;}
+  .panel__content::-webkit-scrollbar-track{background:#f0efe2;}
+  .panel__content::-webkit-scrollbar-thumb{background:var(--ballpen);border-radius:99px;border:2px solid #f0efe2;}
+
+  /* Tabs:索引贴纸 tab */
+  .tabs { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px; }
+  .tabs button {
+    font-family:var(--hand); font-size:13px;
+    padding:10px 0 9px;
+    background:#fff; color:var(--ballpen);
+    border:2.5px solid var(--ballpen);
+    cursor:pointer;
+    transition:all .15s;
+    position:relative;
+  }
+  .tabs button:nth-child(1){ border-radius:var(--wobble); transform:rotate(-1.2deg); }
+  .tabs button:nth-child(2){ border-radius:var(--wobble2); transform:translateY(2px) rotate(.8deg); }
+  .tabs button:nth-child(3){ border-radius:var(--wobble); transform:rotate(-.5deg); }
+  .tabs button:hover { background:#f2f7ff; }
+  .tabs button.on {
+    color:#fff;
+    background:var(--ballpen);
+    transform:translateY(-2px) rotate(0deg);
+    box-shadow:3px 4px 0 rgba(43,69,160,.25);
+  }
+  .tabs button.on::before { content:"☞ "; }
+  .view[hidden]{display:none;}
+
+  .panel__title {
+    font-size:21px; letter-spacing:1px; color:var(--ballpen);
+    margin:0 0 16px;
+    display:flex; align-items:center; gap:10px;
+    transform:rotate(-.6deg);
+  }
+  /* 标题荧光笔底 */
+  .panel__title em {
+    font-style:normal;
+    background:linear-gradient(100deg, transparent 3%, var(--hl-mint) 6% 94%, transparent 97%);
+    padding:0 6px;
+  }
+  .panel__title small { font-size:12px; color:var(--pencil); letter-spacing:2px; }
+
+  /* 主笔记卡:歪框+胶带角 */
+  .big-note {
+    position:relative;
+    margin-bottom:16px;
+    padding:16px 18px 15px;
+    background:#fffef7;
+    border:2.5px solid var(--ink);
+    border-radius:var(--wobble);
+    transform:rotate(-.5deg);
+  }
+  /* 和纸胶带贴角 */
+  .big-note::before {
+    content:""; position:absolute; top:-11px; left:26px;
+    width:74px; height:22px;
+    background:var(--tape-pink);
+    transform:rotate(-4deg);
+    box-shadow:0 2px 4px rgba(150,80,110,.25);
+  }
+  .hero-line { display:flex; align-items:center; gap:16px; }
+  .hero-num {
+    font-family:var(--heavy-fallback,"Comic Sans MS",var(--body-fallback));
+    font-weight:700; font-size:56px; line-height:.95; letter-spacing:-2px;
+    color:var(--ballpen);
+    background:linear-gradient(100deg, transparent 4%, var(--hl-yellow) 7% 93%, transparent 96%);
+    padding:0 8px;
+    transform:rotate(-2deg);
+  }
+  .hero-notes { flex:1; min-width:0; font-size:12.5px; line-height:2; }
+  .hero-notes b { background:linear-gradient(transparent 40%, var(--hl-mint) 40% 92%, transparent 92%); padding:0 3px; }
+  /* 手绘分隔波浪线 */
+  .squiggle-rule {
+    height:10px; margin:10px 0 12px;
+    background:var(--scribble) repeat-x; background-size:auto 100%;
+    opacity:.7;
+  }
+  /* 次要行:箭头列表 */
+  .sub-note-row {
+    display:flex; align-items:center; gap:10px;
+    padding:7px 2px;
+    border-bottom:2px dotted rgba(122,130,150,.5);
+    font-size:12.5px;
+  }
+  .sub-note-row:last-child { border-bottom:none; }
+  .sub-note-row::before { content:"→"; color:var(--ballpen); font-weight:900; }
+  .sub-note-row s { text-decoration:none; color:var(--pencil); margin-left:auto; font-size:11px; }
+  .sub-note-row b { color:var(--ballpen); }
+
+  /* 用量统计:便利贴板 */
+  .ucard {
+    margin-top:18px;
+    position:relative;
+    padding:16px 16px 15px;
+    background:#fffef7;
+    border:2.5px solid var(--ink);
+    border-radius:var(--wobble2);
+    transform:rotate(.5deg);
+  }
+  .ucard::before {
+    content:""; position:absolute; top:-11px; right:30px;
+    width:70px; height:20px;
+    background:var(--tape-mint);
+    transform:rotate(3deg);
+    box-shadow:0 2px 4px rgba(60,130,100,.25);
+  }
+  .ucard__title {
+    font-size:15px; color:var(--ballpen); margin-bottom:11px;
+    display:flex; align-items:center; gap:8px;
+    transform:rotate(-.8deg);
+  }
+  .ucard__title::before { content:"📊"; font-size:15px; }
+  .seg {
+    display:inline-grid; grid-auto-flow:column; gap:0;
+    border:2.5px solid var(--ballpen);
+    border-radius:var(--wobble);
+    background:#fff;
+    overflow:hidden;
+  }
+  .seg button {
+    font-family:var(--hand); font-size:11.5px;
+    padding:5px 12px;
+    background:transparent; color:var(--ballpen);
+    border:none; border-left:2px dashed rgba(43,69,160,.4);
+    cursor:pointer; transition:all .13s;
+  }
+  .seg button:first-child { border-left:none; }
+  .seg button.on { background:var(--hl-yellow); }
+  .usage-summary {
+    display:grid; grid-template-columns:repeat(5,auto); justify-content:space-between;
+    margin:13px 2px 6px;
+  }
+  .us-item { display:flex; flex-direction:column; gap:3px; align-items:center; }
+  .us-item b {
+    font-family:var(--heavy-fallback,"Comic Sans MS",var(--body-fallback));
+    font-size:13.5px;
+    background:linear-gradient(transparent 45%, var(--hl-pink) 45% 90%, transparent 90%);
+    padding:0 3px;
+  }
+  .us-item--in b { background:linear-gradient(transparent 45%, var(--hl-blue) 45% 90%, transparent 90%); }
+  .us-item--out b { background:linear-gradient(transparent 45%, var(--hl-mint) 45% 90%, transparent 90%); }
+  .us-item span { font-size:8.5px; color:var(--pencil); }
+  .chart {
+    display:flex; align-items:flex-end; gap:9px;
+    height:84px; margin-top:14px;
+    padding:0 4px 20px;
+    position:relative;
+  }
+  /* 底部手绘横线 */
+  .chart::after {
+    content:""; position:absolute; left:0; right:0; bottom:16px; height:3px;
+    background:var(--scribble) repeat-x; background-size:auto 100%;
+    opacity:.85;
+  }
+  .chart__col { flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end; position:relative; }
+  .chart__barwrap { width:100%; max-width:24px; flex:1; display:flex; align-items:flex-end; }
+  /* 蜡笔柱:斜纹半透明 */
+  .chart__bar {
+    --cc: var(--hl-blue);
+    width:100%;
+    height:var(--h,40%);
+    background:repeating-linear-gradient(-76deg, var(--cc) 0 3px, rgba(255,255,255,.55) 3px 6px);
+    border:2.5px solid var(--ink);
+    border-bottom:none;
+    border-radius:var(--wobble);
+    position:relative;
+    transform-origin:bottom;
+    transform:rotate(-1deg);
+    animation:doodle-pop .55s cubic-bezier(.34,1.5,.64,1) backwards;
+  }
+  .chart__col:nth-child(2) .chart__bar { --cc:var(--hl-pink); transform:rotate(1.4deg); }
+  .chart__col:nth-child(3) .chart__bar { --cc:var(--hl-yellow); }
+  .chart__col:nth-child(4) .chart__bar { --cc:var(--hl-mint); transform:rotate(1deg); }
+  .chart__col:nth-child(5) .chart__bar { --cc:var(--hl-pink); transform:rotate(-1.2deg); }
+  .chart__col:nth-child(6) .chart__bar { --cc:var(--hl-blue); transform:rotate(.8deg); }
+  .chart__col:nth-child(7) .chart__bar { --cc:var(--hl-yellow); }
+  .chart__bar em {
+    position:absolute; left:2px; right:2px; bottom:2px;
+    height:calc(var(--seg,30%) - 2px);
+    background:rgba(43,69,160,.32);
+    border-radius:inherit;
+  }
+  @keyframes doodle-pop { from { transform:scaleY(.15) rotate(0deg); } to { transform:scaleY(1) rotate(-1deg); } }
+  .chart__date { position:absolute; bottom:-16px; font-size:8.5px; color:var(--pencil); }
+
+  /* 明细行:清单勾选 */
+  .rows { margin-top:20px; display:flex; flex-direction:column; gap:9px; }
+  .row {
+    display:flex; align-items:center; gap:12px;
+    padding:9px 13px;
+    background:#fffef7;
+    border:2.5px solid var(--ink);
+    border-radius:var(--wobble);
+    box-shadow:3px 3px 0 rgba(43,69,160,.12);
+    transition:all .15s;
+    cursor:default;
+  }
+  .row:nth-child(odd){ transform:rotate(-.6deg); }
+  .row:nth-child(even){ transform:rotate(.5deg); }
+  .row:hover { transform:rotate(0deg) translateX(4px); background:#fffef2; }
+  .row-check {
+    width:22px; height:22px; flex-shrink:0;
+    border:2.5px solid var(--ink);
+    border-radius:var(--wobble);
+    display:grid; place-items:center;
+    background:var(--ck,var(--hl-mint));
+    color:var(--ballpen);
+    font-weight:900; font-size:13px;
+    transform:rotate(-3deg);
+  }
+  .row__label { font-size:13px; font-weight:600; }
+  .row__label a { color:var(--ballpen); text-decoration:none; }
+  .row__label a:hover { text-decoration:underline wavy var(--pink-c,#e05a8c); }
+  .row__value { margin-left:auto; font-weight:800; color:var(--ballpen); }
+  .row__hint { font-size:10px; color:var(--pencil); }
+
+  .panel__footer {
+    flex-shrink:0;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:13px 24px 15px 56px;
+    border-top:2.5px dashed rgba(122,130,150,.55);
+    background:rgba(255,254,247,.9);
+  }
+  .panel__footer-meta { font-size:10.5px; color:var(--pencil); letter-spacing:1px; }
+  .btn-close {
+    font-family:var(--hand); font-size:12.5px;
+    padding:8px 19px;
+    color:#fff;
+    background:var(--pink-c,#e05a8c);
+    border:2.5px solid var(--ink);
+    border-radius:var(--wobble);
+    box-shadow:3px 3px 0 rgba(224,90,140,.3);
+    cursor:pointer; transition:all .15s;
+    transform:rotate(1deg);
+  }
+  .btn-close:hover { filter:brightness(1.06); }
+  .btn-close:active { transform:rotate(1deg) translate(2px,2px); box-shadow:1px 1px 0 rgba(224,90,140,.3); }
+
+  /* ============ 团队页 ============ */
+  .team-announcement {
+    position:relative;
+    padding:13px 16px;
+    margin-bottom:17px;
+    background:#fffef7;
+    border:2.5px solid var(--ink);
+    border-radius:var(--wobble2);
+    box-shadow:5px 5px 0 rgba(255,179,200,.5);
+    transform:rotate(-.5deg);
+  }
+  .ta-topline { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+  .ta-label {
+    font-size:12px; font-weight:700; color:var(--ballpen);
+    background:linear-gradient(transparent 42%, var(--hl-yellow) 42% 88%, transparent 88%);
+    padding:0 4px;
+  }
+  .ta-meta { font-size:10px; color:var(--pencil); }
+  .ta-text { font-size:12.5px; line-height:1.75; }
+  .ta-ack {
+    margin-top:9px; padding:5px 17px;
+    font-family:var(--hand); font-size:12px;
+    color:var(--ballpen);
+    background:#fff;
+    border:2.5px solid var(--ballpen);
+    border-radius:var(--wobble);
+    cursor:pointer; transition:all .15s;
+  }
+  .ta-ack:hover { background:var(--hl-mint); }
+
+  .board-head { display:flex; align-items:center; justify-content:space-between; margin:2px 0 14px; }
+  .board-head h3 {
+    font-size:15.5px; color:var(--ballpen);
+    display:flex; align-items:center; gap:8px;
+    transform:rotate(-.5deg);
+  }
+  .board-head h3::before { content:"🏆"; font-size:16px; }
+  .board-head h3 em { font-style:normal; background:linear-gradient(transparent 42%, var(--hl-pink) 42% 88%, transparent 88%); padding:0 3px; }
+  .btn-refresh {
+    font-family:var(--hand); font-size:12px;
+    padding:7px 16px;
+    color:var(--ballpen);
+    background:#fff;
+    border:2.5px solid var(--ballpen);
+    border-radius:var(--wobble2);
+    box-shadow:3px 3px 0 rgba(43,69,160,.18);
+    cursor:pointer; transition:all .15s;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  .btn-refresh:active { transform:translate(2px,2px); box-shadow:1px 1px 0 rgba(43,69,160,.18); }
+
+  .trow {
+    display:flex; align-items:center; gap:12px;
+    padding:11px 13px;
+    margin-bottom:11px;
+    background:#fffef7;
+    border:2.5px solid var(--ink);
+    box-shadow:4px 4px 0 var(--sc,var(--hl-yellow));
+    transition:transform .15s;
+  }
+  .trow:nth-of-type(1){ --sc:var(--hl-pink); transform:rotate(-.8deg); }
+  .trow:nth-of-type(2){ --sc:var(--hl-mint); transform:rotate(.7deg); }
+  .trow:nth-of-type(3){ --sc:var(--hl-blue); transform:rotate(-.5deg); }
+  .trow:hover { transform:rotate(0deg) translateX(4px); }
+  .rank {
+    width:32px; height:32px; flex-shrink:0;
+    display:grid; place-items:center;
+    font-family:var(--heavy-fallback,"Comic Sans MS",var(--body-fallback));
+    font-size:14px;
+    border:2.5px solid var(--ink);
+    background:var(--rc,#fff);
+    border-radius:48% 52% 50% 50%/52% 48% 54% 46%;
+    transform:rotate(-5deg);
+  }
+  .trow:nth-of-type(1) .rank { --rc:var(--hl-yellow); }
+  .trow:nth-of-type(2) .rank { --rc:var(--hl-blue); }
+  .trow:nth-of-type(3) .rank { --rc:var(--hl-mint); }
+  .trow__main { flex:1; min-width:0; }
+  .trow__name-line { display:flex; align-items:center; gap:7px; margin-bottom:5px; }
+  .trow__name { font-size:13px; font-weight:700; }
+  .badge-self {
+    font-size:8.5px; padding:2px 9px;
+    color:#fff;
+    background:var(--pink-c,#e05a8c);
+    border:2px solid var(--ink);
+    border-radius:var(--wobble);
+    transform:rotate(-3deg);
+  }
+  .dot-ver { width:9px; height:9px; border-radius:50% 46% 52% 48%; border:2px solid var(--ink); }
+  .twin { display:flex; align-items:center; gap:8px; }
+  .twin__label { font-size:9.5px; color:var(--pencil); width:18px; }
+  .twin__bar {
+    flex:1; height:9px;
+    border:2px solid var(--ink);
+    border-radius:var(--wobble);
+    background:#fffdf2;
+    overflow:hidden;
+  }
+  .twin__bar i {
+    display:block; height:100%; width:var(--w,50%);
+    background:repeating-linear-gradient(-76deg,var(--tone,var(--hl-pink)) 0 3px, rgba(255,255,255,.5) 3px 6px);
+    border-right:2px solid var(--ink);
+  }
+  .twin__val { font-size:10px; font-weight:800; width:32px; text-align:right; }
+  .trow__side { display:flex; flex-direction:column; align-items:flex-end; gap:3px; flex-shrink:0; }
+  .trow__pct {
+    font-family:var(--heavy-fallback,"Comic Sans MS",var(--body-fallback));
+    font-size:17px;
+    background:linear-gradient(transparent 42%, var(--hl-yellow) 42% 88%, transparent 88%);
+    padding:0 4px; transform:rotate(-2deg);
+  }
+  .chip-mini { font-size:9px; font-weight:600; color:var(--pencil); }
+  .like-btn {
+    display:inline-flex; align-items:center; gap:3px;
+    padding:3px 10px;
+    font-family:var(--hand); font-size:10.5px;
+    color:var(--ballpen);
+    background:#fff;
+    border:2.5px solid var(--pink-c,#e05a8c);
+    border-radius:var(--wobble);
+    cursor:pointer; transition:all .15s;
+  }
+  .like-btn:hover { background:#fff0f5; }
+  .like-btn.liked { background:var(--pink-c,#e05a8c); color:#fff; box-shadow:2px 2px 0 rgba(224,90,140,.35); }
+
+  /* 广播消息:拍立得留言 */
+  .broadcast { margin-top:18px; }
+  .broadcast__title {
+    font-size:14px; color:var(--ballpen); margin-bottom:10px;
+    display:flex; align-items:center; gap:8px; transform:rotate(-.6deg);
+  }
+  .broadcast__title::before { content:"💬"; }
+  .feed {
+    display:flex; flex-direction:column; gap:10px;
+    max-height:132px; overflow-y:auto;
+    padding:4px 2px;
+    scrollbar-width:thin; scrollbar-color:var(--ballpen) #f0efe2;
+  }
+  .msg {
+    max-width:86%;
+    padding:9px 14px;
+    background:#fffef7;
+    border:2.5px solid var(--ink);
+    border-radius:var(--wobble);
+    box-shadow:3px 3px 0 var(--sc,var(--hl-mint));
+    font-size:12px; line-height:1.65;
+    transform:rotate(-.7deg);
+    --sc:var(--hl-mint);
+  }
+  .msg:nth-child(even) { transform:rotate(.8deg); align-self:flex-end; --sc:var(--hl-yellow); }
+  .msg--self { --sc:var(--hl-pink); background:#fffafc; }
+  .msg__meta { display:flex; gap:8px; font-size:9px; color:var(--pencil); margin-bottom:3px; }
+  .composer { display:flex; gap:10px; margin-top:12px; }
+  .composer input {
+    flex:1; padding:10px 15px;
+    font-family:var(--hand); font-size:12.5px;
+    background:#fff; color:var(--ink);
+    border:2.5px solid var(--ballpen);
+    border-radius:var(--wobble);
+    outline:none;
+    transition:box-shadow .15s;
+  }
+  .composer input:focus { box-shadow:3px 3px 0 rgba(43,69,160,.2); }
+  .composer input::placeholder { color:#b0b6c4; }
+  .btn-send {
+    padding:10px 20px;
+    font-family:var(--hand); font-size:12.5px;
+    color:#fff;
+    background:var(--ballpen);
+    border:2.5px solid var(--ink);
+    border-radius:var(--wobble2);
+    box-shadow:3px 3px 0 rgba(43,69,160,.3);
+    cursor:pointer; transition:all .15s;
+  }
+  .btn-send:active { transform:translate(2px,2px); box-shadow:1px 1px 0 rgba(43,69,160,.3); }
+
+  /* ============ 设置页 ============ */
+  .settings-section { margin-bottom:19px; }
+  .settings-section__title {
+    font-size:13px; color:var(--ballpen); margin-bottom:10px;
+    display:inline-flex; align-items:center; gap:8px;
+    background:linear-gradient(transparent 45%, var(--hl-yellow) 45% 90%, transparent 90%);
+    padding:0 6px;
+    transform:rotate(-.8deg);
+  }
+  .setting-row {
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:10px 13px;
+    margin-bottom:9px;
+    background:#fffef7;
+    border:2.5px solid var(--ink);
+    border-radius:var(--wobble);
+    box-shadow:3px 3px 0 rgba(43,69,160,.1);
+    transition:all .15s;
+  }
+  .setting-row:nth-child(odd){ transform:rotate(-.5deg); }
+  .setting-row:hover { transform:rotate(0deg) translateX(3px); }
+  .setting-row > span:first-child { font-size:12.5px; font-weight:600; }
+  .inline-input {
+    display:inline-flex; align-items:center; gap:7px;
+    padding:4px 12px;
+    background:#fff;
+    border:2.5px dashed var(--ballpen);
+    border-radius:var(--wobble2);
+  }
+  .inline-input span { font-size:10px; color:var(--pencil); }
+  .inline-input input {
+    width:46px; padding:2px 5px;
+    font-family:var(--heavy-fallback,"Comic Sans MS",var(--body-fallback));
+    font-size:13px;
+    background:transparent; color:var(--ballpen);
+    border:none; outline:none; text-align:right;
+    border-bottom:2px dotted var(--ballpen);
+  }
+  .inline-input input:focus { background:var(--hl-yellow); }
+  .inline-input em { font-style:normal; font-size:10px; color:var(--pencil); }
+  /* 开关:手绘勾选块 */
+  .toggle {
+    width:46px; height:26px;
+    border:2.5px solid var(--ink);
+    border-radius:var(--wobble);
+    background:#fff;
+    position:relative; cursor:pointer; flex-shrink:0;
+    transition:background .2s;
+  }
+  .toggle::after {
+    content:""; position:absolute; top:1.5px; left:2px;
+    width:17px; height:17px;
+    border-radius:48% 52% 50% 50%/52% 48% 54% 46%;
+    background:var(--hl-blue);
+    border:2px solid var(--ink);
+    transition:transform .2s cubic-bezier(.34,1.5,.64,1), background .2s;
+  }
+  .toggle.on { background:var(--hl-yellow); }
+  .toggle.on::after { transform:translateX(20px) rotate(10deg); background:var(--pink-c,#e05a8c); }
+  .about-row {}
+  .about-row__info { display:flex; flex-direction:column; gap:2px; }
+  .about-row__label { font-size:12.5px; font-weight:600; }
+  .about-row__version { font-size:10px; color:var(--pencil); }
+  .btn-check {
+    font-family:var(--hand); font-size:11.5px;
+    padding:8px 17px;
+    color:var(--ballpen);
+    background:#fff;
+    border:2.5px solid var(--ballpen);
+    border-radius:var(--wobble);
+    box-shadow:3px 3px 0 rgba(43,69,160,.18);
+    cursor:pointer; transition:all .15s;
+  }
+  .btn-check:hover { background:var(--hl-blue); }
+  .btn-check:active { transform:translate(2px,2px); box-shadow:1px 1px 0 rgba(43,69,160,.18); }
+
+  /* 入场:撕下便签 */
+  .rise { animation:peel-stick .5s cubic-bezier(.34,1.4,.64,1) backwards; }
+  @keyframes peel-stick {
+    from { opacity:0; transform:translateY(-16px) rotate(-3deg); }
+    to   { opacity:1; transform:translateY(0) rotate(.3deg); }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="back" href="./more-themes.html">← back</a>
+  <h1>额度手账 Quota Journal ✎</h1>
+  <span class="desc">方格纸 · 和纸胶带 · 荧光笔 · 圆珠笔</span>
+</div>
+
+<!-- 横竖胶囊 -->
+<div class="section-title"><b>Capsule & Orb</b><i>✏</i><span></span></div>
+<div class="wallpaper" id="wp1">
+  <div class="doodles">
+    <span style="left:7%; top:20%">☁</span>
+    <span style="left:86%; top:16%">★</span>
+    <span style="left:12%; bottom:18%">☂</span>
+    <span style="left:82%; bottom:24%">♪</span>
+    <span style="left:47%; top:9%">☀</span>
+  </div>
+  <div class="wp-toolbar">
+    <button onclick="toggleWp('wp1', this)">浅色壁纸</button>
+    <button onclick="replay(document.getElementById('wp1'))">↻ replay</button>
+  </div>
+  <div class="wallpaper__inner">
+    <!-- 横便签 -->
+    <div style="position:relative">
+      <span class="cap-stage-label">memo · H</span>
+      <div class="capsule">
+        <div class="note-face">
+          <div class="note-main">
+            <span class="circle-scribble">☀</span>
+            <div class="ntk-metric">
+              <span class="hl-num" data-count="42" data-suffix="%">0%</span>
+              <span class="crayon-track" style="--crayon:#e05a8c"><i class="crayon-fill" style="--w:42%"></i></span>
+            </div>
+            <span class="ntk-weekly">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h12M6 22h12M7 2v4l5 6-5 6v4M17 2v4l-5 6 5 6v4"/></svg>
+              <span data-count="6" data-suffix="D">0D</span>
+            </span>
+          </div>
+          <div class="note-side">
+            <span class="sticky-tag">🎫 重置 2天</span>
+            <span class="sticky-tag">✦ Terra Mx</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- 竖便签 -->
+    <div style="position:relative">
+      <span class="cap-stage-label">memo · V</span>
+      <div class="orb">
+        <div class="note-face">
+          <div class="orb-layout-x">
+            <span class="circle-scribble" style="--pink-c:#3a6cff">☁</span>
+            <span class="sticky-tag">🎫 重置 1天</span>
+            <span class="vcrayon"><b style="--w:10%"></b></span>
+            <span class="orb-pct" data-count="10" data-suffix="%">0%</span>
+            <span class="sticky-tag">✦ Terra Mx</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Panel -->
+<div class="section-title"><b>Panel · Notebook Page</b><i>📐</i><span></span></div>
+<div class="panel-zone">
+  <div class="panel rise">
+    <div class="spiral"></div>
+    <div class="margin-line"></div>
+
+    <div class="panel__content">
+      <nav class="tabs">
+        <button class="on">详情</button>
+        <button>团队</button>
+        <button>设置</button>
+      </nav>
+
+      <!-- 主笔记卡 -->
+      <div class="view" id="view-details">
+        <div class="big-note">
+          <div class="hero-line">
+            <span class="hero-num"><span data-count="42">0</span>%</span>
+            <div class="hero-notes">
+              5h 额度还剩 <b>四成多</b>,省着点用~<br>
+              ⏰ 重置倒计时 <b>02:30</b> · 到期 <b>18:36</b>
+            </div>
+          </div>
+          <div class="squiggle-rule"></div>
+          <div class="sub-note-row">一周额度 <b>98%</b> 快满啦<s>EXPIRES 8/5 14:52</s></div>
+          <div class="sub-note-row">周重置倒计时 <b>6天22小时</b><s>RESET-IN 162:00</s></div>
+          <div class="sub-note-row">推荐模型 <b>Terra Mx</b> 划算<s>IQ 106 ✓</s></div>
+        </div>
+
+        <!-- 用量统计 -->
+        <div class="ucard">
+          <div class="ucard__title">用量统计 Usage Log</div>
+          <div class="seg">
+            <button class="on">1天</button><button>7天</button><button>30天</button><button>自定义</button>
+          </div>
+          <div class="usage-summary">
+            <div class="us-item"><b>1.2M</b><span>总 TOKEN</span></div>
+            <div class="us-item us-item--in"><b>860K</b><span>输入 IN</span></div>
+            <div class="us-item us-item--out"><b>142K</b><span>输出 OUT</span></div>
+            <div class="us-item us-item--cache"><b>71%</b><span>CACHE</span></div>
+            <div class="us-item"><b>$3.82</b><span>花费 COST</span></div>
+          </div>
+          <div class="chart">
+            <div class="chart__col"><div class="chart__barwrap"><div class="chart__bar" style="--h:46%; animation-delay:.05s"><em style="--seg:64%"></em></div></div><span class="chart__date">8/15</span></div>
+            <div class="chart__col"><div class="chart__barwrap"><div class="chart__bar" style="--h:72%; animation-delay:.1s"><em style="--seg:58%"></em></div></div><span class="chart__date">8/16</span></div>
+            <div class="chart__col"><div class="chart__barwrap"><div class="chart__bar" style="--h:34%; animation-delay:.15s"><em style="--seg:70%"></em></div></div><span class="chart__date">8/17</span></div>
+            <div class="chart__col"><div class="chart__barwrap"><div class="chart__bar" style="--h:88%; animation-delay:.2s"><em style="--seg:52%"></em></div></div><span class="chart__date">8/18</span></div>
+            <div class="chart__col"><div class="chart__barwrap"><div class="chart__bar" style="--h:58%; animation-delay:.25s"><em style="--seg:66%"></em></div></div><span class="chart__date">8/19</span></div>
+            <div class="chart__col"><div class="chart__barwrap"><div class="chart__bar" style="--h:96%; animation-delay:.3s"><em style="--seg:61%"></em></div></div><span class="chart__date">昨天</span></div>
+            <div class="chart__col"><div class="chart__barwrap"><div class="chart__bar" style="--h:64%; animation-delay:.35s"><em style="--seg:71%"></em></div></div><span class="chart__date">今天</span></div>
+          </div>
+        </div>
+
+        <!-- 待办清单式明细 -->
+        <div class="rows">
+          <div class="row">
+            <span class="row-check">✓</span>
+            <span class="row__label">重置卡 Tickets ×2</span>
+            <span class="row__value">2天</span>
+            <span class="row__hint">8月1日 04:11</span>
+          </div>
+          <div class="row" style="--ck:var(--hl-pink)">
+            <span class="row-check">☆</span>
+            <span class="row__label"><a href="#">雷达荐模 Radar Pick</a></span>
+            <span class="row__value">Sol Xh</span>
+            <span class="row__hint">IQ 106.3 · $6.33</span>
+          </div>
+          <div class="row" style="--ck:var(--hl-blue)">
+            <span class="row-check">⟳</span>
+            <span class="row__label"><a href="#">额度勘验 Monitor</a></span>
+            <span class="row__value">RUN</span>
+          </div>
+        </div>
+      </div><!-- /view-details -->
+
+      <!-- ============ 团队视图 ============ -->
+      <div class="view" id="view-team" hidden>
+        <section class="team-announcement">
+          <div class="ta-topline">
+            <span class="ta-label">📢 公告 Notice</span>
+            <span class="ta-meta">管理员 · 10:24</span>
+          </div>
+          <p class="ta-text">本周六晚 22:00-23:00 官方额度窗口重置,期间可能出现短暂数据延迟,请知悉。</p>
+          <button class="ta-ack">知道啦!</button>
+        </section>
+
+        <div style="margin-bottom:14px">
+          <div class="seg">
+            <button class="on">额度 HP</button><button>TOKEN EXP</button>
+          </div>
+        </div>
+
+        <div class="board-head">
+          <h3><em>排行榜 Ranking</em></h3>
+          <button class="btn-refresh">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 3v6h-6"/></svg>
+            刷新 refresh
+          </button>
+        </div>
+
+        <div class="trow">
+          <span class="rank">1</span>
+          <div class="trow__main">
+            <div class="trow__name-line"><span class="trow__name">阿宁</span><span class="badge-self">我 me</span></div>
+            <div class="twin"><span class="twin__label">5h</span><span class="twin__bar" style="--tone:var(--hl-pink)"><i style="--w:42%"></i></span><span class="twin__val">42%</span></div>
+            <div class="twin"><span class="twin__label">7d</span><span class="twin__bar" style="--tone:var(--hl-blue)"><i style="--w:98%"></i></span><span class="twin__val">98%</span></div>
+          </div>
+          <div class="trow__side">
+            <span class="trow__pct">98%</span>
+            <span class="chip-mini">🎫 ×2</span>
+          </div>
+        </div>
+
+        <div class="trow">
+          <span class="rank">2</span>
+          <div class="trow__main">
+            <div class="trow__name-line"><span class="trow__name">老王</span><span class="dot-ver" style="background:var(--hl-mint)" title="最新版本"></span></div>
+            <div class="twin"><span class="twin__label">5h</span><span class="twin__bar" style="--tone:var(--hl-pink)"><i style="--w:67%"></i></span><span class="twin__val">67%</span></div>
+            <div class="twin"><span class="twin__label">7d</span><span class="twin__bar" style="--tone:var(--hl-blue)"><i style="--w:81%"></i></span><span class="twin__val">81%</span></div>
+          </div>
+          <div class="trow__side">
+            <span class="trow__pct">81%</span>
+            <button class="like-btn liked">♥ 3</button>
+          </div>
+        </div>
+
+        <div class="trow">
+          <span class="rank">3</span>
+          <div class="trow__main">
+            <div class="trow__name-line"><span class="trow__name">小柒</span><span class="dot-ver" style="background:var(--hl-yellow)" title="版本落后"></span></div>
+            <div class="twin"><span class="twin__label">5h</span><span class="twin__bar" style="--tone:#d5d9de"><i style="--w:23%"></i></span><span class="twin__val">23%</span></div>
+            <div class="twin"><span class="twin__label">7d</span><span class="twin__bar" style="--tone:var(--hl-blue)"><i style="--w:55%"></i></span><span class="twin__val">55%</span></div>
+          </div>
+          <div class="trow__side">
+            <span class="trow__pct">55%</span>
+            <button class="like-btn">♡ 0</button>
+          </div>
+        </div>
+
+        <div class="broadcast">
+          <div class="broadcast__title">留言墙 Messages</div>
+          <div class="feed">
+            <div class="msg">
+              <div class="msg__meta"><span>老王</span><span>10:31</span></div>
+              谁还有重置卡?我 5h 快见底了
+            </div>
+            <div class="msg msg--self">
+              <div class="msg__meta"><span>我</span><span>10:33</span></div>
+              我还剩 2 张,周六给你留一张
+            </div>
+          </div>
+          <div class="composer">
+            <input placeholder="写点什么… 同组成员可见" type="text">
+            <button class="btn-send">发送 send</button>
+          </div>
+        </div>
+      </div><!-- /view-team -->
+
+      <!-- ============ 设置视图 ============ -->
+      <div class="view" id="view-settings" hidden>
+        <div class="settings-section">
+          <p class="settings-section__title">工具 Tools</p>
+          <div class="setting-row">
+            <span>监控工具</span>
+            <div class="seg">
+              <button class="on">Codex</button><button>Claude Code</button><button>OpenCode</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">刷新 Refresh</p>
+          <div class="setting-row">
+            <span>刷新模式</span>
+            <div class="seg">
+              <button class="on">自动 auto</button><button>手动 manu</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span>刷新间隔 interval</span>
+            <div class="seg">
+              <button>15s</button><button class="on">30s</button><button>60s</button><button>120s</button><button>自定义</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">显示 Display</p>
+          <div class="setting-row">
+            <span>百分比口径 metric</span>
+            <div class="seg">
+              <button class="on">剩余 left</button><button>已使用 used</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">荐模 Radar</p>
+          <div class="setting-row">
+            <span>IQ 阈值 threshold</span>
+            <label class="inline-input"><span>≥</span><input type="number" value="90"><em>IQ</em></label>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">通用 General</p>
+          <div class="setting-row">
+            <span>开机自启动 autorun</span>
+            <span class="toggle on" onclick="this.classList.toggle('on')"></span>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">语言 Locale</p>
+          <div class="setting-row">
+            <span>语种 language</span>
+            <div class="seg">
+              <button class="on">简中 ZH</button><button>EN</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">小组 Squad</p>
+          <div class="setting-row">
+            <span>团队昵称 nickname</span>
+            <label class="inline-input"><input type="text" value="阿宁" style="width:88px; text-align:left"></label>
+          </div>
+          <div class="setting-row">
+            <span>团队口令 passkey</span>
+            <label class="inline-input"><input type="text" value="••••••" style="width:88px; text-align:left"></label>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">关于 About</p>
+          <div class="setting-row about-row">
+            <div class="about-row__info">
+              <span class="about-row__label">当前版本 version</span>
+              <span class="about-row__version">v1.1.7 · draft 03</span>
+            </div>
+            <button class="btn-check">检查更新 update!</button>
+          </div>
+        </div>
+      </div><!-- /view-settings -->
+    </div>
+    <div class="panel__footer">
+      <span class="panel__footer-meta">chatgpt.com · 上次同步 1分钟前 · page.042</span>
+      <button class="btn-close">✕ 合上 close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 壁纸切换:胶囊是透明悬浮窗,需在深/浅两种桌面下检查可读性
+  function toggleWp(id, btn) {
+    const wp = document.getElementById(id);
+    const light = wp.classList.toggle('is-light');
+    btn.textContent = light ? '深色壁纸' : '浅色壁纸';
+  }
+  function countUp(el) {
+    const target = Number(el.dataset.count);
+    const suffix = el.dataset.suffix || '';
+    const dur = 900;
+    const t0 = performance.now();
+    function tick(t) {
+      const p = Math.min(1, (t - t0) / dur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * eased) + suffix;
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  function replay(scope) {
+    scope.querySelectorAll('[data-count]').forEach(countUp);
+    scope.querySelectorAll('.crayon-fill, .vcrayon b').forEach(bar => {
+      const w = bar.style.getPropertyValue('--w');
+      bar.style.transition = 'none';
+      bar.style.setProperty('--w', '0%');
+      void bar.offsetWidth;
+      bar.style.transition = '';
+      bar.style.setProperty('--w', w);
+    });
+    scope.querySelectorAll('.chart__bar').forEach(b => {
+      b.style.animation = 'none';
+      void b.offsetWidth;
+      b.style.animation = '';
+    });
+  }
+  // 主 Tab 切换
+  const TAB_VIEWS = ['details', 'team', 'settings'];
+  document.querySelectorAll('.panel__content > .tabs button').forEach((btn, i) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.panel__content > .tabs button').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      document.querySelectorAll('.view').forEach(v => { v.hidden = true; });
+      document.getElementById('view-' + TAB_VIEWS[i]).hidden = false;
+    });
+  });
+  document.querySelectorAll('.view .seg').forEach(group => {
+    group.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        group.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+        btn.classList.add('on');
+      });
+    });
+  });
+  window.addEventListener('load', () => replay(document));
+</script>
+</body>
+</html>

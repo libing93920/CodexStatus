@@ -35,6 +35,22 @@
   --panel-clip: inset(0 round 26px);
 }
 
+/* 入场:柔和淡入上浮(默认主题,低调过场) */
+@keyframes midnight-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+[data-theme='midnight'] .panel {
+  animation: midnight-rise 0.45s cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+}
+
 /* =====================================================================
    2. AURORA · 极光玻璃
    深色玻璃拟态 + 缓慢旋转的极光 conic 描边 + shimmer 流光进度条 + 内部漂移雾气
@@ -196,6 +212,24 @@
   }
 }
 
+/* 入场:雾气淡入 + 轻微缩放(呼应极光玻璃的朦胧质感) */
+@keyframes aurora-rise {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+
+[data-theme='aurora'] .panel {
+  animation: aurora-rise 0.5s cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+}
+
 /* =====================================================================
    3. CYBER · 赛博终端
    切角外形 + 扫描线 + 四角瞄准括号 + 分段刻度进度条 + 霓虹读数 + 等宽字体
@@ -345,6 +379,31 @@
 
 /* panel 不加扫描线(仅胶囊保留四角括号);赛博 panel 靠切角+描边撑视觉 */
 
+/* 入场:故障扫描启动,CRT 通电式 RGB 偏移 + 横向扫描带掠过 */
+@keyframes cyber-power-on {
+  0% {
+    opacity: 0;
+    transform: translateX(-6px) skewX(-8deg);
+    filter: brightness(1.8);
+  }
+  30% {
+    opacity: 1;
+    transform: translateX(3px) skewX(0);
+  }
+  45% {
+    transform: translateX(-2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+    filter: brightness(1);
+  }
+}
+
+[data-theme='cyber'] .panel {
+  animation: cyber-power-on 0.5s cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+}
+
 /* =====================================================================
    4. TITAN · 黑曜钛金
    近黑岩面 + 钛银高光棱线 + 琥珀金强调 + 刻度进度条 + 金色扫光
@@ -485,6 +544,27 @@
   100% {
     transform: translateY(70%);
   }
+}
+
+/* 入场:金属唤醒,从暗岩到亮金(呼应钛金岩面质感) */
+@keyframes titan-awaken {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+    filter: brightness(0.4) saturate(0.6);
+  }
+  60% {
+    filter: brightness(1.2) saturate(1);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: brightness(1) saturate(1);
+  }
+}
+
+[data-theme='titan'] .panel {
+  animation: titan-awaken 0.55s cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
 }
 
 /* =====================================================================
@@ -2116,6 +2196,7 @@
   background: #dfa32b;
   color: #22333b;
   box-shadow: inset 0 2px 0 #22333b;
+  font-size: 9px;
   font-weight: 700;
 }
 
@@ -2125,13 +2206,21 @@
   background: #faf4e4;
   color: #22333b;
   box-shadow: inset 0 0 0 1.5px #22333b;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 300;
+  letter-spacing: 0.2px;
 }
 
 /* 竖版 orb:各项更小、居中、整体变瘦(继承默认) */
 [data-theme='poster'] .capsule--orb .capsule__credit {
-  font-size: 8px;
-  padding: 1px 4px;
+  font-size: 9px;
+  padding: 2px 3px;
+}
+
+/* 竖版 orb:推荐模型印章同步收紧 */
+[data-theme='poster'] .capsule--orb .capsule__pick {
+  font-size: 11px;
+  padding: 2px 5px;
 }
 
 /* panel 招贴报头:标题用 Impact 浓重字 + 双线下划 */
@@ -3121,17 +3210,17 @@
   font-size: 7px;
   font-weight: 400;
   box-shadow: 0 0 0 2px #26f7fd;
-  padding: 2px 5px;
+  padding: 2px 9px;
 }
 
 [data-theme='arcade'] .capsule--orb .capsule__credit {
   font-size: 7px;
-  padding: 1px 4px;
+  padding: 2px 4px;
 }
 
 [data-theme='arcade'] .capsule--orb .capsule__pick {
-  font-size: 6px;
-  padding: 1px 4px;
+  font-size: 7px;
+  padding: 2px 0px;
 }
 
 /* panel 标题:游戏标题,像素字 + RGB 偏移故障 + glitch 抖动 */
@@ -4231,6 +4320,1367 @@
   50% {
     opacity: 0.45;
   }
+}
+
+/* =====================================================================
+   7. MEMPHIS · 孟菲斯派对 Memphis Party
+   形态语言:奶油底 + 粗墨描边 + 彩色错位实心阴影(贴纸感)
+           + 几何纸屑纹理(圆点阵/波浪线)+ 歪斜组件 + 波浪泡泡进度条
+   与海报区分:海报是"旅行招贴",本方案是"派对贴纸"——撞色更跳、歪斜更皮
+   ===================================================================== */
+
+/* 局部 data-URI 资源:波浪线(标题下划线)+ 圆点阵,只在 memphis 块内引用 */
+[data-theme='memphis'] {
+  --memphis-squiggle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='10' viewBox='0 0 60 10'%3E%3Cpath d='M0 5 Q 7.5 0 15 5 T 30 5 T 45 5 T 60 5' fill='none' stroke='%23ff5c8a' stroke-width='4'/%3E%3C/svg%3E");
+
+  /* 胶囊:圆角不切角,让粗墨描边 + 错位实心阴影完整外溢显示 */
+  --capsule-radius: 8px;
+  --capsule-orb-radius: 8px;
+  --capsule-clip: none;
+  --capsule-text: #1c1a17;
+  --capsule-bg: #fdf6ec;
+  --capsule-orb-bg: #fdf6ec;
+  --capsule-edge: #1c1a17;
+  --capsule-edge-soft: rgba(28, 26, 23, 0.4);
+  /* 关掉毛玻璃,贴纸是不透明奶油底 */
+  --capsule-filter: none;
+  --capsule-accent: #ff5c8a;
+  --capsule-font: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+
+  /* panel:派对主舞台,粗墨外框 + 青色错位实心阴影 */
+  --panel-radius: 4px;
+  --panel-clip: inset(0 round 4px);
+  --panel-border: 5px solid #1c1a17;
+  --panel-tint: none;
+  --panel-bg: linear-gradient(#fdf6ec, #fdf6ec);
+  --panel-shadow:
+    14px 14px 0 #00c2b2,
+    0 0 0 1.5px rgba(28, 26, 23, 0.92);
+  /* 色板:奶油/墨/粉/芥末/青/钴蓝/橘/淡紫 */
+  --panel-card: #fffdf7;
+  --panel-card-2: #fdf6ec;
+  --panel-card-3: #fbeeda;
+  --panel-inset: #f3e8d4;
+  --panel-text: #1c1a17;
+  --panel-text-2: #3d5059;
+  --panel-muted: #8d8578;
+  --panel-accent: #ff5c8a;
+  --panel-accent-2: #3a6cff;
+  --panel-accent-soft: rgba(255, 92, 138, 0.14);
+  --panel-success: #00c2b2;
+  --panel-danger: #ff6b35;
+  --panel-line: rgba(28, 26, 23, 0.28);
+  --panel-line-strong: rgba(28, 26, 23, 0.55);
+  --panel-icon-blue: #3a6cff;
+  --panel-icon-violet: #b388ff;
+  --panel-icon-amber: #ffc93c;
+  --panel-icon-pink: #ff5c8a;
+  --panel-icon-green: #00c2b2;
+  --panel-font: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+}
+
+/* main.css 的 .panel{} 自身重声明了一批 token,元素自身声明优先于父级继承;
+   用 [data-theme='memphis'] .panel (特异性 0,2,0) 在 .panel 元素上重新赋主题值 */
+[data-theme='memphis'] .panel {
+  --panel-bg: linear-gradient(#fdf6ec, #fdf6ec);
+  --panel-card: #fffdf7;
+  --panel-card-2: #fdf6ec;
+  --panel-card-3: #fbeeda;
+  --panel-surface: #fffdf7;
+  --panel-surface-2: #fdf6ec;
+  --panel-inset: #f3e8d4;
+  --panel-text: #1c1a17;
+  --panel-text-2: #3d5059;
+  --panel-muted: #8d8578;
+  --panel-accent: #ff5c8a;
+  --panel-accent-2: #3a6cff;
+  --panel-accent-soft: rgba(255, 92, 138, 0.14);
+  --panel-success: #00c2b2;
+  --panel-danger: #ff6b35;
+  --panel-line: rgba(28, 26, 23, 0.28);
+  --panel-line-strong: rgba(28, 26, 23, 0.55);
+  --panel-icon-blue: #3a6cff;
+  --panel-icon-violet: #b388ff;
+  --panel-icon-amber: #ffc93c;
+  --panel-icon-pink: #ff5c8a;
+  --panel-icon-green: #00c2b2;
+}
+
+/* 装饰层:panel 顶部图案横带(party-band)用 ::before 承载;
+   不铺圆点阵背景(会压卡片层级),胶囊 deco 不启用 */
+[data-theme='memphis'] .panel__deco {
+  display: block;
+  z-index: 0;
+}
+
+[data-theme='memphis'] .capsule__deco {
+  display: none;
+}
+
+/* panel 顶部图案横带(party-band):圆点 + 斜纹彩条 */
+[data-theme='memphis'] .panel__deco::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 26px;
+  background:
+    radial-gradient(circle at 12px 50%, #ff5c8a 5px, transparent 5.6px) 0 0 / 40px 100% no-repeat content-box,
+    radial-gradient(circle at 12px 50%, #3a6cff 5px, transparent 5.6px) 20px 0 / 40px 100% no-repeat content-box,
+    repeating-linear-gradient(-45deg, #ffc93c 0 12px, #ffe08a 12px 24px);
+  border-bottom: 5px solid #1c1a17;
+}
+
+/* 胶囊粗墨描边 + 彩色错位实心阴影:用 box-shadow inset 替代 border,不占布局 */
+[data-theme='memphis'] .capsule {
+  box-shadow:
+    inset 0 0 0 4px #1c1a17,
+    6px 6px 0 rgba(28, 26, 23, 0.5);
+}
+
+[data-theme='memphis'] .capsule--orb {
+  box-shadow:
+    inset 0 0 0 4px #1c1a17,
+    5px 5px 0 rgba(28, 26, 23, 0.5);
+}
+
+/* 周重置倒计时:heavy 字 + 墨色 */
+[data-theme='memphis'] .capsule__weekly {
+  color: #1c1a17;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+[data-theme='memphis'] .capsule__weekly svg {
+  color: #ff6b35;
+}
+
+[data-theme='memphis'] .capsule__weekly {
+  gap: 0px;
+}
+
+[data-theme='memphis'] .capsule--orb .capsule__weekly {
+  gap: 0px;
+}
+
+/* 百分比:heavy 字 + 粉色 + 墨描边(贴纸数字味) */
+[data-theme='memphis'] .capsule__percent {
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  color: #ff5c8a;
+  font-size: 21px;
+  font-weight: 900;
+  letter-spacing: -1.5px;
+  -webkit-text-stroke: 1px #1c1a17;
+  paint-order: stroke fill;
+}
+
+[data-theme='memphis'] .capsule--orb .capsule__percent {
+  font-size: 16px;
+}
+
+/* 进度条:波浪槽 + 粉色泡泡滚动填充 */
+[data-theme='memphis'] .capsule__progress {
+  height: 10px;
+  border-radius: 99px;
+  background: repeating-linear-gradient(-45deg, #f3e8d4 0 6px, #fdf6ec 6px 12px);
+  box-shadow: inset 0 0 0 3px #1c1a17;
+  overflow: hidden;
+  position: relative;
+}
+
+[data-theme='memphis'] .capsule__progress span {
+  border-radius: 0;
+  border-right: 3px solid #1c1a17;
+  background:
+    radial-gradient(circle at 10px 50%, #ff5c8a 4px, transparent 4.6px) 0 0 / 20px 100%,
+    linear-gradient(#ff5c8a, #ff5c8a) 10px 0 / 20px 100%;
+  background-repeat: repeat-x;
+  animation: memphis-bubble-roll 1.4s linear infinite;
+}
+
+[data-theme='memphis'] .capsule--orb .capsule__progress {
+  width: 34px;
+  height: 8px;
+}
+
+@keyframes memphis-bubble-roll {
+  to {
+    background-position: 20px 0, 30px 0;
+  }
+}
+
+/* 重置卡:芥末黄票根 + 顶墨线 + 歪斜 */
+[data-theme='memphis'] .capsule__credit {
+  border-radius: 0;
+  background: #ffc93c;
+  color: #1c1a17;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+  font-size: 9px;
+  padding: 1px 2px;
+  box-shadow: inset 0 2px 0 #1c1a17;
+  transform: rotate(-1deg);
+}
+
+/* 推荐模型:奶油底 + 墨边小印章 + 歪斜 */
+[data-theme='memphis'] .capsule__pick {
+  border-radius: 0;
+  background: #fffdf7;
+  color: #1c1a17;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+  font-size: 10px;
+  padding: 2px 3px;
+  box-shadow: inset 0 0 0 1.5px #1c1a17;
+  transform: rotate(1deg);
+}
+
+[data-theme='memphis'] .capsule--orb .capsule__credit {
+  font-size: 8px;
+  padding: 1px 3px;
+}
+
+[data-theme='memphis'] .capsule--orb .capsule__pick {
+  font-size: 7px;
+  padding: 2px 4px;
+}
+
+/* panel 标题:heavy 字 + 波浪线下划 */
+[data-theme='memphis'] .panel__title {
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #1c1a17;
+  display: inline-block;
+  position: relative;
+  transform: rotate(-1deg);
+}
+
+[data-theme='memphis'] .panel__title::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: -8px;
+  bottom: -7px;
+  height: 10px;
+  background: var(--memphis-squiggle) repeat-x;
+  background-size: auto 100%;
+}
+
+/* panel 眉标:粉色 heavy 小字 */
+[data-theme='memphis'] .panel__eyebrow {
+  color: #ff5c8a;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+  letter-spacing: 3px;
+}
+
+[data-theme='memphis'] .panel__eyebrow--danger {
+  color: #ff6b35;
+}
+
+/* panel tabs:歪斜票根,粗墨边 + 错位阴影 + 粉 active */
+[data-theme='memphis'] .panel__tabs {
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  gap: 9px;
+  padding: 0;
+}
+
+[data-theme='memphis'] .panel__tab {
+  border-radius: 0;
+  color: #1c1a17;
+  background: #fffdf7;
+  border: 3.5px solid #1c1a17;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+  letter-spacing: 1px;
+  box-shadow: 4px 4px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .panel__tab:nth-child(1) {
+  transform: rotate(-1.4deg);
+}
+
+[data-theme='memphis'] .panel__tab:nth-child(2) {
+  transform: translateY(2px) rotate(0.8deg);
+  box-shadow: 4px 4px 0 #3a6cff;
+}
+
+[data-theme='memphis'] .panel__tab:nth-child(3) {
+  transform: rotate(-0.6deg);
+}
+
+[data-theme='memphis'] .panel__tab:hover:not(.is-active) {
+  transform: translate(-2px, -2px) rotate(0deg);
+  background: #fffdf7;
+  color: #1c1a17;
+  box-shadow: 6px 6px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .panel__tab.is-active {
+  background: #ff5c8a;
+  color: #fff;
+  border-color: #1c1a17;
+  transform: rotate(0deg) translateY(-2px);
+  box-shadow: 4px 5px 0 #1c1a17;
+}
+
+/* quota-card / usage-card:拍立得相框卡,粗墨边 + 彩色错位阴影 + hover 上浮 */
+[data-theme='memphis'] .quota-card,
+[data-theme='memphis'] .usage-card {
+  border-radius: 0;
+  border: 4px solid #1c1a17;
+  background: #fffdf7;
+  box-shadow: 6px 6px 0 #3a6cff;
+}
+
+[data-theme='memphis'] .quota-card:nth-child(odd) {
+  transform: rotate(-1.3deg);
+  box-shadow: 6px 6px 0 #3a6cff;
+}
+
+[data-theme='memphis'] .quota-card:nth-child(even) {
+  transform: rotate(1.1deg);
+  box-shadow: 6px 6px 0 #ff6b35;
+}
+
+[data-theme='memphis'] .quota-card.is-accent {
+  background: #fbeeda;
+}
+
+[data-theme='memphis'] .quota-card.is-accent::before {
+  content: 'HOT';
+  position: absolute;
+  top: -13px;
+  right: 12px;
+  background: #ff6b35;
+  color: #fff;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  padding: 3px 9px;
+  border: 3px solid #1c1a17;
+  transform: rotate(6deg);
+  inset: auto;
+  height: auto;
+}
+
+[data-theme='memphis'] .quota-card:hover,
+[data-theme='memphis'] .usage-card:hover {
+  transform: rotate(0deg) translate(-3px, -3px);
+  box-shadow: 9px 9px 0 #3a6cff;
+}
+
+[data-theme='memphis'] .quota-card__label {
+  background: #3a6cff;
+  color: #fff;
+  padding: 2.5px 9px;
+  border: 3px solid #1c1a17;
+  border-radius: 0;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+[data-theme='memphis'] .quota-card.is-accent .quota-card__label {
+  background: #ff6b35;
+}
+
+[data-theme='memphis'] .quota-card__value {
+  color: var(--metric-accent, #ff5c8a);
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-size: 33px;
+  font-weight: 900;
+  letter-spacing: -1px;
+}
+
+[data-theme='memphis'] .quota-card__mode {
+  font-weight: 800;
+  color: #8d8578;
+  letter-spacing: 2px;
+}
+
+/* 额度进度条:墨槽 + 斜纹填充 */
+[data-theme='memphis'] .quota-card__progress {
+  height: 12px;
+  border-radius: 0;
+  background: #f3e8d4;
+  box-shadow: inset 0 0 0 3px #1c1a17;
+  overflow: hidden;
+}
+
+[data-theme='memphis'] .quota-card.is-accent .quota-card__progress {
+  height: 12px;
+}
+
+[data-theme='memphis'] .quota-card__progress span {
+  border-radius: 0;
+  background: repeating-linear-gradient(-45deg, var(--metric-accent, #ff5c8a) 0 8px, #fff 8px 11px);
+}
+
+[data-theme='memphis'] .quota-card__reset {
+  color: #3d5059;
+  font-weight: 700;
+}
+
+[data-theme='memphis'] .quota-card__expiry {
+  color: #8d8578;
+  font-weight: 700;
+}
+
+/* 用量统计卡:青色标签 + heavy 标题 */
+[data-theme='memphis'] .usage-card__title {
+  display: inline-block;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-size: 13.5px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: #00c2b2;
+  color: #fff;
+  padding: 4px 13px;
+  border: 3.5px solid #1c1a17;
+  box-shadow: 3px 3px 0 #1c1a17;
+  transform: rotate(-1deg);
+  margin: -24px 0 12px -6px;
+}
+
+[data-theme='memphis'] .usage-card__title::before {
+  content: '';
+}
+
+/* 用量汇总:虚线墨框纸底 */
+[data-theme='memphis'] .usage-summary__item {
+  border-radius: 0;
+  background: #fdeecd;
+  border: 3.5px dashed #1c1a17;
+}
+
+[data-theme='memphis'] .usage-summary__value {
+  color: #1c1a17;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+}
+
+[data-theme='memphis'] .usage-summary__label {
+  color: #8d7a52;
+  font-weight: 800;
+}
+
+[data-theme='memphis'] .usage-summary__value--input {
+  color: #3a6cff;
+}
+
+[data-theme='memphis'] .usage-summary__value--output {
+  color: #b388ff;
+}
+
+[data-theme='memphis'] .usage-summary__value--cached {
+  color: #00c2b2;
+}
+
+[data-theme='memphis'] .usage-summary__value--cost {
+  color: #ff6b35;
+}
+
+/* 柱状图:歪斜彩色柱 + 墨边 + 泡泡帽 */
+[data-theme='memphis'] .usage-chart__bar {
+  border-radius: 0;
+  background: var(--bc, #3a6cff);
+  border: 3.5px solid #1c1a17;
+  border-bottom: none;
+  transform: rotate(-1.5deg);
+  transform-origin: bottom;
+}
+
+[data-theme='memphis'] .usage-chart__col:nth-child(2) .usage-chart__bar {
+  --bc: #ff5c8a;
+  transform: rotate(1.2deg);
+}
+
+[data-theme='memphis'] .usage-chart__col:nth-child(3) .usage-chart__bar {
+  --bc: #ffc93c;
+}
+
+[data-theme='memphis'] .usage-chart__col:nth-child(4) .usage-chart__bar {
+  --bc: #00c2b2;
+  transform: rotate(1deg);
+}
+
+[data-theme='memphis'] .usage-chart__col:nth-child(5) .usage-chart__bar {
+  --bc: #ff6b35;
+  transform: rotate(-1deg);
+}
+
+[data-theme='memphis'] .usage-chart__col:nth-child(6) .usage-chart__bar {
+  --bc: #b388ff;
+  transform: rotate(0.8deg);
+}
+
+[data-theme='memphis'] .usage-chart__col:nth-child(7) .usage-chart__bar {
+  --bc: #3a6cff;
+}
+
+[data-theme='memphis'] .usage-chart__bar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--seg, 30%);
+  background:
+    radial-gradient(circle at 6px 5px, rgba(255, 255, 255, 0.85) 2.4px, transparent 3px) 0 0 / 12px 10px,
+    rgba(0, 0, 0, 0.18);
+}
+
+[data-theme='memphis'] .usage-chart__bar--stack {
+  background: #f3e8d4;
+  border: 3.5px solid #1c1a17;
+}
+
+[data-theme='memphis'] .usage-chart__bar-seg.is-cached {
+  background: repeating-linear-gradient(-45deg, rgba(255, 107, 53, 0.85) 0 5px, transparent 5px 9px);
+}
+
+[data-theme='memphis'] .usage-chart__bar-seg.is-input {
+  background: #ff5c8a;
+}
+
+[data-theme='memphis'] .usage-chart__bar-seg.is-output {
+  background: #b388ff;
+}
+
+[data-theme='memphis'] .usage-chart__date {
+  color: #8d8578;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+/* 明细行:便签条,粗墨边 + 彩色错位阴影 + hover 平移 */
+[data-theme='memphis'] .detail-row {
+  border-radius: 0;
+  border: 4px solid #1c1a17;
+  background: #fffdf7;
+  box-shadow: 5px 5px 0 var(--icon-tone, #ffc93c);
+}
+
+[data-theme='memphis'] .detail-row:nth-child(odd) {
+  transform: rotate(-0.7deg);
+}
+
+[data-theme='memphis'] .detail-row:nth-child(even) {
+  transform: rotate(0.6deg);
+}
+
+[data-theme='memphis'] .detail-row:hover {
+  transform: rotate(0deg) translateX(4px);
+  box-shadow: 5px 5px 0 var(--icon-tone, #ffc93c);
+}
+
+[data-theme='memphis'] .detail-row__icon {
+  border-radius: 50% 46% 54% 48%;
+  background: var(--icon-tone, #ffc93c);
+  border: 3.5px solid #1c1a17;
+  color: #fff;
+}
+
+[data-theme='memphis'] .detail-row__icon svg {
+  stroke: #fff;
+}
+
+[data-theme='memphis'] .detail-row__label {
+  color: #1c1a17;
+  font-weight: 800;
+}
+
+[data-theme='memphis'] .detail-row__link {
+  color: #3a6cff;
+  font-weight: 700;
+}
+
+[data-theme='memphis'] .detail-row__link:hover {
+  text-decoration: underline wavy #ff5c8a;
+}
+
+[data-theme='memphis'] .detail-row__value {
+  color: #1c1a17;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+}
+
+[data-theme='memphis'] .detail-row__hint {
+  color: #8d8578;
+  font-weight: 700;
+}
+
+[data-theme='memphis'] .detail-row__badge {
+  border-radius: 0;
+  border: 2.5px solid #1c1a17;
+  background: #fffdf7;
+  color: #1c1a17;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+  box-shadow: none;
+}
+
+/* 来源信息卡:纸底墨边 */
+[data-theme='memphis'] .panel__meta {
+  border-radius: 0;
+  border: 4px solid #1c1a17;
+  background: #fffdf7;
+  box-shadow: 4px 4px 0 #ffc93c;
+}
+
+[data-theme='memphis'] .panel__meta-row svg {
+  border-radius: 50% 46% 54% 48%;
+  background: var(--icon-tone, #ffc93c);
+  border: 3px solid #1c1a17;
+  box-shadow: none;
+  color: #fff;
+}
+
+[data-theme='memphis'] .panel__meta-main {
+  font-weight: 800;
+  color: #1c1a17;
+}
+
+[data-theme='memphis'] .panel__meta-badge {
+  border-radius: 0;
+  border: 2.5px solid #1c1a17;
+  background: #fffdf7;
+  color: #1c1a17;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+}
+
+[data-theme='memphis'] .panel__meta-hint {
+  color: #8d8578;
+  font-weight: 700;
+}
+
+/* 团队排行榜行:贴纸卡片,粗墨边 + 彩色错位阴影 */
+[data-theme='memphis'] .team-row {
+  border-radius: 0;
+  border: 4px solid #1c1a17;
+  background: #fffdf7;
+  box-shadow: 5px 5px 0 var(--rk, #ff5c8a);
+}
+
+[data-theme='memphis'] .team-row:nth-child(odd) {
+  transform: rotate(-0.8deg);
+}
+
+[data-theme='memphis'] .team-row:nth-child(even) {
+  transform: rotate(0.7deg);
+}
+
+[data-theme='memphis'] .team-row:hover {
+  transform: rotate(0deg) translateX(4px);
+  box-shadow: 5px 5px 0 var(--rk, #ff5c8a);
+}
+
+[data-theme='memphis'] .team-row.is-self {
+  background: #fff0f4;
+  border-color: #ff5c8a;
+}
+
+/* 排名:不规则圆 + 墨边,前 3 彩色 */
+[data-theme='memphis'] .team-row__rank {
+  border-radius: 50% 44% 52% 46%;
+  background: var(--rk, #ffc93c);
+  color: #1c1a17;
+  border: 3.5px solid #1c1a17;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+}
+
+[data-theme='memphis'] .team-row.is-top-1 .team-row__rank {
+  --rk: #ff5c8a;
+  color: #fff;
+}
+
+[data-theme='memphis'] .team-row.is-top-2 .team-row__rank {
+  --rk: #3a6cff;
+  color: #fff;
+}
+
+[data-theme='memphis'] .team-row.is-top-3 .team-row__rank {
+  --rk: #00c2b2;
+  color: #fff;
+}
+
+[data-theme='memphis'] .team-row__name {
+  color: #1c1a17;
+  font-weight: 900;
+}
+
+[data-theme='memphis'] .team-row__value {
+  color: var(--metric-accent, #1c1a17);
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+}
+
+/* 团队行进度条:墨槽 + 斜纹填充 */
+[data-theme='memphis'] .team-row__bar,
+[data-theme='memphis'] .team-row__window-bar {
+  border-radius: 0;
+  background: #f3e8d4;
+  box-shadow: inset 0 0 0 3px #1c1a17;
+  overflow: hidden;
+}
+
+[data-theme='memphis'] .team-row__bar-fill,
+[data-theme='memphis'] .team-row__window-bar-fill {
+  border-radius: 0;
+  background: repeating-linear-gradient(-45deg, var(--metric-accent, #ff5c8a) 0 7px, #fff 7px 10px);
+}
+
+[data-theme='memphis'] .team-row__credit {
+  color: #ff6b35;
+  font-weight: 900;
+}
+
+[data-theme='memphis'] .team-row__window-label {
+  color: #8d8578;
+  font-weight: 800;
+}
+
+[data-theme='memphis'] .team-row__window-value {
+  color: #1c1a17;
+  font-weight: 800;
+}
+
+/* 团队行 tooltip:纸底墨边浮层 */
+[data-theme='memphis'] .team-row__tooltip {
+  border-radius: 0;
+  border: 3px solid #1c1a17;
+  background: #fffdf7;
+  box-shadow: 4px 4px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .team-row__tooltip-label {
+  color: #1c1a17;
+  font-weight: 800;
+}
+
+[data-theme='memphis'] .team-row__tooltip-value {
+  color: #8d8578;
+  font-weight: 700;
+}
+
+/* 点赞:粉边贴纸按钮 */
+[data-theme='memphis'] .team-row__like {
+  border-radius: 0;
+  border: 3px solid #1c1a17;
+  background: #fffdf7;
+  color: #ff5c8a;
+  box-shadow: 3px 3px 0 #ff5c8a;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+}
+
+[data-theme='memphis'] .team-row__like:hover {
+  transform: scale(1.08) rotate(-2deg);
+}
+
+[data-theme='memphis'] .team-row__like.is-liked {
+  background: #ff5c8a;
+  color: #fff;
+  box-shadow: 3px 3px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .team-row__like-count {
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+}
+
+/* segmented:粗墨边 + 芥末 active */
+[data-theme='memphis'] .segmented {
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  gap: 9px;
+  padding: 0;
+}
+
+[data-theme='memphis'] .segmented button {
+  border-radius: 0;
+  color: #1c1a17;
+  background: #fffdf7;
+  border: 3.5px solid #1c1a17;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+  letter-spacing: 1px;
+  box-shadow: 4px 4px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .segmented button.is-active {
+  background: #ffc93c;
+  color: #1c1a17;
+  border-color: #1c1a17;
+  box-shadow: 4px 4px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .segmented button:hover:not(.is-active):not(:disabled) {
+  background: #fdeecd;
+  color: #1c1a17;
+}
+
+/* toggle-switch:粗墨边 + 粉/芥末开态 */
+[data-theme='memphis'] .toggle-switch__track {
+  border-radius: 0;
+  background: #f3e8d4;
+  box-shadow: inset 0 0 0 3.5px #1c1a17;
+}
+
+[data-theme='memphis'] .toggle-switch.is-checked .toggle-switch__track {
+  background: #ffc93c;
+  box-shadow: inset 0 0 0 3.5px #1c1a17;
+}
+
+[data-theme='memphis'] .toggle-switch__thumb {
+  border-radius: 50% 46% 52% 48%;
+  background: #ff5c8a;
+  border: 3px solid #1c1a17;
+  box-shadow: none;
+}
+
+[data-theme='memphis'] .toggle-switch.is-checked .toggle-switch__thumb {
+  background: #00c2b2;
+  transform: translateX(20px);
+}
+
+/* ghost-button:粗墨边 + 错位阴影 + 按压回弹 */
+[data-theme='memphis'] .ghost-button {
+  border-radius: 0;
+  border: 3.5px solid #1c1a17;
+  background: #fffdf7;
+  color: #1c1a17;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+  letter-spacing: 1px;
+  box-shadow: 4px 4px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .ghost-button:hover {
+  transform: translate(-2px, -2px);
+  background: #fffdf7;
+  color: #1c1a17;
+  border-color: #1c1a17;
+  box-shadow: 6px 6px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .ghost-button:active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .ghost-button--accent {
+  background: #ff5c8a;
+  color: #fff;
+  border-color: #1c1a17;
+}
+
+[data-theme='memphis'] .about-row__btn {
+  background: #ffc93c;
+  color: #1c1a17;
+  border: 3.5px solid #1c1a17;
+  box-shadow: 4px 4px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .about-row__btn:hover {
+  background: #ffd966;
+  box-shadow: 6px 6px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .about-row__btn:disabled {
+  opacity: 0.5;
+}
+
+[data-theme='memphis'] .about-row__badge {
+  border-radius: 0;
+  border: 2.5px solid #1c1a17;
+  background: #fffdf7;
+  color: #8d8578;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+}
+
+[data-theme='memphis'] .about-row__label {
+  color: #1c1a17;
+  font-weight: 800;
+}
+
+[data-theme='memphis'] .about-row__version {
+  color: #ff5c8a;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+}
+
+[data-theme='memphis'] .about-row__hint {
+  color: #8d8578;
+  font-weight: 700;
+}
+
+/* 下载进度条:墨槽 + 斜纹填充 */
+[data-theme='memphis'] .update-progress__bar {
+  border-radius: 0;
+  background: #f3e8d4;
+  box-shadow: inset 0 0 0 3px #1c1a17;
+}
+
+[data-theme='memphis'] .update-progress__fill {
+  border-radius: 0;
+  background: repeating-linear-gradient(-45deg, #ff5c8a 0 6px, #fff 6px 9px);
+}
+
+[data-theme='memphis'] .update-progress__text {
+  color: #8d8578;
+  font-weight: 700;
+}
+
+/* panel 底栏:圆点底纹 + 墨边 */
+[data-theme='memphis'] .panel__footer {
+  border-top: 5px solid #1c1a17;
+  background:
+    radial-gradient(circle at 14px 50%, rgba(255, 92, 138, 0.5) 4px, transparent 4.6px) 0 0 / 34px 100%;
+}
+
+[data-theme='memphis'] .panel__footer-meta {
+  color: #8d8578;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* 设置区:登记表,粗墨边 + 彩色错位阴影 + 歪斜标题 */
+[data-theme='memphis'] .settings-section {
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-theme='memphis'] .settings-section__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  background: #fffdf7;
+  padding: 5px 14px;
+  border: 3.5px solid #1c1a17;
+  box-shadow: 4px 4px 0 var(--sc, #00c2b2);
+  transform: rotate(-0.8deg);
+  color: #1c1a17;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+[data-theme='memphis'] .settings-section:nth-of-type(2n) .settings-section__title {
+  --sc: #ff5c8a;
+  transform: rotate(0.7deg);
+}
+
+[data-theme='memphis'] .settings-section:nth-of-type(3n) .settings-section__title {
+  --sc: #ff6b35;
+}
+
+[data-theme='memphis'] .settings-section__title::before {
+  content: '';
+}
+
+[data-theme='memphis'] .settings-section__title::after {
+  content: '';
+  flex: 1;
+  height: 12px;
+  margin-left: 9px;
+  background:
+    repeating-linear-gradient(-45deg, #1c1a17 0 10px, transparent 10px 20px, #ff5c8a 20px 24px, transparent 24px 34px);
+  border-radius: 99px;
+}
+
+[data-theme='memphis'] .setting-row {
+  border-radius: 0;
+  border: 3.5px solid #1c1a17;
+  background: #fffdf7;
+  margin-bottom: 9px;
+  box-shadow: 4px 4px 0 #f0e4cf;
+}
+
+[data-theme='memphis'] .setting-row:nth-child(odd) {
+  transform: rotate(-0.5deg);
+}
+
+[data-theme='memphis'] .setting-row:hover {
+  transform: rotate(0deg) translateX(3px);
+  box-shadow: 5px 5px 0 #ffc93c;
+}
+
+[data-theme='memphis'] .setting-row > span:first-child,
+[data-theme='memphis'] .setting-field__label {
+  color: #1c1a17;
+  font-weight: 800;
+}
+
+[data-theme='memphis'] .setting-field__hint {
+  color: #8d8578;
+  font-weight: 700;
+}
+
+[data-theme='memphis'] .inline-input {
+  border-radius: 0;
+  border: 3px solid #1c1a17;
+  background: #fdeecd;
+}
+
+[data-theme='memphis'] .inline-input input {
+  color: #1c1a17;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+  caret-color: #ff5c8a;
+}
+
+[data-theme='memphis'] .inline-input input[type='number'] {
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+}
+
+[data-theme='memphis'] .inline-input em {
+  color: #8d7a52;
+  font-weight: 900;
+}
+
+[data-theme='memphis'] .inline-input span {
+  color: #8d7a52;
+  font-weight: 800;
+}
+
+[data-theme='memphis'] .inline-input:focus-within {
+  border-color: #ff5c8a;
+  box-shadow: 4px 4px 0 #ff5c8a;
+}
+
+/* 团队公告:图钉 + 纸底墨边 + 芥末底 */
+[data-theme='memphis'] .team-announcement {
+  border-radius: 0;
+  border: 4px solid #1c1a17;
+  background: #ffc93c;
+  box-shadow: 6px 6px 0 #1c1a17;
+  background-image: none;
+  transform: rotate(-0.6deg);
+}
+
+[data-theme='memphis'] .team-announcement::before {
+  top: -16px;
+  left: 50%;
+  bottom: auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 32%, #ff8d6e, #c0442c 70%);
+  border: 3px solid #1c1a17;
+  box-shadow: none;
+  transform: translateX(-50%);
+}
+
+[data-theme='memphis'] .team-announcement.is-unread {
+  border-color: #ff5c8a;
+  box-shadow: 6px 6px 0 #ff5c8a;
+}
+
+[data-theme='memphis'] .team-announcement__label {
+  background: #fffdf7;
+  color: #1c1a17;
+  border: 3px solid #1c1a17;
+  border-radius: 0;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+  letter-spacing: 2px;
+}
+
+[data-theme='memphis'] .team-announcement__meta {
+  color: #6b5426;
+  font-weight: 800;
+}
+
+[data-theme='memphis'] .team-announcement__text {
+  color: #1c1a17;
+  font-weight: 600;
+  line-height: 1.65;
+}
+
+[data-theme='memphis'] .team-announcement__acknowledge {
+  border-radius: 0;
+  border: 3.5px solid #1c1a17;
+  background: #fffdf7;
+  color: #1c1a17;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+  letter-spacing: 1px;
+  box-shadow: 3px 3px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .team-announcement__acknowledge:hover {
+  background: #fff0f4;
+  border-color: #1c1a17;
+  color: #1c1a17;
+}
+
+[data-theme='memphis'] .team-announcement__acknowledge:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 #1c1a17;
+}
+
+/* 团队广播消息:拍立得留言,纸底墨边 + 歪斜 */
+[data-theme='memphis'] .team-broadcast__item {
+  border-radius: 0;
+  border: 3.5px solid #1c1a17;
+  background: #fffdf7;
+  box-shadow: 4px 4px 0 #ffc93c;
+  transform: rotate(-0.8deg);
+}
+
+[data-theme='memphis'] .team-broadcast__item:nth-child(even) {
+  transform: rotate(0.9deg);
+  box-shadow: 4px 4px 0 #00c2b2;
+}
+
+[data-theme='memphis'] .team-broadcast__name {
+  color: #ff5c8a;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+[data-theme='memphis'] .team-broadcast__time {
+  color: #8d8578;
+  font-weight: 800;
+}
+
+[data-theme='memphis'] .team-broadcast__text {
+  color: #1c1a17;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+[data-theme='memphis'] .team-broadcast__input {
+  border-radius: 0;
+  border: 3.5px solid #1c1a17;
+  background: #fffdf7;
+  color: #1c1a17;
+  font-weight: 600;
+  box-shadow: none;
+  transform: rotate(-0.4deg);
+  caret-color: #ff5c8a;
+}
+
+[data-theme='memphis'] .team-broadcast__input::placeholder {
+  color: #b3aa99;
+}
+
+[data-theme='memphis'] .team-broadcast__input:focus {
+  border-color: #1c1a17;
+  box-shadow: 4px 4px 0 #3a6cff;
+}
+
+[data-theme='memphis'] .team-broadcast__send {
+  border-radius: 0;
+  border: 3.5px solid #1c1a17;
+  background: #3a6cff;
+  color: #fff;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+  letter-spacing: 1px;
+  box-shadow: 4px 4px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .team-broadcast__send:hover {
+  box-shadow: 6px 6px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .team-broadcast__send:active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .team-broadcast__error {
+  color: #ff6b35;
+  font-weight: 800;
+}
+
+/* 自定义时间面板:纸底墨边凹陷 */
+[data-theme='memphis'] .usage-range-panel {
+  border-radius: 0;
+  border: 3.5px solid #1c1a17;
+  background: #f3e8d4;
+  box-shadow: 4px 4px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .usage-range-field__label {
+  color: #8d8578;
+  font-weight: 800;
+}
+
+[data-theme='memphis'] .usage-range-field input {
+  border-radius: 0;
+  border: 3px solid #1c1a17;
+  background: #fffdf7;
+  color: #1c1a17;
+  font-weight: 700;
+  color-scheme: light;
+}
+
+[data-theme='memphis'] .usage-range-field input:focus-visible {
+  border-color: #ff5c8a;
+  box-shadow: 3px 3px 0 #ff5c8a;
+}
+
+[data-theme='memphis'] .usage-range-apply {
+  border-radius: 0;
+  background: #ff5c8a;
+  color: #fff;
+  border: 3.5px solid #1c1a17;
+  box-shadow: 4px 4px 0 #1c1a17;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+[data-theme='memphis'] .usage-range-apply:disabled {
+  opacity: 0.5;
+}
+
+/* 模型用量榜:纸底墨边轨道 + 斜纹填充 */
+[data-theme='memphis'] .model-board__title {
+  display: inline-block;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-size: 12.5px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: #fffdf7;
+  border: 4px solid #1c1a17;
+  box-shadow: 4px 4px 0 #3a6cff;
+  padding: 5px 14px;
+  transform: rotate(-1deg);
+  color: #1c1a17;
+}
+
+[data-theme='memphis'] .model-board__title::before {
+  content: '';
+}
+
+[data-theme='memphis'] .model-board__track {
+  border-radius: 0;
+  background: #f3e8d4;
+  box-shadow: inset 0 0 0 3px #1c1a17;
+  overflow: hidden;
+}
+
+[data-theme='memphis'] .model-board__fill {
+  border-radius: 0;
+  background: repeating-linear-gradient(-45deg, var(--panel-accent) 0 5px, #fff 5px 8px);
+}
+
+[data-theme='memphis'] .model-board__name {
+  color: #8d8578;
+  font-weight: 800;
+}
+
+[data-theme='memphis'] .model-board__meta {
+  color: #1c1a17;
+  font-weight: 800;
+}
+
+/* 浮层:纸底墨边 */
+[data-theme='memphis'] .model-board__tooltip,
+[data-theme='memphis'] .usage-tooltip {
+  border-radius: 0;
+  border: 3px solid #1c1a17;
+  background: #fffdf7;
+  box-shadow: 4px 4px 0 #1c1a17;
+}
+
+[data-theme='memphis'] .usage-tooltip__date {
+  color: #1c1a17;
+  font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+[data-theme='memphis'] .usage-tooltip__row {
+  color: #8d8578;
+  font-weight: 700;
+}
+
+[data-theme='memphis'] .usage-tooltip__row span:last-child {
+  color: #1c1a17;
+}
+
+[data-theme='memphis'] .usage-tooltip__cost {
+  border-top: 2px solid #1c1a17;
+}
+
+/* 空状态:虚线墨框 */
+[data-theme='memphis'] .team-empty,
+[data-theme='memphis'] .team-broadcast__empty {
+  border-radius: 0;
+  border: 3px dashed #8d8578;
+  color: #8d8578;
+  font-weight: 700;
+}
+
+/* 滚动条:墨色粗条 */
+[data-theme='memphis'] .panel__content::-webkit-scrollbar,
+[data-theme='memphis'] .team-broadcast__feed::-webkit-scrollbar {
+  width: 10px;
+}
+
+[data-theme='memphis'] .panel__content::-webkit-scrollbar-track,
+[data-theme='memphis'] .team-broadcast__feed::-webkit-scrollbar-track {
+  background: #f3e8d4;
+}
+
+[data-theme='memphis'] .panel__content::-webkit-scrollbar-thumb,
+[data-theme='memphis'] .team-broadcast__feed::-webkit-scrollbar-thumb {
+  border-radius: 0;
+  background: #1c1a17;
+}
+
+[data-theme='memphis'] .panel__content::-webkit-scrollbar-thumb:hover,
+[data-theme='memphis'] .team-broadcast__feed::-webkit-scrollbar-thumb:hover {
+  background: #ff5c8a;
+}
+
+/* 入场:彩带落下 + 轻微旋转(贴纸贴上) */
+@keyframes memphis-drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-26px) rotate(-2.5deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0.4deg);
+  }
+}
+
+[data-theme='memphis'] .panel {
+  animation: memphis-drop-in 0.5s cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+}
+
+/* 告急态:百分比变红 + 描边 */
+[data-theme='memphis'] .capsule__percent.is-critical {
+  color: #ff6b35;
+  -webkit-text-stroke: 1px #1c1a17;
 }
 
 

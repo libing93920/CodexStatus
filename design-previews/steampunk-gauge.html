@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scheme K · 蒸汽朋克 Steampunk Gauge</title>
+<style>
+  /* ================================================================
+     方案 K · 蒸汽朋克 STEAMPUNK GAUGE
+     形态语言:黄铜面板 + 铆钉四角 + 咬合齿轮组 + 压力表针
+             + 皮革内衬 + 蒸汽喷发 · 机械复古未来
+     ================================================================ */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --leather: #2e2115;
+    --leather-deep: #1f1610;
+    --brass: #c9974a;
+    --brass-hi: #e8c883;
+    --brass-lo: #8a6530;
+    --copper: #b06a3b;
+    --verdigris: #4e8578;
+    --paper: #e8dcc0;
+    --ink: #3a2c1a;
+    --serif: Georgia, "Times New Roman", "Noto Serif SC", "Microsoft YaHei UI", serif;
+  }
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(1000px 520px at 78% -10%, rgba(201,151,74,.14), transparent 60%),
+      radial-gradient(800px 440px at 6% 110%, rgba(78,133,120,.10), transparent 60%),
+      var(--leather);
+    color:#e9dcbe;
+    font-family:var(--serif);
+    padding-bottom:90px;
+  }
+
+  .topbar {
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; gap:16px;
+    padding:16px 32px;
+    background:
+      /* 铆钉排 */
+      radial-gradient(circle at 12px 50%, var(--brass-hi) 2.2px, rgba(0,0,0,.4) 2.8px, transparent 3.4px) 0 0/34px 100% no-repeat,
+      linear-gradient(180deg,#3d2d1b,#241a0f);
+    border-bottom:3px solid var(--brass-lo);
+    box-shadow:0 4px 14px rgba(0,0,0,.5);
+  }
+  .topbar a.back {
+    color:var(--brass-hi); text-decoration:none; font-size:13px; letter-spacing:2px;
+  }
+  .topbar a.back:hover { color:#fff; }
+  .topbar h1 {
+    font-size:19px; letter-spacing:4px; text-transform:uppercase;
+    color:var(--brass-hi);
+    text-shadow:0 1px 0 rgba(0,0,0,.7), 0 0 18px rgba(201,151,74,.35);
+  }
+  .topbar .desc { margin-left:auto; font-size:11px; letter-spacing:3px; color:#a08a5e; text-transform:uppercase; }
+
+  .section-title {
+    margin:48px 40px 16px;
+    display:flex; align-items:center; gap:15px;
+    font-size:13px; letter-spacing:5px; text-transform:uppercase; color:#b39860;
+  }
+  .section-title i {
+    font-style:normal;
+    width:26px; height:26px; flex-shrink:0;
+    border-radius:50%;
+    background:
+      radial-gradient(circle at 36% 32%, var(--brass-hi) 0 22%, var(--brass) 45%, var(--brass-lo) 80%);
+    box-shadow:0 2px 5px rgba(0,0,0,.5), inset 0 -2px 3px rgba(0,0,0,.4);
+    animation:gear-spin 9s linear infinite;
+  }
+  @keyframes gear-spin { to { transform:rotate(360deg); } }
+  .section-title::after {
+    content:""; flex:1; height:2px;
+    background:repeating-linear-gradient(90deg, var(--brass-lo) 0 22px, transparent 22px 28px);
+    opacity:.6;
+  }
+
+  /* ============ 壁纸样机:锅炉房 ============ */
+  .wallpaper {
+    position:relative;
+    width:min(1060px, calc(100% - 80px));
+    margin:0 auto;
+    overflow:hidden;
+    border-radius:8px;
+    border:3px solid var(--brass-lo);
+    outline:2px solid rgba(0,0,0,.55);
+    outline-offset:3px;
+    transition:background .5s;
+    background:
+      radial-gradient(600px 300px at 74% 26%, rgba(232,200,131,.13), transparent 58%),
+      radial-gradient(480px 280px at 16% 84%, rgba(176,106,59,.14), transparent 58%),
+      linear-gradient(168deg,#40301c 0%,#241a10 55%,#181008 100%);
+  }
+  .wallpaper.is-light {
+    background:
+      radial-gradient(600px 300px at 74% 26%, rgba(255,240,205,.75), transparent 58%),
+      linear-gradient(168deg,#efe3c8 0%,#dfcda4 60%,#cdb684 100%);
+  }
+  /* 大齿轮组 */
+  .gearworks { position:absolute; inset:0; pointer-events:none; }
+  .gear {
+    position:absolute;
+    border-radius:50%;
+    background:
+      repeating-conic-gradient(var(--brass) 0deg 14deg, var(--brass-lo) 14deg 20deg);
+    -webkit-mask:radial-gradient(circle, transparent 30%, #000 31%);
+            mask:radial-gradient(circle, transparent 30%, #000 31%);
+    opacity:.5;
+  }
+  .gear::after {
+    content:""; position:absolute; inset:38%; border-radius:50%;
+    background:radial-gradient(circle at 36% 32%, var(--brass-hi), var(--brass-lo));
+    box-shadow:inset 0 -3px 6px rgba(0,0,0,.5);
+  }
+  .gear--big { width:190px; height:190px; left:-52px; top:-56px; animation:gear-spin 22s linear infinite; opacity:.42; }
+  .gear--mid { width:120px; height:120px; left:96px; top:44px; animation:gear-spin-r 15s linear infinite; opacity:.4; }
+  .gear--far { width:230px; height:230px; right:-70px; bottom:-80px; animation:gear-spin 30s linear infinite reverse; opacity:.3; }
+  @keyframes gear-spin-r { to { transform:rotate(-360deg); } }
+  /* 蒸汽 */
+  .steam { position:absolute; left:70%; top:30%; pointer-events:none; }
+  .steam i {
+    position:absolute; bottom:0;
+    width:16px; height:16px; border-radius:50%;
+    background:rgba(238,228,204,.5);
+    filter:blur(4px);
+    animation:puff 4s ease-out infinite;
+  }
+  .steam i:nth-child(2){ left:14px; animation-delay:1.3s; }
+  .steam i:nth-child(3){ left:-12px; animation-delay:2.6s; }
+  @keyframes puff {
+    0%   { transform:translateY(0) scale(.5); opacity:0; }
+    15%  { opacity:.8; }
+    100% { transform:translateY(-90px) scale(1.9); opacity:0; }
+  }
+  .wallpaper__inner {
+    position:relative;
+    display:flex; align-items:center; justify-content:center;
+    gap:82px;
+    padding:92px 40px 118px;
+    min-height:360px;
+  }
+  .wp-toolbar {
+    position:absolute; top:14px; right:14px; z-index:5;
+    display:flex; gap:9px;
+  }
+  .wp-toolbar button {
+    font-family:var(--serif); font-size:11.5px; letter-spacing:2px;
+    padding:8px 16px;
+    color:var(--ink);
+    border:none; border-radius:4px; cursor:pointer;
+    background:linear-gradient(180deg,var(--brass-hi),var(--brass) 55%,var(--brass-lo));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.5), 0 3px 7px rgba(0,0,0,.45);
+    transition:all .12s;
+  }
+  .wp-toolbar button:active { transform:translateY(2px); box-shadow:inset 0 1px 0 rgba(255,255,255,.5); }
+
+  .cap-stage-label {
+    position:absolute; top:-33px; left:0;
+    font-size:10.5px; letter-spacing:4px; text-transform:uppercase;
+    color:var(--brass);
+    border-top:1.5px solid var(--brass-lo);
+    border-bottom:1.5px solid var(--brass-lo);
+    padding:4px 2px;
+  }
+
+  /* ---------- 胶囊 = 气压计黄铜条 ---------- */
+  .capsule, .orb {
+    position:relative; cursor:grab;
+    filter:drop-shadow(0 12px 20px rgba(0,0,0,.55));
+  }
+  .capsule { width:256px; height:58px; }
+  .orb { width:58px; height:174px; }
+  .capsule:active, .orb:active { cursor:grabbing; }
+  .brass-plate {
+    position:absolute; inset:0;
+    border-radius:29px;
+    background:
+      linear-gradient(180deg,var(--brass-hi) 0%,var(--brass) 30%,var(--brass-lo) 62%,#6e4f24 100%);
+    box-shadow:
+      inset 0 0 0 2px rgba(255,235,190,.35),
+      inset 0 2px 0 rgba(255,240,200,.55),
+      inset 0 -5px 10px rgba(60,40,10,.55);
+  }
+  /* 四角铆钉(横条两端各两颗) */
+  .rivet { position:absolute; width:9px; height:9px; border-radius:50%; z-index:2;
+    background:radial-gradient(circle at 35% 30%, #fff2d4 0 25%, var(--brass) 60%, #5c421c 100%);
+    box-shadow:0 1.5px 3px rgba(0,0,0,.55);
+  }
+  .rivet.tl{ top:6px; left:12px; } .rivet.tr{ top:6px; right:12px; }
+  .rivet.bl{ bottom:6px; left:12px; } .rivet.br{ bottom:6px; right:12px; }
+  .gauge-layout {
+    position:relative; z-index:1;
+    width:100%; height:100%;
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr) auto;
+    align-items:center;
+    gap:12px;
+    padding:7px 30px;
+    color:var(--ink);
+  }
+  /* 小压力表:表盘+指针 */
+  .mini-gauge {
+    position:relative;
+    width:40px; height:40px; flex-shrink:0;
+    border-radius:50%;
+    background:radial-gradient(circle, #f4ead2 0 58%, var(--ink) 59% 66%, var(--brass-lo) 67%);
+    box-shadow:inset 0 -2px 4px rgba(0,0,0,.3), 0 2px 4px rgba(0,0,0,.4);
+  }
+  /* 刻度 */
+  .mini-gauge::before {
+    content:""; position:absolute; inset:5px; border-radius:50%;
+    background:repeating-conic-gradient(from -115deg, var(--ink) 0deg 2deg, transparent 2deg 24deg);
+    -webkit-mask:radial-gradient(circle, transparent 62%, #000 63% 76%, transparent 77%);
+            mask:radial-gradient(circle, transparent 62%, #000 63% 76%, transparent 77%);
+  }
+  .needle {
+    position:absolute; left:50%; bottom:50%;
+    width:2.5px; height:15px;
+    background:linear-gradient(#a32014,#a32014);
+    transform-origin:bottom center;
+    transform:translateX(-50%) rotate(var(--rot,-72deg));
+    transition:transform 1.2s cubic-bezier(.3,1.3,.4,1);
+    border-radius:2px;
+  }
+  .needle::after {
+    content:""; position:absolute; bottom:-3px; left:50%; transform:translateX(-50%);
+    width:7px; height:7px; border-radius:50%;
+    background:var(--brass-lo);
+  }
+  /* 蚀刻数字 */
+  .etched {
+    font-weight:700;
+    color:#4a371c;
+    text-shadow:0 1px 0 rgba(255,235,190,.65), 0 -1px 1px rgba(70,45,10,.5);
+  }
+  .gauge-pct { font-size:22px; letter-spacing:1px; line-height:1; }
+  .gauge-metric { display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
+  /* 黄铜槽进度 */
+  .slot-track {
+    width:100%; height:8px;
+    border-radius:4px;
+    background:rgba(40,26,8,.55);
+    box-shadow:inset 0 2px 3px rgba(0,0,0,.6), inset 0 -1px 0 rgba(255,235,190,.3);
+    overflow:hidden;
+  }
+  .slot-fill {
+    display:block; height:100%;
+    width:var(--w,42%);
+    border-radius:inherit;
+    background:linear-gradient(180deg,#fff0cd,var(--verdigris) 40%,#2f5c51);
+    box-shadow:0 0 7px rgba(78,133,120,.6);
+    transition:width 1s cubic-bezier(.22,.9,.3,1);
+  }
+  .gauge-side { display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
+  /* 阀轮小签 */
+  .valve-tag {
+    display:inline-flex; align-items:center; gap:4px;
+    font-size:9.5px; letter-spacing:1px;
+    color:var(--ink);
+    background:linear-gradient(180deg,#f0e2bd,#cdb98a);
+    border:1.5px solid var(--brass-lo);
+    border-radius:4px;
+    padding:2.5px 8px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.6);
+    white-space:nowrap;
+  }
+  .gauge-weekly {
+    display:inline-flex; align-items:center; gap:4px;
+    font-size:19px; white-space:nowrap;
+  }
+  .gauge-weekly svg { width:13px; height:13px; stroke-width:2.6; color:#5c421c; }
+  /* 竖气压管 */
+  .tube-face {
+    position:absolute; inset:0;
+    border-radius:17px;
+    background:linear-gradient(90deg,var(--brass-hi),var(--brass) 30%,var(--brass-lo) 70%,#6e4f24);
+    box-shadow:inset 0 0 0 2px rgba(255,235,190,.35), inset 3px 0 5px rgba(255,240,200,.4), inset -4px 0 8px rgba(60,40,10,.5);
+  }
+  .orb-layout {
+    position:relative; z-index:1;
+    width:100%; height:100%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:7px; padding:12px 6px;
+    color:var(--ink);
+  }
+  .vslot {
+    width:12px; height:64px;
+    background:rgba(40,26,8,.55);
+    border-radius:6px;
+    box-shadow:inset 0 0 4px rgba(0,0,0,.7);
+    display:flex; flex-direction:column-reverse;
+    overflow:hidden;
+  }
+  .vslot b {
+    display:block; width:100%; height:var(--w,10%);
+    background:linear-gradient(90deg,#fff0cd,var(--verdigris) 50%,#2f5c51);
+    box-shadow:0 0 7px rgba(78,133,120,.6);
+    transition:height 1s cubic-bezier(.22,.9,.3,1);
+    border-radius:0 0 6px 6px;
+  }
+  .orb-layout .rivet { display:none; }
+  .orb-layout .mini-gauge { width:32px; height:32px; }
+
+  /* ================================================================
+     Panel = 铜壳机器控制台
+     ================================================================ */
+  .panel-zone { display:flex; justify-content:center; padding:26px 40px 0; }
+  .panel {
+    width:480px; height:600px;
+    position:relative;
+    display:flex; flex-direction:column;
+    border-radius:14px;
+    background:linear-gradient(165deg,#43331e 0%,#2b1f12 55%,#1d140b 100%);
+    border:3px solid var(--brass-lo);
+    outline:2px solid rgba(0,0,0,.6);
+    outline-offset:2px;
+    box-shadow:
+      inset 0 0 0 2px rgba(232,200,131,.25),
+      0 30px 60px rgba(0,0,0,.6);
+    overflow:hidden;
+    color:#e9dcbe;
+  }
+  /* 头部铭牌+齿轮组 */
+  .console-head {
+    flex-shrink:0;
+    position:relative;
+    padding:16px 24px 14px;
+    background:linear-gradient(180deg,#57422a,#332515);
+    border-bottom:2.5px solid var(--brass-lo);
+    box-shadow:inset 0 1px 0 rgba(255,235,190,.3);
+    display:flex; align-items:center; justify-content:space-between;
+    overflow:hidden;
+  }
+  .head-gears { position:relative; width:74px; height:52px; flex-shrink:0; }
+  .head-gears i {
+    position:absolute; border-radius:50%;
+    background:repeating-conic-gradient(var(--brass) 0deg 16deg, var(--brass-lo) 16deg 24deg);
+    -webkit-mask:radial-gradient(circle, transparent 34%, #000 35%);
+            mask:radial-gradient(circle, transparent 34%, #000 35%);
+  }
+  .head-gears i:nth-child(1){ width:46px; height:46px; left:0; top:2px; animation:gear-spin 12s linear infinite; }
+  .head-gears i:nth-child(2){ width:30px; height:30px; right:6px; bottom:0; animation:gear-spin-r 8s linear infinite; }
+  .console-head h2 {
+    font-size:17px; letter-spacing:6px; text-transform:uppercase; color:var(--brass-hi);
+    text-shadow:0 2px 0 rgba(0,0,0,.55);
+  }
+  .console-head small {
+    display:block; margin-top:3px;
+    font-size:9px; letter-spacing:3px; color:#a08a5e; text-transform:uppercase;
+  }
+  .panel__content {
+    flex:1; overflow-y:auto;
+    padding:18px 24px 0;
+    scrollbar-width:thin;
+    scrollbar-color:var(--brass-lo) rgba(0,0,0,.3);
+    position:relative;
+    /* 皮革内衬质感 */
+    background:
+      radial-gradient(rgba(0,0,0,.16) 1px, transparent 1.4px) 0 0/5px 5px,
+      transparent;
+  }
+  .panel__content::-webkit-scrollbar{width:9px;}
+  .panel__content::-webkit-scrollbar-thumb{background:var(--brass-lo);border-radius:99px;}
+
+  /* Tabs:铭牌按钮 */
+  .tabs { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-bottom:18px; }
+  .tabs button {
+    font-family:var(--serif);
+    font-size:12.5px; letter-spacing:3px; text-transform:uppercase;
+    padding:11px 0;
+    color:#d8c493;
+    background:linear-gradient(180deg,#4a3820,#2e2113);
+    border:1.5px solid var(--brass-lo);
+    border-radius:6px; cursor:pointer;
+    box-shadow:inset 0 1px 0 rgba(255,235,190,.25), 0 3px 6px rgba(0,0,0,.4);
+    transition:all .15s;
+  }
+  .tabs button.on {
+    color:#3a2c1a;
+    background:linear-gradient(180deg,var(--brass-hi),var(--brass) 60%,var(--brass-lo));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.5), 0 0 12px rgba(201,151,74,.35);
+  }
+  .view[hidden]{display:none;}
+
+  /* 额度卡:嵌皮压力表卡 */
+  .quota-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .qcard {
+    position:relative;
+    padding:13px 15px 14px;
+    border-radius:10px;
+    background:linear-gradient(170deg,#4a3820,#2c2012);
+    border:1.5px solid var(--brass-lo);
+    box-shadow:inset 0 1px 0 rgba(255,235,190,.2), 0 6px 14px rgba(0,0,0,.4);
+    transition:transform .18s, box-shadow .18s;
+  }
+  .qcard:hover {
+    transform:translateY(-3px);
+    box-shadow:inset 0 1px 0 rgba(255,235,190,.3), 0 10px 20px rgba(0,0,0,.5), 0 0 16px rgba(201,151,74,.18);
+  }
+  .qcard__head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+  .qcard__label {
+    font-size:11px; letter-spacing:3px; text-transform:uppercase;
+    color:#3a2c1a;
+    background:linear-gradient(180deg,var(--brass-hi),var(--brass));
+    padding:3px 10px; border-radius:4px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 -1px 0 rgba(90,60,20,.5);
+  }
+  .qcard__mode { font-size:9.5px; letter-spacing:2px; color:#a08a5e; text-transform:uppercase; }
+  /* 表盘大读数:半圆刻度+指针+数字 */
+  .dial-row { display:flex; align-items:center; gap:14px; margin:4px 0 10px; }
+  .dial {
+    position:relative; width:64px; height:64px; flex-shrink:0;
+    border-radius:50%;
+    background:radial-gradient(circle, #f4ead2 0 55%, #3a2c1a 56% 64%, var(--brass-lo) 65% 78%, var(--brass) 79% 88%, #5c421c 89%);
+    box-shadow:0 4px 9px rgba(0,0,0,.5), inset 0 2px 3px rgba(255,255,255,.4);
+  }
+  .dial::before {
+    content:""; position:absolute; inset:9px; border-radius:50%;
+    background:repeating-conic-gradient(from -110deg, #6b5327 0deg 2.4deg, transparent 2.4deg 22.5deg);
+    -webkit-mask:radial-gradient(circle, transparent 58%, #000 59% 74%, transparent 75%);
+            mask:radial-gradient(circle, transparent 58%, #000 59% 74%, transparent 75%);
+  }
+  .dial .needle { height:22px; width:3px; }
+  .qcard-digits { min-width:0; }
+  .qcard__value {
+    font-size:30px; line-height:1; letter-spacing:1px;
+    color:var(--tone,var(--verdigris));
+    text-shadow:0 0 12px color-mix(in srgb, var(--tone,var(--verdigris)) 45%, transparent);
+  }
+  .qcard-bar-slot {
+    height:9px; border-radius:5px;
+    background:rgba(20,12,4,.6);
+    box-shadow:inset 0 2px 3px rgba(0,0,0,.7), inset 0 -1px 0 rgba(232,200,131,.25);
+    overflow:hidden;
+    margin-bottom:9px;
+  }
+  .qcard-bar-slot i {
+    display:block; height:100%; width:var(--w,50%);
+    border-radius:inherit;
+    background:linear-gradient(90deg,color-mix(in srgb,var(--tone) 55%, #fff0cd),var(--tone));
+    box-shadow:0 0 8px color-mix(in srgb,var(--tone) 55%,transparent);
+    transition:width 1.1s cubic-bezier(.22,.9,.3,1);
+  }
+  .qcard__reset { font-size:12px; color:#cbb98a; margin-top:2px; }
+  .qcard__expiry { font-size:10px; letter-spacing:1px; color:#8d7a52; margin-top:3px; }
+
+  /* 用量统计:仪表簇 */
+  .ucard {
+    margin-top:15px;
+    padding:14px 16px 16px;
+    border-radius:10px;
+    background:linear-gradient(170deg,#4a3820,#2c2012);
+    border:1.5px solid var(--brass-lo);
+    box-shadow:inset 0 1px 0 rgba(255,235,190,.18);
+  }
+  .ucard__title {
+    font-size:13px; letter-spacing:4px; text-transform:uppercase;
+    color:var(--brass-hi); margin-bottom:11px;
+    display:flex; align-items:center; gap:9px;
+  }
+  .ucard__title::before {
+    content:""; width:10px; height:10px; border-radius:50%;
+    background:radial-gradient(circle at 36% 32%, var(--brass-hi), var(--brass-lo));
+    animation:gear-spin 7s linear infinite;
+  }
+  .seg {
+    display:inline-grid; grid-auto-flow:column; gap:3px;
+    padding:3px; border-radius:6px;
+    background:rgba(0,0,0,.4);
+    border:1.5px solid var(--brass-lo);
+  }
+  .seg button {
+    padding:5px 12px;
+    font-family:var(--serif); font-size:11.5px; letter-spacing:1px;
+    background:none; border:none; border-radius:4px;
+    color:#cbb98a; cursor:pointer; transition:all .15s;
+  }
+  .seg button.on {
+    color:var(--ink);
+    background:linear-gradient(180deg,var(--brass-hi),var(--brass));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.5);
+  }
+  .usage-summary {
+    display:grid; grid-template-columns:repeat(5,auto); justify-content:space-between;
+    margin:13px 2px 4px;
+    padding:9px 12px;
+    border-radius:6px;
+    background:rgba(0,0,0,.3);
+    border:1.5px dashed rgba(201,151,74,.4);
+  }
+  .us-item { display:flex; flex-direction:column; gap:3px; }
+  .us-item b { font-size:14px; color:#f0e2bd; letter-spacing:.5px; }
+  .us-item span { font-size:8.5px; letter-spacing:2px; color:#a08a5e; text-transform:uppercase; }
+  .us-item--in b{color:#9fc6ba;} .us-item--out b{color:#d9b98a;}
+  .us-item--cache b{color:#8fb8ad;} .us-item--cost b{color:#e0a86a;}
+  /* 铜管柱状图 */
+  .chart {
+    display:flex; align-items:flex-end; gap:7px;
+    height:82px; margin-top:13px;
+    padding:0 4px 20px;
+    position:relative;
+    border-bottom:3px solid var(--brass-lo);
+  }
+  .chart__col { flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end; position:relative; }
+  .chart__barwrap { width:100%; max-width:20px; flex:1; display:flex; align-items:flex-end; }
+  /* 铜管:柱身高光 + 底部法兰环 */
+  .chart__pipe {
+    width:100%; height:var(--h,40%);
+    border-radius:4px 4px 0 0;
+    background:linear-gradient(90deg,#8a5a30,var(--copper) 30%,#e0aa6e 50%,var(--copper) 72%,#6e4224);
+    box-shadow:0 0 8px rgba(176,106,59,.3);
+    position:relative;
+    transform-origin:bottom;
+    animation:pipe-rise .65s cubic-bezier(.22,.9,.3,1) backwards;
+  }
+  .chart__pipe::before {
+    content:""; position:absolute; left:-2px; right:-2px; top:7px; height:5px;
+    border-radius:3px;
+    background:linear-gradient(180deg,var(--brass-hi),var(--brass-lo));
+    box-shadow:0 1px 2px rgba(0,0,0,.4);
+  }
+  .chart__pipe em {
+    position:absolute; left:0; right:0; bottom:0; top:12px;
+    border-radius:0 0 3px 3px;
+    background:repeating-linear-gradient(180deg, rgba(78,133,120,.75) 0 6px, rgba(47,92,81,.75) 6px 12px);
+  }
+  @keyframes pipe-rise { from{transform:scaleY(0);} }
+  .chart__date { position:absolute; bottom:-17px; font-size:8.5px; letter-spacing:1px; color:#a08a5e; }
+
+  /* 明细行:铆接清单板 */
+  .rows { margin-top:17px; display:flex; flex-direction:column; gap:9px; }
+  .row {
+    display:flex; align-items:center; gap:12px;
+    padding:11px 14px;
+    border-radius:8px;
+    background:linear-gradient(170deg,#46341f,#2a1d10);
+    border:1.5px solid var(--brass-lo);
+    box-shadow:inset 0 1px 0 rgba(255,235,190,.15);
+    transition:all .18s;
+    cursor:default;
+  }
+  .row:hover { transform:translateX(3px); border-color:var(--brass); }
+  .row__icon {
+    width:30px; height:30px; flex-shrink:0;
+    display:grid; place-items:center;
+    border-radius:50%;
+    background:radial-gradient(circle at 36% 32%, var(--brass-hi), var(--brass) 55%, var(--brass-lo));
+    box-shadow:inset 0 -2px 4px rgba(0,0,0,.45), 0 2px 5px rgba(0,0,0,.4);
+    color:#3a2c1a;
+  }
+  .row__icon svg { width:15px; height:15px; stroke-width:2.6; stroke:#3a2c1a; fill:none; }
+  .row__label { font-size:13px; letter-spacing:1px; }
+  .row__label a { color:var(--brass-hi); text-decoration:none; }
+  .row__label a:hover { text-decoration:underline; }
+  .row__value { margin-left:auto; font-size:14px; color:#f0e2bd; letter-spacing:1px; }
+  .row__hint { font-size:10px; letter-spacing:1px; color:#a08a5e; }
+
+  .panel__footer {
+    flex-shrink:0;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:13px 24px 15px;
+    background:linear-gradient(180deg,#3d2d1b,#241a0f);
+    border-top:2.5px solid var(--brass-lo);
+    box-shadow:inset 0 1px 0 rgba(232,200,131,.2);
+  }
+  .panel__footer-meta { font-size:10px; letter-spacing:2px; color:#a08a5e; text-transform:uppercase; }
+  .btn-close {
+    font-family:var(--serif); font-size:12px; letter-spacing:2px;
+    padding:9px 19px;
+    color:#3a2c1a;
+    background:linear-gradient(180deg,var(--brass-hi),var(--brass) 55%,var(--brass-lo));
+    border:none; border-radius:5px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.55), 0 3px 7px rgba(0,0,0,.45);
+    cursor:pointer; transition:all .12s;
+  }
+  .btn-close:active { transform:translateY(2px); box-shadow:inset 0 1px 0 rgba(255,255,255,.55); }
+
+  /* ============ 团队页 ============ */
+  .team-announcement {
+    position:relative;
+    padding:13px 15px 13px 48px;
+    margin-bottom:15px;
+    border-radius:8px;
+    background:linear-gradient(170deg,#46341f,#2a1d10);
+    border:1.5px solid var(--verdigris);
+    box-shadow:inset 0 1px 0 rgba(255,235,190,.15);
+  }
+  .team-announcement::before {
+    content:"NOTICE";
+    position:absolute; left:0; top:0; bottom:0; width:36px;
+    writing-mode:vertical-rl;
+    display:grid; place-items:center;
+    background:linear-gradient(180deg,var(--verdigris),#39695e);
+    color:#eafaf4;
+    font-size:9.5px; letter-spacing:4px;
+    border-right:1.5px solid var(--brass-lo);
+    border-radius:7px 0 0 7px;
+  }
+  .ta-topline { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+  .ta-label { font-size:10px; letter-spacing:3px; color:var(--verdigris); text-transform:uppercase; }
+  .ta-meta { font-size:10px; color:#a08a5e; }
+  .ta-text { font-size:12.5px; line-height:1.7; color:#e9dcbe; }
+  .ta-ack {
+    margin-top:9px; padding:5px 16px;
+    font-family:var(--serif); font-size:11.5px; letter-spacing:2px;
+    color:#3a2c1a;
+    background:linear-gradient(180deg,var(--brass-hi),var(--brass));
+    border:none; border-radius:4px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.5);
+    cursor:pointer; transition:all .12s;
+  }
+  .ta-ack:active { transform:translateY(2px); }
+
+  .board-head { display:flex; align-items:center; justify-content:space-between; margin:2px 0 13px; }
+  .board-head h3 {
+    font-size:14px; letter-spacing:4px; text-transform:uppercase; color:var(--brass-hi);
+    display:flex; align-items:center; gap:9px;
+  }
+  .board-head h3 i {
+    font-style:normal; width:22px; height:22px;
+    display:grid; place-items:center;
+    border-radius:50%;
+    background:repeating-conic-gradient(var(--brass) 0deg 16deg, var(--brass-lo) 16deg 24deg);
+    -webkit-mask:radial-gradient(circle, transparent 30%, #000 31%);
+            mask:radial-gradient(circle, transparent 30%, #000 31%);
+    animation:gear-spin 8s linear infinite;
+  }
+  .btn-refresh {
+    font-family:var(--serif); font-size:11px; letter-spacing:2px;
+    padding:7px 15px;
+    color:#3a2c1a;
+    background:linear-gradient(180deg,var(--brass-hi),var(--brass));
+    border:none; border-radius:4px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.5);
+    cursor:pointer; transition:all .12s;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  .btn-refresh:active { transform:translateY(2px); }
+
+  .trow {
+    display:flex; align-items:center; gap:12px;
+    padding:11px 14px;
+    margin-bottom:9px;
+    border-radius:8px;
+    background:linear-gradient(170deg,#42301c,#281c0f);
+    border:1.5px solid rgba(138,101,48,.6);
+    transition:all .18s;
+  }
+  .trow:hover { border-color:var(--brass); transform:translateX(3px); }
+  .rank {
+    width:32px; height:32px; flex-shrink:0;
+    display:grid; place-items:center;
+    font-size:13px; font-weight:700; color:#3a2c1a;
+    border-radius:50%;
+    background:radial-gradient(circle at 36% 32%, var(--brass-hi), var(--brass) 55%, var(--brass-lo));
+    box-shadow:inset 0 -2px 4px rgba(0,0,0,.45);
+    position:relative;
+  }
+  .rank--1 { background:radial-gradient(circle at 36% 32%, #fff6dd, #ffdf9a 45%, #c8973a 80%); box-shadow:0 0 12px rgba(255,223,154,.45), inset 0 -2px 4px rgba(0,0,0,.4); }
+  .rank--2 { filter:saturate(.55) brightness(.92); }
+  .rank--3 { filter:saturate(.75) brightness(.85); }
+  .trow__main { flex:1; min-width:0; }
+  .trow__name-line { display:flex; align-items:center; gap:7px; margin-bottom:5px; }
+  .trow__name { font-size:13px; letter-spacing:1px; }
+  .badge-self {
+    font-size:8.5px; letter-spacing:2px; padding:2.5px 9px;
+    border-radius:4px;
+    color:#eafaf4;
+    background:linear-gradient(180deg,var(--verdigris),#39695e);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  .dot-ver { width:8px; height:8px; border-radius:50%; box-shadow:0 0 5px currentColor, inset -1px -1px 2px rgba(0,0,0,.4); }
+  .twin { display:flex; align-items:center; gap:8px; }
+  .twin__label { font-size:9px; color:#a08a5e; width:20px; letter-spacing:1px; }
+  .twin__bar {
+    flex:1; height:8px;
+    border-radius:4px;
+    background:rgba(20,12,4,.6);
+    box-shadow:inset 0 1.5px 3px rgba(0,0,0,.7);
+    overflow:hidden;
+  }
+  .twin__bar i {
+    display:block; height:100%; width:var(--w,50%);
+    border-radius:inherit;
+    background:linear-gradient(90deg,color-mix(in srgb,var(--tone,#4e8578) 55%,#fff0cd),var(--tone,#4e8578));
+    box-shadow:0 0 7px color-mix(in srgb,var(--tone,#4e8578) 55%,transparent);
+  }
+  .twin__val { font-size:10px; color:#cbb98a; width:32px; text-align:right; }
+  .trow__side { display:flex; flex-direction:column; align-items:flex-end; gap:3px; flex-shrink:0; }
+  .trow__pct { font-size:17px; color:var(--tone,#f0e2bd); letter-spacing:1px; }
+  .chip-mini {
+    font-size:8.5px; letter-spacing:1px;
+    padding:2px 8px;
+    border-radius:4px;
+    color:var(--ink);
+    background:linear-gradient(180deg,#f0e2bd,#cdb98a);
+    border:1px solid var(--brass-lo);
+  }
+  .like-btn {
+    display:inline-flex; align-items:center; gap:3px;
+    padding:3px 10px;
+    font-family:var(--serif); font-size:10px;
+    color:#ffb9c8;
+    background:transparent;
+    border:1.5px solid #b0556a;
+    border-radius:4px;
+    cursor:pointer; transition:all .15s;
+  }
+  .like-btn:hover { background:#b0556a; color:#fff; }
+  .like-btn.liked { background:#b0556a; color:#fff; box-shadow:0 0 9px rgba(176,85,106,.45); }
+
+  /* 广播消息:传声铜管 */
+  .broadcast { margin-top:16px; }
+  .broadcast__title { font-size:12px; letter-spacing:4px; color:#a08a5e; text-transform:uppercase; margin-bottom:9px; }
+  .feed {
+    display:flex; flex-direction:column; gap:8px;
+    max-height:132px; overflow-y:auto;
+    padding-right:4px;
+    scrollbar-width:thin; scrollbar-color:var(--brass-lo) transparent;
+  }
+  .msg {
+    max-width:86%;
+    padding:9px 13px;
+    border-radius:10px 10px 10px 3px;
+    background:linear-gradient(170deg,#46341f,#2a1d10);
+    border:1.5px solid rgba(138,101,48,.6);
+    font-size:12.5px; line-height:1.65;
+  }
+  .msg--self {
+    align-self:flex-end;
+    border-radius:10px 10px 3px 10px;
+    border-color:var(--verdigris);
+    background:linear-gradient(170deg,#31473f,#20332c);
+  }
+  .msg__meta { display:flex; gap:8px; font-size:9px; letter-spacing:1px; color:#a08a5e; margin-bottom:3px; text-transform:uppercase; }
+  .composer { display:flex; gap:9px; margin-top:11px; }
+  .composer input {
+    flex:1; padding:10px 15px;
+    font-family:var(--serif); font-size:12.5px;
+    color:#f0e2bd;
+    background:rgba(0,0,0,.35);
+    border:1.5px solid var(--brass-lo);
+    border-radius:5px; outline:none;
+    transition:border-color .2s, box-shadow .2s;
+  }
+  .composer input:focus { border-color:var(--brass); box-shadow:0 0 0 3px rgba(201,151,74,.15); }
+  .composer input::placeholder { color:#8d7a52; }
+  .btn-send {
+    padding:10px 20px;
+    font-family:var(--serif); font-size:12px; letter-spacing:2px;
+    color:#3a2c1a;
+    background:linear-gradient(180deg,var(--brass-hi),var(--brass) 55%,var(--brass-lo));
+    border:none; border-radius:5px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.55), 0 3px 7px rgba(0,0,0,.45);
+    cursor:pointer; transition:all .12s;
+  }
+  .btn-send:active { transform:translateY(2px); }
+
+  /* ============ 设置页 ============ */
+  .settings-section { margin-bottom:18px; }
+  .settings-section__title {
+    font-size:10.5px; letter-spacing:4px; text-transform:uppercase;
+    color:#a08a5e; margin-bottom:9px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .settings-section__title::before {
+    content:""; width:8px; height:8px; border-radius:50%;
+    background:radial-gradient(circle at 36% 32%, var(--brass-hi), var(--brass-lo));
+  }
+  .settings-section__title::after {
+    content:""; flex:1; height:1.5px;
+    background:repeating-linear-gradient(90deg, rgba(201,151,74,.4) 0 18px, transparent 18px 24px);
+  }
+  .setting-row {
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:11px 14px;
+    margin-bottom:8px;
+    border-radius:8px;
+    background:linear-gradient(170deg,#42301c,#281c0f);
+    border:1.5px solid rgba(138,101,48,.55);
+    transition:all .18s;
+  }
+  .setting-row:hover { border-color:var(--brass); }
+  .setting-row > span:first-child { font-size:12.5px; letter-spacing:1px; }
+  .inline-input {
+    display:inline-flex; align-items:center; gap:7px;
+    padding:5px 12px;
+    border-radius:5px;
+    background:rgba(0,0,0,.3);
+    border:1.5px solid var(--brass-lo);
+  }
+  .inline-input span { font-size:9.5px; letter-spacing:1px; color:#a08a5e; text-transform:uppercase; }
+  .inline-input input {
+    width:46px; padding:3px 6px;
+    font-family:var(--serif); font-size:13px;
+    background:transparent; color:#f0e2bd;
+    border:none; outline:none; text-align:right;
+    border-bottom:1.5px solid var(--brass-lo);
+  }
+  .inline-input input:focus { border-color:var(--brass-hi); }
+  .inline-input em { font-style:normal; font-size:9.5px; color:#a08a5e; }
+  /* 开关:拉杆闸刀 */
+  .toggle {
+    width:48px; height:26px;
+    border-radius:13px;
+    background:rgba(20,12,4,.6);
+    box-shadow:inset 0 2px 4px rgba(0,0,0,.7), inset 0 -1px 0 rgba(232,200,131,.2);
+    position:relative; cursor:pointer; flex-shrink:0;
+    transition:background .25s;
+  }
+  .toggle::after {
+    content:""; position:absolute; top:2.5px; left:3px;
+    width:21px; height:21px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, var(--brass-hi), var(--brass) 55%, var(--brass-lo));
+    box-shadow:0 2px 5px rgba(0,0,0,.55), inset 0 -2px 3px rgba(0,0,0,.4);
+    transition:transform .22s cubic-bezier(.34,1.5,.64,1);
+  }
+  .toggle.on::after { transform:translateX(21px); background:radial-gradient(circle at 35% 30%, #bfe8db, var(--verdigris) 55%, #2f5c51); box-shadow:0 2px 7px rgba(78,133,120,.5), inset 0 -2px 3px rgba(0,0,0,.4); }
+  .about-row {}
+  .about-row__info { display:flex; flex-direction:column; gap:2px; }
+  .about-row__label { font-size:12.5px; }
+  .about-row__version { font-size:9.5px; letter-spacing:2px; color:#a08a5e; }
+  .btn-check {
+    font-family:var(--serif); font-size:11px; letter-spacing:2px;
+    padding:8px 17px;
+    color:#3a2c1a;
+    background:linear-gradient(180deg,var(--brass-hi),var(--brass) 55%,var(--brass-lo));
+    border:none; border-radius:5px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.55), 0 3px 7px rgba(0,0,0,.45);
+    cursor:pointer; transition:all .12s;
+  }
+  .btn-check:active { transform:translateY(2px); }
+
+  /* 入场:蒸汽启动 */
+  .rise { animation:boiler-on .55s cubic-bezier(.22,.9,.3,1) backwards; }
+  @keyframes boiler-on {
+    from { opacity:0; transform:scale(.94); filter:brightness(.5) sepia(.4); }
+    to   { opacity:1; transform:scale(1); filter:brightness(1) sepia(0); }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="back" href="./more-themes.html">← Index</a>
+  <h1>⚙ Codex Aetherium Works</h1>
+  <span class="desc">PATENT No.1842-BRASS</span>
+</div>
+
+<!-- 横竖胶囊 -->
+<div class="section-title"><i></i> Capsule · Orb — Brass Instruments</div>
+<div class="wallpaper" id="wp1">
+  <div class="gearworks">
+    <span class="gear gear--big"></span>
+    <span class="gear gear--mid"></span>
+    <span class="gear gear--far"></span>
+  </div>
+  <div class="steam"><i></i><i></i><i></i></div>
+  <div class="wp-toolbar">
+    <button onclick="toggleWp('wp1', this)">浅色壁纸</button>
+    <button onclick="replay(document.getElementById('wp1'))">↻ Replay</button>
+  </div>
+  <div class="wallpaper__inner">
+    <!-- 横胶囊:气压计条 -->
+    <div style="position:relative">
+      <span class="cap-stage-label">Barometer · H</span>
+      <div class="capsule">
+        <div class="brass-plate"></div>
+        <span class="rivet tl"></span><span class="rivet tr"></span>
+        <span class="rivet bl"></span><span class="rivet br"></span>
+        <div class="gauge-layout">
+          <span class="mini-gauge"><span class="needle" id="needleH" style="--rot:-72deg"></span></span>
+          <div class="gauge-metric">
+            <span class="gauge-pct etched" data-count="42" data-suffix="%">0%</span>
+            <span class="slot-track"><i class="slot-fill" style="--w:42%"></i></span>
+          </div>
+          <span class="gauge-side">
+            <span class="gauge-weekly etched">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h12M6 22h12M7 2v4l5 6-5 6v4M17 2v4l-5 6 5 6v4"/></svg>
+              <span data-count="6" data-suffix="D">0D</span>
+            </span>
+            <span class="valve-tag">🎫 2天</span>
+            <span class="valve-tag" style="color:#2f5c51">✦ Terra Mx</span>
+          </span>
+        </div>
+      </div>
+    </div>
+    <!-- 竖 orb:气压管 -->
+    <div style="position:relative">
+      <span class="cap-stage-label">Aether Tube · V</span>
+      <div class="orb">
+        <div class="tube-face"></div>
+        <div class="orb-layout">
+          <span class="mini-gauge"><span class="needle" style="--rot:104deg"></span></span>
+          <span class="valve-tag">🎫 1天</span>
+          <span class="vslot"><b style="--w:10%"></b></span>
+          <span class="orb-pct etched" style="font-size:15px" data-count="10" data-suffix="%">0%</span>
+          <span class="valve-tag">✦ Terra Mx</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Panel -->
+<div class="section-title"><i></i> Panel — Console 480×600</div>
+<div class="panel-zone">
+  <div class="panel rise">
+    <div class="console-head">
+      <div>
+        <h2>Quota Works</h2>
+        <small>Aether pressure & consumption ledger</small>
+      </div>
+      <div class="head-gears"><i></i><i></i></div>
+    </div>
+
+    <div class="panel__content">
+      <nav class="tabs">
+        <button class="on">详情 Gauges</button>
+        <button>团队 Guild</button>
+        <button>设置 Valves</button>
+      </nav>
+
+      <div class="view" id="view-details">
+      <div class="quota-grid">
+        <div class="qcard qcard--accent" style="--tone:#4e8578">
+          <div class="qcard__head"><span class="qcard__label">5H Dial</span><span class="qcard__mode">剩余 LEFT</span></div>
+          <div class="dial-row">
+            <span class="dial"><span class="needle dial-needle" data-rotate="-72"></span></span>
+            <div class="qcard-digits">
+              <div class="qcard__value"><span data-count="42" data-suffix="%">0%</span></div>
+              <p class="qcard__expiry" style="margin-top:4px">RESET IN 02:30</p>
+            </div>
+          </div>
+          <div class="qcard-bar-slot"><i style="--w:42%"></i></div>
+          <p class="qcard__reset">2小时30分后重置</p>
+          <p class="qcard__expiry">EXPIRES 18:36</p>
+        </div>
+        <div class="qcard" style="--tone:#e0a86a">
+          <div class="qcard__head"><span class="qcard__label">Weekly Dial</span><span class="qcard__mode">剩余 LEFT</span></div>
+          <div class="dial-row">
+            <span class="dial"><span class="needle dial-needle" data-rotate="126"></span></span>
+            <div class="qcard-digits">
+              <div class="qcard__value"><span data-count="98" data-suffix="%">0%</span></div>
+              <p class="qcard__expiry" style="margin-top:4px">RESET IN 6D 22H</p>
+            </div>
+          </div>
+          <div class="qcard-bar-slot"><i style="--w:98%"></i></div>
+          <p class="qcard__reset">6天22小时后重置</p>
+          <p class="qcard__expiry">EXPIRES 8/5 14:52</p>
+        </div>
+      </div>
+
+      <div class="ucard">
+        <div class="ucard__title">用量统计 Ledger</div>
+        <div class="seg">
+          <button class="on">1天</button><button>7天</button><button>30天</button><button>自定义</button>
+        </div>
+        <div class="usage-summary">
+          <div class="us-item"><b>1.2M</b><span>TOKEN 总量</span></div>
+          <div class="us-item us-item--in"><b>860K</b><span>输入 IN</span></div>
+          <div class="us-item us-item--out"><b>142K</b><span>输出 OUT</span></div>
+          <div class="us-item us-item--cache"><b>71%</b><span>CACHE</span></div>
+          <div class="us-item us-item--cost"><b>$3.82</b><span>花费 COAL</span></div>
+        </div>
+        <div class="chart">
+          <div class="chart__col"><div class="chart__barwrap"><div class="chart__pipe" style="--h:46%; animation-delay:.05s"><em style="--seg:64%"></em></div></div><span class="chart__date">8/15</span></div>
+          <div class="chart__col"><div class="chart__barwrap"><div class="chart__pipe" style="--h:72%; animation-delay:.1s"><em style="--seg:58%"></em></div></div><span class="chart__date">8/16</span></div>
+          <div class="chart__col"><div class="chart__barwrap"><div class="chart__pipe" style="--h:34%; animation-delay:.15s"><em style="--seg:70%"></em></div></div><span class="chart__date">8/17</span></div>
+          <div class="chart__col"><div class="chart__barwrap"><div class="chart__pipe" style="--h:88%; animation-delay:.2s"><em style="--seg:52%"></em></div></div><span class="chart__date">8/18</span></div>
+          <div class="chart__col"><div class="chart__barwrap"><div class="chart__pipe" style="--h:58%; animation-delay:.25s"><em style="--seg:66%"></em></div></div><span class="chart__date">8/19</span></div>
+          <div class="chart__col"><div class="chart__barwrap"><div class="chart__pipe" style="--h:96%; animation-delay:.3s"><em style="--seg:61%"></em></div></div><span class="chart__date">昨天</span></div>
+          <div class="chart__col"><div class="chart__barwrap"><div class="chart__pipe" style="--h:64%; animation-delay:.35s"><em style="--seg:71%"></em></div></div><span class="chart__date">今天</span></div>
+        </div>
+      </div>
+
+      <div class="rows">
+        <div class="row" style="--ic:#c9974a">
+          <span class="row__icon"><svg viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1a2 2 0 0 0 0 4v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1a2 2 0 0 0 0-4z"/><path d="M13 7v2m0 6v2"/></svg></span>
+          <span class="row__label">重置票券 Tickets</span>
+          <span class="row__value">×2 天</span>
+          <span class="row__hint">ISSUED 8月1日 04:11</span>
+        </div>
+        <div class="row" style="--ic:#d9b98a">
+          <span class="row__icon"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.8L20 10l-5 3.9L16.5 20 12 16.6 7.5 20 9 13.9 4 10l6.1-1.2z"/></svg></span>
+          <span class="row__label"><a href="#">雷达荐模 Orrery Pick</a></span>
+          <span class="row__value">Sol Xh</span>
+          <span class="row__hint">IQ 106.3 · $6.33/题</span>
+        </div>
+        <div class="row" style="--ic:#4e8578">
+          <span class="row__icon"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 3v6h-6"/></svg></span>
+          <span class="row__label"><a href="#">额度勘验 Regulator</a></span>
+          <span class="row__value">RUNNING</span>
+        </div>
+      </div>
+      </div><!-- /view-details -->
+
+      <!-- ============ 团队视图 ============ -->
+      <div class="view" id="view-team" hidden>
+        <section class="team-announcement">
+          <div class="ta-topline">
+            <span class="ta-label">公告 NOTICE</span>
+            <span class="ta-meta">工头 FOREMAN · 10:24</span>
+          </div>
+          <p class="ta-text">本周六晚 22:00-23:00 官方额度窗口重置,期间可能出现短暂数据延迟,请知悉。</p>
+          <button class="ta-ack">已知 ACK</button>
+        </section>
+
+        <div style="margin-bottom:13px">
+          <div class="seg">
+            <button class="on">额度 PRESSURE</button><button>TOKEN COAL</button>
+          </div>
+        </div>
+
+        <div class="board-head">
+          <h3><i></i> 工匠榜 GUILD RANKING</h3>
+          <button class="btn-refresh">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 3v6h-6"/></svg>
+            SYNC
+          </button>
+        </div>
+
+        <div class="trow">
+          <span class="rank rank--1">I</span>
+          <div class="trow__main">
+            <div class="trow__name-line"><span class="trow__name">阿宁</span><span class="badge-self">我 SELF</span></div>
+            <div class="twin"><span class="twin__label">5h</span><span class="twin__bar"><i style="--w:42%; --tone:#4e8578"></i></span><span class="twin__val">42%</span></div>
+            <div class="twin"><span class="twin__label">7d</span><span class="twin__bar"><i style="--w:98%; --tone:#e0a86a"></i></span><span class="twin__val">98%</span></div>
+          </div>
+          <div class="trow__side">
+            <span class="trow__pct" style="--tone:#e0a86a">98%</span>
+            <span class="chip-mini">🎫 ×2</span>
+          </div>
+        </div>
+
+        <div class="trow">
+          <span class="rank rank--2">II</span>
+          <div class="trow__main">
+            <div class="trow__name-line"><span class="trow__name">老王</span><span class="dot-ver" style="color:#4e8578" title="最新版本"></span></div>
+            <div class="twin"><span class="twin__label">5h</span><span class="twin__bar"><i style="--w:67%; --tone:#4e8578"></i></span><span class="twin__val">67%</span></div>
+            <div class="twin"><span class="twin__label">7d</span><span class="twin__bar"><i style="--w:81%; --tone:#e0a86a"></i></span><span class="twin__val">81%</span></div>
+          </div>
+          <div class="trow__side">
+            <span class="trow__pct" style="--tone:#9fc6ba">81%</span>
+            <button class="like-btn liked">♥ 3</button>
+          </div>
+        </div>
+
+        <div class="trow">
+          <span class="rank rank--3">III</span>
+          <div class="trow__main">
+            <div class="trow__name-line"><span class="trow__name">小柒</span><span class="dot-ver" style="color:#e0a86a" title="版本落后"></span></div>
+            <div class="twin"><span class="twin__label">5h</span><span class="twin__bar"><i style="--w:23%; --tone:#a32014"></i></span><span class="twin__val">23%</span></div>
+            <div class="twin"><span class="twin__label">7d</span><span class="twin__bar"><i style="--w:55%; --tone:#e0a86a"></i></span><span class="twin__val">55%</span></div>
+          </div>
+          <div class="trow__side">
+            <span class="trow__pct" style="--tone:#9fc6ba">55%</span>
+            <button class="like-btn">♡ 0</button>
+          </div>
+        </div>
+
+        <div class="broadcast">
+          <div class="broadcast__title">传声铜管 Speaking Tubes</div>
+          <div class="feed">
+            <div class="msg">
+              <div class="msg__meta"><span>老王</span><span>10:31</span></div>
+              谁还有重置卡?我 5h 快见底了
+            </div>
+            <div class="msg msg--self">
+              <div class="msg__meta"><span>我</span><span>10:33</span></div>
+              我还剩 2 张,周六给你留一张
+            </div>
+          </div>
+          <div class="composer">
+            <input placeholder="发送一条消息,同组成员可见…" type="text">
+            <button class="btn-send">发送 SEND</button>
+          </div>
+        </div>
+      </div><!-- /view-team -->
+
+      <!-- ============ 设置视图 ============ -->
+      <div class="view" id="view-settings" hidden>
+        <div class="settings-section">
+          <p class="settings-section__title">工具 Instrument</p>
+          <div class="setting-row">
+            <span>监控工具</span>
+            <div class="seg">
+              <button class="on">Codex</button><button>Claude Code</button><button>OpenCode</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">刷新 Winding</p>
+          <div class="setting-row">
+            <span>刷新模式 MODE</span>
+            <div class="seg">
+              <button class="on">自动 AUTO</button><button>手动 MANU</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span>刷新间隔 INTERVAL</span>
+            <div class="seg">
+              <button>15s</button><button class="on">30s</button><button>60s</button><button>120s</button><button>自定义</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">显示 Display</p>
+          <div class="setting-row">
+            <span>百分比口径 METRIC</span>
+            <div class="seg">
+              <button class="on">剩余 LEFT</button><button>已使用 USED</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">推荐策略 Orrery</p>
+          <div class="setting-row">
+            <span>荐模 IQ 阈值 THRESHOLD</span>
+            <label class="inline-input"><span>≥</span><input type="number" value="90"><em>IQ</em></label>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">通用 General</p>
+          <div class="setting-row">
+            <span>开机自启动 AUTORUN</span>
+            <span class="toggle on" onclick="this.classList.toggle('on')"></span>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">语言 Locale</p>
+          <div class="setting-row">
+            <span>语种 LANG</span>
+            <div class="seg">
+              <button class="on">简中 ZH</button><button>EN</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">公会 Guild</p>
+          <div class="setting-row">
+            <span>团队昵称 NICKNAME</span>
+            <label class="inline-input"><input type="text" value="阿宁" style="width:88px; text-align:left; color:#f0e2bd"></label>
+          </div>
+          <div class="setting-row">
+            <span>团队口令 PASSKEY</span>
+            <label class="inline-input"><input type="text" value="••••••" style="width:88px; text-align:left; color:#f0e2bd"></label>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="settings-section__title">铭牌 Plate</p>
+          <div class="setting-row about-row">
+            <div class="about-row__info">
+              <span class="about-row__label">当前版本 REV.</span>
+              <span class="about-row__version">MARK I · VER 1.1.7</span>
+            </div>
+            <button class="btn-check">检查更新 UPDATE</button>
+          </div>
+        </div>
+      </div><!-- /view-settings -->
+    </div>
+    <div class="panel__footer">
+      <span class="panel__footer-meta">chatgpt.com · stoked · 1 min ago</span>
+      <button class="btn-close">✕ 收起 STOW</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 表针角度映射:0% → -110°, 100% → 110°
+  function needleAngle(pct) { return -110 + pct * 2.2; }
+  // 壁纸切换
+  function toggleWp(id, btn) {
+    const wp = document.getElementById(id);
+    const light = wp.classList.toggle('is-light');
+    btn.textContent = light ? '深色壁纸' : '浅色壁纸';
+  }
+  function countUp(el) {
+    const target = Number(el.dataset.count);
+    const suffix = el.dataset.suffix || '';
+    const dur = 900;
+    const t0 = performance.now();
+    function tick(t) {
+      const p = Math.min(1, (t - t0) / dur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * eased) + suffix;
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  function replay(scope) {
+    scope.querySelectorAll('[data-count]').forEach(countUp);
+    // 指针扫动
+    document.querySelectorAll('.dial-needle').forEach(n => {
+      const target = Number(n.dataset.rotate);
+      n.style.setProperty('--rot', '-110deg');
+      setTimeout(() => n.style.setProperty('--rot', target + 'deg'), 60);
+    });
+    document.getElementById('needleH')?.style.setProperty('--rot', needleAngle(42) + 'deg');
+    scope.querySelectorAll('.slot-fill, .qcard-bar-slot i, .twin__bar i, .vslot b').forEach(bar => {
+      const w = bar.style.getPropertyValue('--w');
+      bar.style.transition = 'none';
+      bar.style.setProperty('--w', '0%');
+      void bar.offsetWidth;
+      bar.style.transition = '';
+      bar.style.setProperty('--w', w);
+    });
+    scope.querySelectorAll('.chart__pipe').forEach(b => {
+      b.style.animation = 'none';
+      void b.offsetWidth;
+      b.style.animation = '';
+    });
+  }
+  // 主 Tab 切换
+  const TAB_VIEWS = ['details', 'team', 'settings'];
+  document.querySelectorAll('.panel__content > .tabs button').forEach((btn, i) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.panel__content > .tabs button').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      document.querySelectorAll('.view').forEach(v => { v.hidden = true; });
+      document.getElementById('view-' + TAB_VIEWS[i]).hidden = false;
+    });
+  });
+  document.querySelectorAll('.view .seg').forEach(group => {
+    group.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        group.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+        btn.classList.add('on');
+      });
+    });
+  });
+  window.addEventListener('load', () => replay(document));
+</script>
+</body>
+</html>
