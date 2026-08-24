@@ -436,7 +436,7 @@
   }
 }
 
-/* B 赛博:分段刻度 10 格,用 repeating mask 把填充切成等宽亮段 */
+/* B 赛博:进度条槽底(胶囊与面板共用) */
 [data-theme='cyber'] .capsule__progress,
 [data-theme='cyber'] .quota-card__progress {
   height: 6px;
@@ -444,7 +444,44 @@
   box-shadow: inset 0 0 0 0.5px rgba(0, 255, 213, 0.14);
 }
 
-[data-theme='cyber'] .capsule__progress span,
+/* 胶囊:电池式分段进度条。span 实色填充随进度伸缩,
+   父级 ::after 压全宽等距刻度线(不受填充宽度影响),两头直角不圆 */
+[data-theme='cyber'] .capsule__progress {
+  height: 6px;
+  border-radius: 0;
+  background: rgba(0, 255, 213, 0.12);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 255, 213, 0.14);
+  position: relative;
+}
+
+[data-theme='cyber'] .capsule__progress span {
+  background: var(--metric-accent, var(--capsule-accent));
+  box-shadow: 0 0 7px var(--metric-accent, var(--capsule-accent));
+}
+
+/* 横版 10 格刻度:每 10% 一道竖线,首尾压在两端 */
+[data-theme='cyber'] .capsule__progress::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 calc(10% - 1px),
+    rgba(0, 0, 0, 0.6) calc(10% - 1px) 10%
+  );
+}
+
+/* 竖版 5 格刻度覆盖(orb 更窄,5 格更清晰);data-theme 与 capsule--orb 不在同节点,用后代选择器 */
+[data-theme='cyber'] .capsule--orb .capsule__progress::after {
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 calc(20% - 1px),
+    rgba(0, 0, 0, 0.6) calc(20% - 1px) 20%
+  );
+}
+
+/* 面板:保留 10 格分段刻度 */
 [data-theme='cyber'] .quota-card__progress span {
   background: var(--metric-accent, var(--capsule-accent));
   box-shadow: 0 0 7px var(--metric-accent, var(--capsule-accent));
@@ -503,6 +540,12 @@
 [data-theme='cyber'] .capsule__weekly,
 [data-theme='cyber'] .capsule__stat-value {
   text-shadow: 0 0 12px var(--metric-accent, var(--capsule-accent));
+}
+
+/* 百分比提亮但保留随额度变色:--metric-accent(随额度红→绿)与白色混合,各主题统一 */
+[data-theme] .capsule__percent,
+[data-theme] .quota-card__value {
+  color: color-mix(in srgb, var(--metric-accent, var(--capsule-accent)) 75%, white);
 }
 
 [data-theme='cyber'] .capsule__weekly {
