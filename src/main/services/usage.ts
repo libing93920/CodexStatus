@@ -184,7 +184,7 @@ export function getCachedTokenTotals(): Partial<Record<UsageWindow, number>> | u
   const totals: Partial<Record<UsageWindow, number>> = {}
   for (const [window, agents] of Object.entries(lastAgentTotals)) {
     totals[window as UsageWindow] =
-      (agents.codex ?? 0) + (agents.claude ?? 0) + (agents.opencode ?? 0)
+      (agents.codex ?? 0) + (agents.claude ?? 0) + (agents.opencode ?? 0) + (agents.pi ?? 0)
   }
   return totals
 }
@@ -195,10 +195,10 @@ export function invalidateUsageCache(): void {
   lastAgentTotals = undefined
 }
 
-const ALL_AGENTS: readonly AgentId[] = ['codex', 'claude', 'opencode']
+const ALL_AGENTS: readonly AgentId[] = ['codex', 'claude', 'opencode', 'pi']
 const ALL_WINDOWS: readonly UsageWindow[] = ['1d', '7d', '30d']
 
-/** 预热三个工具的每窗口 token 总数并缓存,供团队榜总量排名与分段展示 */
+/** 预热全部工具的每窗口 token 总数并缓存,供团队榜总量排名与分段展示 */
 export async function warmAllAgentTokenTotals(): Promise<
   Partial<Record<UsageWindow, Partial<Record<AgentId, number>>>>
 > {
