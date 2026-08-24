@@ -301,7 +301,17 @@ export class LanService {
     if (!address || typeof address === 'string') return
     const port = (address as AddressInfo).port
 
-    this.bonjour = new Bonjour()
+    // 显式指定首选局域网接口:multicast-dns 默认 setMulticastInterface('0.0.0.0')
+    // 在 Windows 上可能选中虚拟网卡(WSL 等)作为多播出口,导致广播无法到达真实局域网。
+    // 指定真实网卡 IP 后,发布与发现都走该接口(接收仍含全部接口,发送定向真实网卡)
+    const preferredInterface = getPreferredInterface()
+    // bonjour-service 的 d.ts 未暴露 multicast-dns 的 `interface` 选项,但运行时确实透传,
+    // 故用受控类型断言注入
+    this.bonjour = new Bonjour(
+      (preferredInterface ? { interface: preferredInterface } : {}) as unknown as ConstructorParameters<
+        typeof Bonjour
+      >[0]
+    )
     // probe:false 跳过同名探测:peerId 是 randomUUID 全局唯一,
     // 探测到的"同名"几乎总是本机旧服务未注销完的残留(TTL 未过),会导致发布失败
     this.publishedService = this.bonjour.publish({
@@ -647,19 +657,6 @@ function hashGroup(group: string): string {
 // 4. IPv6 垫底(链路本地 fe80:: 需 zone id 且 URL 要方括号,坑多)
 function sortServiceHosts(addresses: string[] | undefined, localIpv4s: string[] = []): string[] {
   if (!addresses || addresses.length === 0) return []
-  // 常见虚拟网卡/容器网段判定(粗粒度即可:宁可多排后,不可抢先堵死真实地址)
-  const isVirtualSegment = (ip: string): boolean => {
-    const p = ip.split('.').map(Number)
-    if (p.length !== 4) return false
-    const [a, b, c] = p
-    return (
-      (a === 172 && b >= 16 && b <= 31) || // WSL/Hyper-V/Docker/VirtualBox 默认段
-      (a === 192 && b === 168 && c >= 56 && c <= 100) || // VirtualBox/VMware 常用段
-      (a === 10 && b === 0 && c === 2) || // NAT 段
-      a === 169 ||
-      a === 100 // 链路本地 / CGNAT
-    )
-  }
   // 与本地任一接口同网段(前两段一致;对 /16 /24 网段均适用)即视为最优先候选
   const inSameSubnet = (ip: string): boolean => {
     const p = ip.split('.').map(Number)
@@ -677,17 +674,41 @@ function sortServiceHosts(addresses: string[] | undefined, localIpv4s: string[] 
   return [...v4SameNet, ...v4Other, ...v4Virtual, ...v6]
 }
 
-// 本机活跃 IPv4 地址(排除回环与虚拟网卡段),用于同网段优先排序
-function getLocalIpv4s(): string[] {
+// 常见虚拟网卡/容器网段判定:这类地址仅本机可达,既不能作为多播发送出口,
+// 也不应成为首选连接候选(排序时降权垫底)
+export function isVirtualSegment(ip: string): boolean {
+  const p = ip.split('.').map(Number)
+  if (p.length !== 4) return false
+  const [a, b, c] = p
+  return (
+    (a === 172 && b >= 16 && b <= 31) || // WSL/Hyper-V/Docker/VirtualBox 默认段
+    (a === 192 && b === 168 && c >= 56 && c <= 100) || // VirtualBox/VMware 常用段
+    (a === 10 && b === 0 && c === 2) || // NAT 段
+    a === 169 ||
+    a === 100 // 链路本地 / CGNAT
+  )
+}
+
+// 本机活跃真实 IPv4 地址(排除回环与虚拟网卡段),用于同网段优先排序
+export function getLocalIpv4s(): string[] {
   const interfaces = os.networkInterfaces()
   const result: string[] = []
   for (const name of Object.keys(interfaces)) {
     for (const iface of interfaces[name] ?? []) {
       if (iface.family !== 'IPv4' || iface.internal) continue
+      if (isVirtualSegment(iface.address)) continue
       result.push(iface.address)
     }
   }
   return result
+}
+
+// 首选局域网接口 IP(第一个真实网卡地址):
+// multicast-dns 需要明确的 interface 才能选对多播发送出口,
+// 否则 Windows 上默认(setMulticastInterface('0.0.0.0'))可能选中虚拟网卡(如 WSL),
+// 导致广播被 NAT 隔离、真实局域网的同事收不到本机服务
+export function getPreferredInterface(): string | undefined {
+  return getLocalIpv4s()[0]
 }
 
 // IPv6 地址在 URL 里必须用方括号包裹,否则 ws 库解析抛 Invalid URL
