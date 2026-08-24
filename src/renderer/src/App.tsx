@@ -657,7 +657,7 @@ function App(): React.JSX.Element {
   const capsuleWeeklyText = isApiMode
     ? apiTodayTotal === undefined
       ? '--'
-      : formatCompactTokens(apiTodayTotal, settings.locale)
+      : formatCapsuleTokens(apiTodayTotal, settings.locale)
     : capsuleResetText
   // API Key 模式胶囊数值与自适应字号(长文本自动缩小,不出框)
   // 竖版仅 50px 宽,字号与最大宽度都比横版收紧
@@ -2900,6 +2900,14 @@ function formatCompactTokens(value: number, locale: LocaleCode): string {
   if (value >= 1e6) return `${trimTrailingZero((value / 1e6).toFixed(1))}M`
   if (value >= 1e3) return `${trimTrailingZero((value / 1e3).toFixed(1))}K`
   return String(Math.round(value))
+}
+
+// 胶囊今日 token:万级(1万~9999万)取整不显示小数;亿级沿用公共格式化保留 1 位小数
+function formatCapsuleTokens(value: number, locale: LocaleCode): string {
+  if (locale === 'zh-CN' && value >= 1e4 && value < 1e8) {
+    return `${Math.round(value / 1e4)}万`
+  }
+  return formatCompactTokens(value, locale)
 }
 
 function trimTrailingZero(value: string): string {
