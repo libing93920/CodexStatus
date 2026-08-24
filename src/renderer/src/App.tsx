@@ -72,7 +72,9 @@ const THEME_OPTIONS: ReadonlyArray<{ label: string; value: ThemeId }> = [
   { label: '星夜', value: 'midnight' },
   { label: '极光', value: 'aurora' },
   { label: '赛博', value: 'cyber' },
-  { label: '钛金', value: 'titan' }
+  { label: '钛金', value: 'titan' },
+  { label: '海报', value: 'poster' },
+  { label: '街机', value: 'arcade' }
 ]
 
 interface CapsulePointerState {
