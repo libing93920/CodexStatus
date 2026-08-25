@@ -54,7 +54,7 @@ interface ParsedEvent {
 }
 
 /** 解析后的单个 session 文件 */
-interface ParsedFile {
+export interface ParsedFile {
   parent: string | undefined
   deferred: boolean
   rootTs: number | undefined
@@ -346,8 +346,13 @@ async function incrementalScanCodex(
   return { days: aggregateDays(events), events, files }
 }
 
-// 跨文件父子重放去重:先按 threadId 选出事件最多的父文件,再对子文件前缀匹配跳过重放
-function dedupParsedFiles(parsed: Array<{ threadId: string | undefined; file: ParsedFile }>): UsageEvent[] {
+// 跨文件父子重放去重(对齐 cc-switch session_usage_codex.rs):
+// - 有 parent 且父文件在扫描集:前缀匹配跳过重放,保留断点后真实增量
+// - 有 parent 但父文件不在(孤儿 subagent):跳过整个文件(无法判断重放,宁漏勿重)
+// - 无 parent(主会话/guardian):全量计入
+// 背景:Codex subagent 子会话 forked_from_id 指向父,找不到父时若全量计入会把
+// 无法去重的 token 计入(实测同事机器 360亿 vs cc-switch 15亿,差 24 倍)。
+export function dedupParsedFiles(parsed: Array<{ threadId: string | undefined; file: ParsedFile }>): UsageEvent[] {
   const byThread = new Map<string, ParsedFile>()
   for (const { threadId, file } of parsed) {
     if (!threadId) {
@@ -362,11 +367,18 @@ function dedupParsedFiles(parsed: Array<{ threadId: string | undefined; file: Pa
   const events: UsageEvent[] = []
   for (const { threadId, file } of parsed) {
     let skipPrefix = 0
+    let skipAll = false
     if (threadId && file.parent && !file.deferred && file.rootTs !== undefined) {
       const parent = byThread.get(file.parent)
       if (parent) {
         skipPrefix = matchingReplayPrefix(file.events, parent.events, file.rootTs)
+      } else {
+        // 有 parent 但父文件不在扫描集:对齐 cc-switch mark_deferred,跳过整个文件
+        skipAll = true
       }
+    }
+    if (skipAll) {
+      continue
     }
     for (let index = skipPrefix; index < file.events.length; index++) {
       const event = file.events[index]

@@ -8,7 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { parseClaudeAssistantEvent, parseClaudeFile, parseOpenCodeMessage } from '../src/main/services/agents.ts'
 import { computeCost, setRateLookup } from '../src/main/services/rate.ts'
-import { buildCodexDelta, dedupClaudeEvents } from '../src/main/services/usage.ts'
+import { buildCodexDelta, dedupClaudeEvents, dedupParsedFiles } from '../src/main/services/usage.ts'
 
 // —— parseOpenCodeMessage ——
 test('opencode:cache 两桶拆分 + reasoning 折入 output + cost 双轨', () => {
@@ -235,4 +235,51 @@ test('codex:无 last_token_usage 时回落相邻累计差', () => {
   assert.equal(delta.cachedInput, 40)
   assert.equal(delta.output, 10)
   assert.equal(delta.reasoning, 5)
+})
+
+// —— dedupParsedFiles:孤儿 subagent 跳过(对齐 cc-switch mark_deferred) ——
+function mkSigEvent(ts, total) {
+  return {
+    ts,
+    sig: { total: { input: total, cachedInput: 0, output: 0, reasoning: 0, total } },
+    delta: { input: total, cachedInput: 0, output: 0, reasoning: 0, total },
+    model: undefined
+  }
+}
+
+test('codex:孤儿 subagent(父文件不在)整体跳过', () => {
+  // 子会话 forked_from_id=父,但父文件不在扫描集 → 跳过整个子会话(对齐 cc-switch mark_deferred)
+  const child = {
+    parent: 'PARENT-UUID', deferred: false, rootTs: 2000, events: [mkSigEvent(2000, 100), mkSigEvent(2100, 200)]
+  }
+  // 没有父文件,只有这个子会话
+  const events = dedupParsedFiles([{ threadId: 'CHILD-UUID', file: child }])
+  assert.equal(events.length, 0) // 父不在,子全跳
+})
+
+test('codex:父文件在时子会话前缀去重保留增量', () => {
+  const parent = {
+    parent: undefined, deferred: false, rootTs: 1000, events: [mkSigEvent(1000, 100), mkSigEvent(1100, 200), mkSigEvent(1200, 300)]
+  }
+  // 子会话前2个事件与父签名相同(重放),第3个是新工作
+  const child = {
+    parent: 'PARENT-UUID', deferred: false, rootTs: 2000,
+    events: [mkSigEvent(2000, 100), mkSigEvent(2100, 200), mkSigEvent(2200, 999)]
+  }
+  const events = dedupParsedFiles([
+    { threadId: 'PARENT-UUID', file: parent },
+    { threadId: 'CHILD-UUID', file: child }
+  ])
+  // 父全计(3) + 子前缀跳2留1(999)
+  assert.equal(events.length, 4)
+  assert.equal(events.reduce((s, e) => s + e.tokens.input, 0), 100 + 200 + 300 + 999)
+})
+
+test('codex:无 parent 的主会话全量计入', () => {
+  const main = {
+    parent: undefined, deferred: false, rootTs: 1000, events: [mkSigEvent(1000, 500), mkSigEvent(1100, 600)]
+  }
+  const events = dedupParsedFiles([{ threadId: 'MAIN', file: main }])
+  assert.equal(events.length, 2)
+  assert.equal(events.reduce((s, e) => s + e.tokens.input, 0), 1100)
 })
