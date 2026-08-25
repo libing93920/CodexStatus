@@ -38,7 +38,7 @@
     overflow: hidden;
     border: 1px solid rgba(255,255,255,.09);
     transition: transform .25s cubic-bezier(.22,.9,.3,1), box-shadow .25s;
-    min-height: 210px;
+    min-height: 236px;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
@@ -50,13 +50,15 @@
   a.card p { font-size: 13px; line-height: 1.7; opacity: .82; }
   a.card .swatches { display: flex; gap: 6px; margin-top: 10px; }
   a.card .swatches i { width: 22px; height: 22px; border-radius: 7px; border: 1px solid rgba(255,255,255,.18); }
-  /* 四套方案的卡片底色 */
+
+  /* A · 极光玻璃 */
   .card--aurora {
     background:
       radial-gradient(400px 200px at 90% 0%, rgba(56, 232, 177, .28), transparent 65%),
       radial-gradient(500px 260px at 0% 100%, rgba(88, 101, 242, .30), transparent 60%),
       linear-gradient(160deg, #10141f, #0b0e16);
   }
+  /* B · 赛博终端 */
   .card--cyber {
     background:
       repeating-linear-gradient(0deg, transparent 0 3px, rgba(0, 255, 213, .025) 3px 4px),
@@ -64,19 +66,61 @@
       #050807;
     font-family: Consolas, monospace;
   }
-  .card--porcelain { background: linear-gradient(155deg, #fbfaf7, #eceae4); color: #3c4350; }
-  .card--porcelain .tag { opacity: .55; }
+  /* D · 黑曜钛金 */
   .card--titan {
     background:
       linear-gradient(180deg, rgba(255,255,255,.05) 0%, transparent 30%),
       linear-gradient(160deg, #131316, #0a0a0c);
   }
-  .foot { margin-top: 40px; color: #64708233; font-size: 12px; color:#647082; }
+  /* E · 复古旅行海报 */
+  .card--poster {
+    background:
+      radial-gradient(circle at 82% 18%, #ffd889 0 26px, transparent 27px),
+      repeating-conic-gradient(from 0deg at 82% 18%, rgba(255,216,137,.35) 0deg 6deg, transparent 6deg 14deg) no-repeat,
+      linear-gradient(165deg,#f3ecd8 0%,#e9c98f 46%,#d9712f 78%,#b23f0a 100%);
+    color:#22333b;
+  }
+  .card--poster .tag,.card--poster p{opacity:.85;}
+  .card--poster .swatches i{border-color:rgba(34,51,59,.45);}
+  /* F · 街机 CRT */
+  .card--arcade {
+    background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,.28) 0 1px, transparent 1px 3px),
+      radial-gradient(360px 200px at 50% 42%, rgba(52,68,255,.32), transparent 62%),
+      #0b0b16;
+    font-family:Consolas,monospace;
+  }
+  .card--arcade::after{
+    content:"▶ INSERT COIN"; position:absolute; top:20px; left:24px;
+    font-family:Consolas,monospace; font-size:10px; color:#ffd21f;
+    animation:coin-blink 1.1s steps(2) infinite;
+  }
+  @keyframes coin-blink{50%{opacity:.15;}}
+  /* I · 孟菲斯派对 */
+  .card--memphis{
+    background:
+      radial-gradient(circle at 12px 12px,#ff5c8a 4px,transparent 4.6px) 0 0/52px 52px,
+      conic-gradient(from 135deg at 50% 72%,#1c1a17 90deg,transparent 0) 0 100%/36px 18px repeat-x,
+      linear-gradient(160deg,#fdf6ec,#fbeeda);
+    color:#1c1a17;
+  }
+  .card--memphis h2{font-family:"Arial Black","Microsoft YaHei UI",sans-serif;text-transform:uppercase;letter-spacing:-.5px;}
+  .card--memphis .tag{color:#ff5c8a;opacity:1;font-weight:800;}
+  .card--memphis .swatches i{border-color:rgba(28,26,23,.5);}
+  .card--memphis::after{
+    content:""; position:absolute; top:18px; right:20px;
+    width:0;height:0;
+    border-left:15px solid transparent;border-right:15px solid transparent;
+    border-bottom:26px solid #00c2b2;
+    filter:drop-shadow(3px 3px 0 #1c1a17);
+    transform:rotate(14deg);
+  }
+  .foot { margin-top: 40px; font-size: 12px; color:#647082; }
 </style>
 </head>
 <body>
   <h1>CodexStatus · UI 风格重设计方案</h1>
-  <p class="sub">横胶囊 / 竖 Orb / Panel 三件套 × 4 套风格 · 均含动效演示 · 点击进入</p>
+  <p class="sub">横胶囊 / 竖 Orb / Panel 三件套 × 6 套精选风格 · 均含独立手绘动效演示 · 点击进入</p>
   <div class="grid">
     <a class="card card--aurora" href="./aurora-glass.html">
       <span class="tag">Scheme A</span>
@@ -90,17 +134,29 @@
       <p>黑底霓虹青 + 扫描线 + 等宽读数。胶囊切角造型像 HUD 仪表，Panel 是终端面板风，数据带故障闪烁与打字机效果。</p>
       <div class="swatches"><i style="background:#050807"></i><i style="background:#00ffd5"></i><i style="background:#ff2d78"></i><i style="background:#ffb347"></i></div>
     </a>
-    <a class="card card--porcelain" href="./porcelain.html">
-      <span class="tag">Scheme C</span>
-      <h2>瓷釉浅色 Porcelain</h2>
-      <p>奶油白瓷面 + 柔和彩色糖珠。浅色毛玻璃胶囊、大圆角白瓷卡片、弹性进度动画，整体轻盈友好，白天桌面不突兀。</p>
-      <div class="swatches"><i style="background:#fbfaf7"></i><i style="background:#ff9d76"></i><i style="background:#5fb8a0"></i><i style="background:#7c9cf5"></i></div>
-    </a>
     <a class="card card--titan" href="./obsidian-titan.html">
       <span class="tag">Scheme D</span>
       <h2>黑曜钛金 Obsidian Titan</h2>
       <p>近黑岩面 + 钛银分割线 + 琥珀金强调。金属高光边缘、刻度式进度环、金色扫光，沉稳高级的商务质感。</p>
       <div class="swatches"><i style="background:#0a0a0c"></i><i style="background:#d9a441"></i><i style="background:#8f98a8"></i><i style="background:#3dd68c"></i></div>
+    </a>
+    <a class="card card--poster" href="./sunset-dune.html">
+      <span class="tag">Scheme E</span>
+      <h2>复古旅行海报 Retro Poster</h2>
+      <p>胶囊是一张带打孔虚线的公园门票，太阳射线徽章旋转指示进度；Panel 是国家公园招贴——报头横幅、半调网点、条带落日天空、按钮按压回弹。</p>
+      <div class="swatches"><i style="background:#f3ecd8"></i><i style="background:#d95d18"></i><i style="background:#dfa32b"></i><i style="background:#22333b"></i></div>
+    </a>
+    <a class="card card--arcade" href="./synthwave-drive.html">
+      <span class="tag">Scheme F</span>
+      <h2>街机 CRT Arcade Cabinet</h2>
+      <p>整个 Panel 是一台显像管街机：机壳边框、CRT 暗角与滚动刷新亮带、光栅三色纹。额度即血条——分段能量槽、低血量红闪、零填充计分、开机点亮动画。</p>
+      <div class="swatches"><i style="background:#0b0b16"></i><i style="background:#ffd21f"></i><i style="background:#ff3355"></i><i style="background:#26f7fd"></i></div>
+    </a>
+    <a class="card card--memphis" href="./memphis-party.html">
+      <span class="tag">Scheme I</span>
+      <h2>孟菲斯派对 Memphis Party</h2>
+      <p>大胆撞色的几何狂欢：粗黑描边 + 彩色错位实心阴影，三角纸屑/锯齿/圆环满屏漂动，卡片歪斜如贴纸，进度条滚泡泡，一切元素拒绝横平竖直。</p>
+      <div class="swatches"><i style="background:#fdf6ec"></i><i style="background:#ff5c8a"></i><i style="background:#ffc93c"></i><i style="background:#00c2b2"></i></div>
     </a>
   </div>
   <p class="foot">预览用静态页 · 数据为示意 · 确认风格后再落地到 Electron 项目</p>
