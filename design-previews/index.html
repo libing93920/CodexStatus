@@ -115,17 +115,6 @@
     filter:drop-shadow(3px 3px 0 #1c1a17);
     transform:rotate(14deg);
   }
-  /* J · 枯山水和风禅意 */
-  .card--zenwabi {
-    background:
-      repeating-radial-gradient(circle at 18% 120%, transparent 0 10px, rgba(82,92,102,.04) 10px 11px),
-      linear-gradient(160deg, #faf6f0, #e7ddc9);
-    color: #1c2226;
-  }
-  .card--zenwabi h2 { font-family: "Noto Serif SC", "Songti SC", SimSun, serif; }
-  .card--zenwabi .tag { color: #b0312a; opacity: 1; font-weight: 700; }
-  .card--zenwabi .swatches i { border-color: rgba(28,34,38,.28); }
-
   /* K · 机械座舱 */
   .card--cockpit {
     background:
@@ -137,37 +126,49 @@
   .card--cockpit .tag { color: #ffaa00; opacity: 1; font-weight: 700; }
   .card--cockpit .swatches i { border-color: rgba(0,0,0,.4); }
 
-  /* L · 植物学手账 */
-  .card--botanist {
+  /* N · 社论朋克 */
+  .card--editorial {
     background:
-      radial-gradient(ellipse at 50% 100%, rgba(114,47,55,.05), transparent),
-      linear-gradient(170deg, #f8f2df, #e2d2ac);
-    color: #3a2e1e;
+      repeating-linear-gradient(90deg, transparent 0 40px, rgba(16,16,18,.06) 40px 41px),
+      linear-gradient(170deg, #ececea, #d6d6d4);
+    color:#101012;
+    box-shadow: inset 0 -3px 0 var(--red,#d02a24);
   }
-  .card--botanist h2 { font-family: Georgia, "Noto Serif SC", serif; font-style: italic; }
-  .card--botanist .tag { color: #1e3825; opacity: 1; font-weight: 700; }
-  .card--botanist .swatches i { border-color: rgba(93,63,32,.25); }
+  .card--editorial h2 { font-family:"Helvetica Neue","Arial Black","Microsoft YaHei UI",sans-serif; text-transform:uppercase; letter-spacing:1px; }
+  .card--editorial .tag { color:#fff; background:#101012; padding:2px 8px; opacity:1; }
+  .card--editorial .swatches i { border-color:rgba(16,16,18,.45); }
 
-  /* M · 液态铬金 */
-  .card--chrome {
+  /* O · 霓虹低多边形 */
+  .card--poly {
     background:
-      radial-gradient(circle at 80% -10%, rgba(123,47,247,.16), transparent 60%),
-      linear-gradient(180deg, #0b0b14, #030308);
-    color: #eef1f8;
+      linear-gradient(118deg, rgba(55,224,255,.08) 0 18%, transparent 19% 46%, rgba(255,46,166,.07) 47% 60%, transparent 61%),
+      linear-gradient(180deg, #0e0c26, #08071a);
+    color:#e8ecff;
+    border-color: rgba(55,224,255,.35);
   }
-  .card--chrome h2 {
-    background: linear-gradient(178deg, #fff 10%, #aab3c8 50%, #8d97ae 90%);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
+  .card--poly h2 { text-shadow:0 0 12px rgba(55,224,255,.5); }
+  .card--poly .tag { color:#b6ff00; opacity:1; font-weight:700; }
+  .card--poly .swatches i { border-color:rgba(122,92,255,.5); }
+
+  /* P · 黑色电影塔罗 */
+  .card--tarot {
+    background:
+      radial-gradient(300px 180px at 78% 12%, rgba(236,229,211,.10), transparent 60%),
+      linear-gradient(180deg, #161310, #0e0c0a);
+    color:#ece5d3;
+    border-color: #8a6f1d;
   }
-  .card--chrome .tag { color: #00f5a0; opacity: 1; font-weight: 700; }
-  .card--chrome .swatches i { border-color: rgba(255,255,255,.1); }
+  .card--tarot h2 { font-family:Georgia,"Times New Roman","Noto Serif SC",serif; letter-spacing:3px; }
+  .card--tarot .tag { color:#c9a227; opacity:1; font-style:italic; }
+  .card--tarot::after { content:"☽"; position:absolute; top:18px; right:20px; font-size:24px; color:#c9a227; filter:drop-shadow(0 0 10px rgba(201,162,39,.6)); }
+  .card--tarot .swatches i { border-color:rgba(138,111,29,.6); }
 
   .foot { margin-top: 40px; font-size: 12px; color:#647082; }
 </style>
 </head>
 <body>
-  <h1>CodexStatus · UI 风格重设计方案</h1>
-  <p class="sub">横胶囊 / 竖 Orb / Panel 三件套 × 10 套风格（含 4 套独特物理结构的高定版） · 均含独立手绘动效演示 · 点击进入</p>
+  <h1>CodexStatus · UI 风格方案</h1>
+  <p class="sub">横胶囊 / 竖 Orb / Panel 三件套 × 10 套风格 · 均含独立手绘动效演示 · 点击进入</p>
   <div class="grid">
     <a class="card card--aurora" href="./aurora-glass.html">
       <span class="tag">Scheme A</span>
@@ -205,30 +206,30 @@
       <p>大胆撞色的几何狂欢：粗黑描边 + 彩色错位实心阴影，三角纸屑/锯齿/圆环满屏漂动，卡片歪斜如贴纸，进度条滚泡泡，一切元素拒绝横平竖直。</p>
       <div class="swatches"><i style="background:#fdf6ec"></i><i style="background:#ff5c8a"></i><i style="background:#ffc93c"></i><i style="background:#00c2b2"></i></div>
     </a>
-
-    <a class="card card--zenwabi" href="./zen-wabi.html">
-      <span class="tag">Scheme J</span>
-      <h2>枯山水·和风禅意 Zen Wabi</h2>
-      <p>耙纹白砂与水墨洇染：胶囊是不规则流线卵石，木质绘马竖 Orb 悬挂摆动；Panel 是樟子松纸窗，背景翠竹摇曳，竹节图表。</p>
-      <div class="swatches"><i style="background:#faf6f0"></i><i style="background:#1c2226"></i><i style="background:#d9b48f"></i><i style="background:#52705b"></i></div>
-    </a>
     <a class="card card--cockpit" href="./vintage-cockpit.html">
       <span class="tag">Scheme K</span>
       <h2>机械座舱·苏式仪表 Cockpit</h2>
       <p>军绿钢板与实体铆钉：胶囊带 bolted 盖板与偏转指针，竖 Orb 是真空压力管红丝；Panel 是重型控制台，双圆形指针表盘，应急红钮。</p>
       <div class="swatches"><i style="background:#2b3629"></i><i style="background:#ffaa00"></i><i style="background:#cc1100"></i><i style="background:#37e05f"></i></div>
     </a>
-    <a class="card card--botanist" href="./botanical-journal.html">
-      <span class="tag">Scheme L</span>
-      <h2>植物学家手账 Botanical</h2>
-      <p>压花红枫与黄铜夹板：标本夹玻璃舱，常绿藤蔓发芽进度，牛皮纸挂签；Panel 是摊开的皮革手账，咖啡墨水污渍，红火漆印封口。</p>
-      <div class="swatches"><i style="background:#efe6cf"></i><i style="background:#4a3018"></i><i style="background:#a6422b"></i><i style="background:#7c8a66"></i></div>
+
+    <a class="card card--editorial" href="./swiss-editorial.html">
+      <span class="tag">Scheme N</span>
+      <h2>社论朋克 Editorial Punk</h2>
+      <p>混凝土纸灰 + 硬黑边框 + 瑞士红块：胶囊是倾斜铅版，进度为斜切墨条；Panel 是「QUOTA GAZETTE」日报——报眼横幅、滚动电讯条、对开巨型数字、刻度块进度。</p>
+      <div class="swatches"><i style="background:#e2e2e0"></i><i style="background:#101012"></i><i style="background:#d02a24"></i><i style="background:#1f4d5c"></i></div>
     </a>
-    <a class="card card--chrome" href="./liquid-chrome.html">
-      <span class="tag">Scheme M</span>
-      <h2>全息铬金·液态金属 Chrome</h2>
-      <p>水银流动与全息流光：全息旋转霓虹边框，胶囊是液态水银球在真空中流动，双螺旋真空管；Panel 是铬镜悬浮玻璃，极光雾气漂移。</p>
-      <div class="swatches"><i style="background:#0b0b14"></i><i style="background:#00f5a0"></i><i style="background:#7b2ff7"></i><i style="background:#ff2bd6"></i></div>
+    <a class="card card--poly" href="./neon-poly.html">
+      <span class="tag">Scheme O</span>
+      <h2>霓虹低多边形 Neon Poly</h2>
+      <p>虚空峡谷与发光线框：胶囊是双层切角棱晶板（edge+core 折射面），Orb 是晶体碎片；Panel 是悬浮数码碑，山脊峰顶图表与电路线迹明细。</p>
+      <div class="swatches"><i style="background:#08071a"></i><i style="background:#37e0ff"></i><i style="background:#ff2ea6"></i><i style="background:#b6ff00"></i></div>
+    </a>
+    <a class="card card--tarot" href="./noir-tarot.html">
+      <span class="tag">Scheme P</span>
+      <h2>黑色电影·塔罗占卜 Noir Tarot</h2>
+      <p>午夜占星台：胶囊/Orb 是骨白塔罗牌（眼睛徽章 + 烫金菱尖进度），月亮随壁纸切换成太阳；Panel 是降神桌牌阵——月之牌与日之牌、烛台星座图表、目录点线索引。</p>
+      <div class="swatches"><i style="background:#14120f"></i><i style="background:#ece5d3"></i><i style="background:#c9a227"></i><i style="background:#8c1f28"></i></div>
     </a>
   </div>
   <p class="foot">预览用静态页 · 数据为示意 · 确认风格后再落地到 Electron 项目</p>
