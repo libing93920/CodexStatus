@@ -1630,7 +1630,7 @@ function App(): React.JSX.Element {
                   {cardWindows.map((windowState, index) => (
                     <QuotaCard
                       key={windowState.id}
-                      isAccent={index === 0}
+                      isAccent={index === 0 && (windowState.windowMinutes ?? Infinity) < 1440}
                       locale={settings.locale}
                       modeLabel={settings.percentageMode === 'used' ? copy.used : copy.remaining}
                       percentageMode={settings.percentageMode}
