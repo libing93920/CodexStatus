@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import { isIPv4, type AddressInfo } from 'node:net'
+import os from 'node:os'
 import { WebSocketServer, WebSocket } from 'ws'
 import Bonjour from 'bonjour-service'
 import type {
@@ -22,6 +23,14 @@ const HELLO_RETRY_DELAY_MS = 3000
 // 广播消息约束:超长拒绝、过频丢弃(局域网无鉴权,防刷屏底线)
 const BROADCAST_MAX_TEXT_LENGTH = 200
 const BROADCAST_MIN_INTERVAL_MS = 2000
+// 单地址连接超时:对端虚拟网卡/不可达地址的 TCP 握手可能长时间挂起,
+// 超时后强制终止并尝试下一个候选地址,避免 peer 永久卡死
+const CONNECT_TIMEOUT_MS = 6000
+// 全地址失败或已连 peer 掉线后的重连间隔:不依赖 mDNS up 重触发
+// (bonjour 对已发现服务只触发一次 up),改为周期性主动重连
+const RECONNECT_INTERVAL_MS = 20000
+// 重连尝试次数上限:超过后停止(peer 已下线或网络持续不可达)
+const RECONNECT_MAX_ATTEMPTS = 12
 
 /** peer 间互发的派生展示数据:绝不包含 Codex 凭据 */
 export interface PeerSnapshot {
@@ -115,11 +124,17 @@ export class LanService {
   private readonly discovered = new Map<string, DiscoveredService>()
   // hello 重发定时器:连接 open 后若未及时收到对方 hello 则补发
   private readonly helloTimers = new Map<string, NodeJS.Timeout>()
+  // 单地址连接超时定时器:超时强制终止当前尝试并试下一个地址
+  private readonly connectTimers = new Map<string, NodeJS.Timeout>()
+  // 周期重连定时器:全地址失败或已连 peer 掉线后,周期性重新发起连接
+  private readonly retryTimers = new Map<string, { timer: NodeJS.Timeout; attempts: number }>()
   private options: StartOptions | undefined
   private groupHash: string | undefined
   private stopped = false
   /** 上次广播时间戳,用于间隔限频 */
   private lastBroadcastAt = 0
+  /** 本机活跃 IPv4 地址,用于候选地址同网段优先排序 */
+  private localIpv4s: string[] = []
 
   start(options: StartOptions): void {
     if (this.options) {
@@ -128,6 +143,7 @@ export class LanService {
     this.stopped = false
     this.options = options
     this.groupHash = hashGroup(options.group)
+    this.localIpv4s = getLocalIpv4s()
     this.peers.clear()
     this.discovered.clear()
 
@@ -143,6 +159,14 @@ export class LanService {
       clearTimeout(timer)
     }
     this.helloTimers.clear()
+    for (const timer of this.connectTimers.values()) {
+      clearTimeout(timer)
+    }
+    this.connectTimers.clear()
+    for (const entry of this.retryTimers.values()) {
+      clearTimeout(entry.timer)
+    }
+    this.retryTimers.clear()
     for (const socket of this.connections.values()) {
       socket.close()
     }
@@ -277,7 +301,17 @@ export class LanService {
     if (!address || typeof address === 'string') return
     const port = (address as AddressInfo).port
 
-    this.bonjour = new Bonjour()
+    // 显式指定首选局域网接口:multicast-dns 默认 setMulticastInterface('0.0.0.0')
+    // 在 Windows 上可能选中虚拟网卡(WSL 等)作为多播出口,导致广播无法到达真实局域网。
+    // 指定真实网卡 IP 后,发布与发现都走该接口(接收仍含全部接口,发送定向真实网卡)
+    const preferredInterface = getPreferredInterface()
+    // bonjour-service 的 d.ts 未暴露 multicast-dns 的 `interface` 选项,但运行时确实透传,
+    // 故用受控类型断言注入
+    this.bonjour = new Bonjour(
+      (preferredInterface ? { interface: preferredInterface } : {}) as unknown as ConstructorParameters<
+        typeof Bonjour
+      >[0]
+    )
     // probe:false 跳过同名探测:peerId 是 randomUUID 全局唯一,
     // 探测到的"同名"几乎总是本机旧服务未注销完的残留(TTL 未过),会导致发布失败
     this.publishedService = this.bonjour.publish({
@@ -312,13 +346,15 @@ export class LanService {
     if (peerId === this.options.peerId) return
     if (groupHash !== this.groupHash) return
 
-    const hosts = sortServiceHosts(service.addresses)
+    const hosts = sortServiceHosts(service.addresses, this.localIpv4s)
     if (hosts.length === 0) return
 
     // 已记录或已连接则跳过
     if (this.discovered.has(peerId) || this.connections.has(peerId)) return
 
     this.discovered.set(peerId, { peerId, nickname, groupHash, hosts, port: service.port })
+    // 重新发现视为新鲜事件:清零历史重试计数
+    this.clearRetryTimer(peerId)
     this.connectToPeer(peerId)
   }
 
@@ -326,6 +362,12 @@ export class LanService {
     const peerId = service.name
     if (!peerId) return
     this.discovered.delete(peerId)
+    const retry = this.retryTimers.get(peerId)
+    if (retry) {
+      clearTimeout(retry.timer)
+      this.retryTimers.delete(peerId)
+    }
+    this.clearConnectTimer(peerId)
     const socket = this.connections.get(peerId)
     if (socket) {
       socket.close()
@@ -336,13 +378,14 @@ export class LanService {
     }
   }
 
-  // 逐个候选地址尝试连接;某地址握手失败试下一个,全失败才清 discovered 允许下次 mDNS up 重试
+  // 逐个候选地址尝试连接;某地址握手失败/超时试下一个,全失败则保留记录转周期重试
   private connectToPeer(peerId: string, fromIndex = 0): void {
     if (!this.discovered.has(peerId) || this.connections.has(peerId)) return
     const info = this.discovered.get(peerId)!
     if (fromIndex >= info.hosts.length) {
-      // 所有地址都试过仍失败:清掉 discovered,下次 mDNS up 可重新尝试
-      this.discovered.delete(peerId)
+      // 所有地址都试过仍失败:保留 discovered 记录(不清除),转周期重试
+      // 不依赖 mDNS up 重触发——bonjour 对已发现服务只 up 一次,靠自驱重连兜底
+      this.scheduleReconnect(peerId)
       return
     }
     const host = info.hosts[fromIndex]
@@ -354,10 +397,23 @@ export class LanService {
     const handleClose = (): void => {
       if (closed) return
       closed = true
+      this.clearConnectTimer(peerId)
       this.handleOutgoingClose(peerId, socket, fromIndex)
     }
 
-    socket.on('open', () => this.onOutgoingOpen(peerId, socket))
+    // 连接超时:对端地址不可达(虚拟网卡/跨网段)时 TCP 握手可能长时间挂起,
+    // 强制终止当前尝试,让 handleClose 流程试下一个候选地址
+    const timer = setTimeout(() => {
+      if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) {
+        socket.terminate()
+      }
+    }, CONNECT_TIMEOUT_MS)
+    this.connectTimers.set(peerId, timer)
+
+    socket.on('open', () => {
+      this.clearConnectTimer(peerId)
+      this.onOutgoingOpen(peerId, socket)
+    })
     socket.on('message', (raw) => this.handleMessage(socket, peerId, raw.toString()))
     socket.on('close', handleClose)
     socket.on('error', handleClose)
@@ -384,6 +440,8 @@ export class LanService {
       if (this.peers.delete(peerId)) {
         this.emitPeersChange()
       }
+      // 掉线后安排周期重连,不依赖 mDNS up 重触发
+      this.scheduleReconnect(peerId)
       return
     }
     // 从未收到对方 hello:说明这条地址没通,试下一个
@@ -469,8 +527,7 @@ export class LanService {
     const existing = this.peers.get(peerId)
     // 昵称缺省时留空串,前端按 locale 显示本地化占位名;绝不用 'peer' 之类的字面量兜底,
     // 那会冒充真名出现在排行榜里,无法与成员实际设置的昵称区分
-    const resolvedNickname =
-      snapshot?.nickname ?? nickname ?? existing?.nickname ?? ''
+    const resolvedNickname = snapshot?.nickname ?? nickname ?? existing?.nickname ?? ''
     const entry: PeerEntry = {
       id: peerId,
       nickname: resolvedNickname,
@@ -487,16 +544,22 @@ export class LanService {
       updatedAt: new Date().toISOString()
     }
     this.peers.set(peerId, entry)
-    // 收到对方数据说明双向已通,取消 hello 重发
+    // 收到对方数据说明双向已通,取消 hello 重发,并清零重试计数
     this.clearHelloTimer(peerId)
+    this.clearRetryTimer(peerId)
     this.emitPeersChange()
   }
 
   private handleSocketClose(peerId: string): void {
     this.clearHelloTimer(peerId)
+    this.clearConnectTimer(peerId)
     const removed = this.connections.delete(peerId)
-    if (removed && this.peers.delete(peerId)) {
-      this.emitPeersChange()
+    if (removed) {
+      if (this.peers.delete(peerId)) {
+        this.emitPeersChange()
+      }
+      // 掉线后安排周期重连(peer 仍由 mDNS 广播),直到主动 stop 或达到重试上限
+      this.scheduleReconnect(peerId)
     }
   }
 
@@ -520,6 +583,62 @@ export class LanService {
     }
   }
 
+  private clearConnectTimer(peerId: string): void {
+    const timer = this.connectTimers.get(peerId)
+    if (timer) {
+      clearTimeout(timer)
+      this.connectTimers.delete(peerId)
+    }
+  }
+
+  // 周期重连:全地址失败或已连 peer 掉线后,按固定间隔重新发起连接。
+  // attempts 跨轮次累积:定时器回调不删计数条目,由下一轮 scheduleReconnect 递增;
+  // 仅在 peer 确认上线(applyPeerSnapshot)或重新被发现(handleServiceUp)时清零,
+  // 达上限才放弃,避免对长期不可达 peer 无限重试。
+  private scheduleReconnect(peerId: string): void {
+    if (this.stopped || !this.options) return
+    const existing = this.retryTimers.get(peerId)
+    if (existing) {
+      // 定时器可能已触发(clearTimeout 对已触发定时器无副作用),计数继续累积而非重置
+      clearTimeout(existing.timer)
+      this.retryTimers.delete(peerId)
+      const attempts = existing.attempts + 1
+      if (attempts > RECONNECT_MAX_ATTEMPTS) {
+        // 达上限:放弃该 peer 并移除 discovered。bonjour 浏览器对仍在广播的服务
+        // 不会重复触发 up(见 browser.js addService 只在首次加入 _services 时 emit),
+        // 需等服务真正 down/up(TTL 过期或对端重启)才会重新发现
+        this.discovered.delete(peerId)
+        return
+      }
+      const timer = setTimeout(() => {
+        this.tryReconnect(peerId)
+      }, RECONNECT_INTERVAL_MS)
+      this.retryTimers.set(peerId, { timer, attempts })
+      return
+    }
+    const timer = setTimeout(() => {
+      this.tryReconnect(peerId)
+    }, RECONNECT_INTERVAL_MS)
+    this.retryTimers.set(peerId, { timer, attempts: 1 })
+  }
+
+  // peer 确认上线或重新被发现时清空重试状态,让计数归零
+  private clearRetryTimer(peerId: string): void {
+    const retry = this.retryTimers.get(peerId)
+    if (retry) {
+      clearTimeout(retry.timer)
+      this.retryTimers.delete(peerId)
+    }
+  }
+
+  // 重连时机:peer 仍在 discovered(还在广播)且无活跃连接/记录时才真正发起
+  private tryReconnect(peerId: string): void {
+    if (this.stopped || !this.options) return
+    if (this.connections.has(peerId) || this.peers.has(peerId)) return
+    if (!this.discovered.has(peerId)) return
+    this.connectToPeer(peerId, 0)
+  }
+
   private emitPeersChange(): void {
     if (this.stopped || !this.options) return
     this.options.onPeersChange(this.getPeers())
@@ -530,12 +649,66 @@ function hashGroup(group: string): string {
   return createHash('sha256').update(group).digest('hex').slice(0, GROUP_HASH_LENGTH)
 }
 
-// 候选地址排序:IPv4 优先(IPv6 链路本地地址 fe80:: 要 zone id 且 URL 要方括号,坑多)
-function sortServiceHosts(addresses?: string[]): string[] {
+// 候选地址排序:
+// 1. 与本地同网段的真实 IPv4 最优先(最常见可达地址,连接成功率最高)
+// 2. 其他真实 IPv4 次之
+// 3. 虚拟网卡段(172.16.0.0/12 WSL/Hyper-V/Docker/VirtualBox 等)降权——
+//    这些地址对端可达性差且常导致连接挂起,放最后
+// 4. IPv6 垫底(链路本地 fe80:: 需 zone id 且 URL 要方括号,坑多)
+function sortServiceHosts(addresses: string[] | undefined, localIpv4s: string[] = []): string[] {
   if (!addresses || addresses.length === 0) return []
+  // 与本地任一接口同网段(前两段一致;对 /16 /24 网段均适用)即视为最优先候选
+  const inSameSubnet = (ip: string): boolean => {
+    const p = ip.split('.').map(Number)
+    if (p.length !== 4) return false
+    return localIpv4s.some((local) => {
+      const l = local.split('.').map(Number)
+      return l.length === 4 && l[0] === p[0] && l[1] === p[1]
+    })
+  }
   const v4 = addresses.filter((addr) => isIPv4(addr))
   const v6 = addresses.filter((addr) => !isIPv4(addr))
-  return [...v4, ...v6]
+  const v4SameNet = v4.filter((addr) => inSameSubnet(addr) && !isVirtualSegment(addr))
+  const v4Other = v4.filter((addr) => !inSameSubnet(addr) && !isVirtualSegment(addr))
+  const v4Virtual = v4.filter((addr) => isVirtualSegment(addr))
+  return [...v4SameNet, ...v4Other, ...v4Virtual, ...v6]
+}
+
+// 常见虚拟网卡/容器网段判定:这类地址仅本机可达,既不能作为多播发送出口,
+// 也不应成为首选连接候选(排序时降权垫底)
+export function isVirtualSegment(ip: string): boolean {
+  const p = ip.split('.').map(Number)
+  if (p.length !== 4) return false
+  const [a, b, c] = p
+  return (
+    (a === 172 && b >= 16 && b <= 31) || // WSL/Hyper-V/Docker/VirtualBox 默认段
+    (a === 192 && b === 168 && c >= 56 && c <= 100) || // VirtualBox/VMware 常用段
+    (a === 10 && b === 0 && c === 2) || // NAT 段
+    a === 169 ||
+    a === 100 // 链路本地 / CGNAT
+  )
+}
+
+// 本机活跃真实 IPv4 地址(排除回环与虚拟网卡段),用于同网段优先排序
+export function getLocalIpv4s(): string[] {
+  const interfaces = os.networkInterfaces()
+  const result: string[] = []
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name] ?? []) {
+      if (iface.family !== 'IPv4' || iface.internal) continue
+      if (isVirtualSegment(iface.address)) continue
+      result.push(iface.address)
+    }
+  }
+  return result
+}
+
+// 首选局域网接口 IP(第一个真实网卡地址):
+// multicast-dns 需要明确的 interface 才能选对多播发送出口,
+// 否则 Windows 上默认(setMulticastInterface('0.0.0.0'))可能选中虚拟网卡(如 WSL),
+// 导致广播被 NAT 隔离、真实局域网的同事收不到本机服务
+export function getPreferredInterface(): string | undefined {
+  return getLocalIpv4s()[0]
 }
 
 // IPv6 地址在 URL 里必须用方括号包裹,否则 ws 库解析抛 Invalid URL

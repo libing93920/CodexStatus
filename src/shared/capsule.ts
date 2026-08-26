@@ -3,7 +3,7 @@ export type RefreshMode = 'auto' | 'manual'
 export type LocaleCode = 'zh-CN' | 'en-US'
 export type RateLimitSource = 'official' | 'local' | 'none'
 export type AuthMode = 'chatgpt' | 'api' | 'none'
-export type AgentId = 'codex' | 'claude' | 'opencode'
+export type AgentId = 'codex' | 'claude' | 'opencode' | 'pi'
 export type PanelView = 'details' | 'settings' | 'team'
 export type RendererWindowRole = 'capsule' | 'panel'
 export type CapsuleViewMode = 'capsule' | 'orb'
@@ -523,7 +523,7 @@ function isDockEdge(value: unknown): value is DockEdge {
 }
 
 function isAgentId(value: unknown): value is AgentId {
-  return value === 'codex' || value === 'claude' || value === 'opencode'
+  return value === 'codex' || value === 'claude' || value === 'opencode' || value === 'pi'
 }
 
 function isThemeId(value: unknown): value is ThemeId {

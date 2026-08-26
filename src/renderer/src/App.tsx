@@ -1927,7 +1927,8 @@ function App(): React.JSX.Element {
                       options={[
                         { label: 'Codex', value: 'codex' },
                         { label: 'Claude Code', value: 'claude' },
-                        { label: 'OpenCode', value: 'opencode' }
+                        { label: 'OpenCode', value: 'opencode' },
+      { label: 'Pi', value: 'pi' }
                       ]}
                       value={settings.agentId}
                     />
@@ -3110,16 +3111,18 @@ function TeamRow({
   )
 }
 
-// 团队榜三工具分段颜色:进度条不标文字,颜色区分工具,悬停浮层提示明细
+// 团队榜各工具分段颜色:进度条不标文字,颜色区分工具,悬停浮层提示明细
 const AGENT_SEGMENT_COLORS: Record<AgentId, string> = {
   codex: 'var(--metric-accent, rgba(151, 163, 176, 0.74))',
   claude: '#ecc05a',
-  opencode: '#b585ff'
+  opencode: '#b585ff',
+  pi: '#5ac8fa'
 }
 const AGENT_SEGMENT_LABELS: Record<AgentId, string> = {
   codex: 'Codex',
   claude: 'Claude',
-  opencode: 'OpenCode'
+  opencode: 'OpenCode',
+  pi: 'Pi'
 }
 
 // Token 消耗排行榜一行:排名/昵称/按窗口最大值归一化的横条/紧凑 token 值;self 行高亮
@@ -3154,7 +3157,7 @@ function TokenRow({
   const rankClass =
     rank === 1 ? ' is-top-1' : rank === 2 ? ' is-top-2' : rank === 3 ? ' is-top-3' : ''
   const segments = tokensByAgent
-    ? (['codex', 'claude', 'opencode'] as const)
+    ? (['codex', 'claude', 'opencode', 'pi'] as const)
         .map((id) => ({ id, tokens: tokensByAgent[id] ?? 0 }))
         .filter((segment) => segment.tokens > 0)
     : undefined
@@ -3215,7 +3218,7 @@ function TokenRow({
       </span>
       {segments && segments.length > 0 ? (
         <span className="team-row__tooltip" role="tooltip">
-          {(['codex', 'claude', 'opencode'] as const).map((id) => (
+          {(['codex', 'claude', 'opencode', 'pi'] as const).map((id) => (
             <span className="team-row__tooltip-row" key={id}>
               <span
                 className="team-row__tooltip-dot"

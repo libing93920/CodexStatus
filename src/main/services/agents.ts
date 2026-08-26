@@ -1,13 +1,19 @@
 // Agent 工具 provider 抽象:统一"本地扫描 → 事件级 token 用量"的接口。
 // v1 只做本地扫描出用量/花费,不涉及 billing/官方额度/重置卡/雷达。
 // 注:codex 与 claude 的扫描逻辑已迁到 usage.ts 做增量(incrementalScanCodex/incrementalScanClaude),
-// 此处注册表只剩 opencode(SQLite 无文件粒度增量,走全量查询)。
+// 此处注册表是 opencode(SQLite 无文件粒度增量)与 pi(JSONL 全量扫描)。
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import type { AgentId } from '../../shared/capsule'
-import { collectJsonlFiles, getNonNegativeNumber, getRecord, getString, parseJsonObject } from './quota.ts'
+import {
+  collectJsonlFiles,
+  getNonNegativeNumber,
+  getRecord,
+  getString,
+  parseJsonObject
+} from './quota.ts'
 import type { JsonlFileEntry } from './quota.ts'
 
 /** 单次用量增量的五分量 token 计数 */
@@ -43,6 +49,11 @@ export const AGENT_PROVIDERS: Partial<Record<AgentId, AgentProvider>> = {
     id: 'opencode',
     label: 'OpenCode',
     scanRecentEvents: scanOpenCodeEvents
+  },
+  pi: {
+    id: 'pi',
+    label: 'Pi',
+    scanRecentEvents: scanPiEvents
   }
 }
 
@@ -232,8 +243,8 @@ export function parseOpenCodeMessage(dataRaw: string | undefined): UsageEvent | 
   const outputTokens = getNonNegativeNumber(tokens.output) ?? 0
   const reasoning = getNonNegativeNumber(tokens.reasoning) ?? 0
   const cache = getRecord(tokens.cache)
-  const cacheRead = cache ? getNonNegativeNumber(cache.read) ?? 0 : 0
-  const cacheWrite = cache ? getNonNegativeNumber(cache.write) ?? 0 : 0
+  const cacheRead = cache ? (getNonNegativeNumber(cache.read) ?? 0) : 0
+  const cacheWrite = cache ? (getNonNegativeNumber(cache.write) ?? 0) : 0
   const cachedInput = cacheRead + cacheWrite
   const input = freshInput + cachedInput
   const output = outputTokens + reasoning
@@ -244,7 +255,14 @@ export function parseOpenCodeMessage(dataRaw: string | undefined): UsageEvent | 
   const event: UsageEvent = {
     ts,
     model: getString(data.modelID),
-    tokens: { input, cachedInput, output, reasoning, total: input + output, cacheCreation: cacheWrite }
+    tokens: {
+      input,
+      cachedInput,
+      output,
+      reasoning,
+      total: input + output,
+      cacheCreation: cacheWrite
+    }
   }
   const cost = getNonNegativeNumber(data.cost) ?? 0
   if (cost > 0) {
@@ -260,6 +278,138 @@ function resolveOpenCodeDbPath(): string {
     ? path.resolve(dataHome === '~' ? os.homedir() : dataHome)
     : path.join(os.homedir(), '.local', 'share')
   return path.join(base, 'opencode', 'opencode.db')
+}
+
+// —— Pi 读取器 ——
+const PI_SCAN_WINDOW_DAYS = 30
+
+// Pi(badlogic/pi-mono)会话为 JSONL:~/.pi/agent/sessions/--<编码后cwd>--/<时间戳>_<uuidv7>.jsonl。
+// 首行 SessionHeader(type:"session"),后续条目带 type 字段;token 记在 assistant 消息的
+// message.usage 上(每消息独立计数,非累计),compaction/branch_summary 条目也可带 usage
+// (官方文档口径计入会话总量)。tool result 的 usage 不属主 LLM 计费,跳过。
+// 会话是分支树:废弃分支的 token 同样真实计费消耗,按"实际消耗"口径全部计入。
+async function scanPiEvents(): Promise<UsageEvent[]> {
+  const sessionsDir = resolvePiSessionsDir()
+  if (!(await pathExists(sessionsDir))) {
+    return []
+  }
+  const cutoff = Date.now() - PI_SCAN_WINDOW_DAYS * DAY_MS
+  const files = await collectJsonlFiles(sessionsDir, Number.MAX_SAFE_INTEGER)
+  const events: UsageEvent[] = []
+  for (const file of files) {
+    // 先按 mtime 粗筛(claude 同款),再逐行按事件时间精筛(opencode 同款)
+    if (file.mtimeMs < cutoff) {
+      continue
+    }
+    let content: string
+    try {
+      content = await fs.readFile(file.filePath, 'utf8')
+    } catch {
+      continue
+    }
+    for (const rawLine of content.split(/\r?\n/)) {
+      if (rawLine.trim().length === 0) {
+        continue
+      }
+      const event = parsePiEntryLine(rawLine)
+      if (event && event.ts >= cutoff) {
+        events.push(event)
+      }
+    }
+  }
+  return events
+}
+
+// 解析 pi 会话 JSONL 单行为事件;供单测使用。
+// token 字段语义自适应:pi-ai 对 Anthropic 类 provider 归一化为并列字段(input 不含缓存,
+// cacheRead/cacheWrite 单列),对 OpenAI 类 input 可能已含缓存。用 totalTokens 校验两种口径
+// 取更贴近者,避免缓存双计/漏计;无 totalTokens 时按并列口径兜底。
+export function parsePiEntryLine(rawLine: string): UsageEvent | undefined {
+  const parsed = parseJsonObject(rawLine)
+  if (!parsed) {
+    return undefined
+  }
+  const entryType = getString(parsed.type)
+  let usageRecord: Record<string, unknown> | undefined
+  let model: string | undefined
+  let ts = Number.NaN
+  if (entryType === 'message') {
+    const message = getRecord(parsed.message)
+    if (!message || getString(message.role) !== 'assistant') {
+      return undefined
+    }
+    usageRecord = getRecord(message.usage)
+    if (!usageRecord) {
+      return undefined
+    }
+    model = getString(message.model)
+    const messageTs = getNonNegativeNumber(message.timestamp)
+    if (messageTs !== undefined && messageTs > 0) {
+      ts = messageTs
+    }
+  } else if (entryType === 'compaction' || entryType === 'branch_summary') {
+    usageRecord = getRecord(parsed.usage)
+  }
+  if (!usageRecord) {
+    return undefined
+  }
+  if (Number.isNaN(ts)) {
+    const parsedTs = Date.parse(getString(parsed.timestamp) ?? '')
+    if (!Number.isNaN(parsedTs)) {
+      ts = parsedTs
+    }
+  }
+  const rawInput = getNonNegativeNumber(usageRecord.input) ?? 0
+  const outputTokens = getNonNegativeNumber(usageRecord.output) ?? 0
+  const cacheRead = getNonNegativeNumber(usageRecord.cacheRead) ?? 0
+  const cacheWrite = getNonNegativeNumber(usageRecord.cacheWrite) ?? 0
+  const reasoning = getNonNegativeNumber(usageRecord.reasoning) ?? 0
+  const reportedTotal = getNonNegativeNumber(usageRecord.totalTokens) ?? 0
+  const sumParallel = rawInput + outputTokens + cacheRead + cacheWrite
+  const sumInclusive = rawInput + outputTokens
+  const parallel =
+    reportedTotal > 0
+      ? Math.abs(reportedTotal - sumParallel) <= Math.abs(reportedTotal - sumInclusive)
+      : true
+  // CodexStatus 统一口径:tokens.input 含缓存,total = 含缓存输入 + 输出(reasoning 是 output 子集不另加)
+  const cachedInput = parallel ? cacheRead + cacheWrite : 0
+  const input = rawInput + cachedInput
+  const total = reportedTotal > 0 ? reportedTotal : parallel ? sumParallel : sumInclusive
+  if ((input === 0 && outputTokens === 0) || !Number.isFinite(ts) || ts <= 0) {
+    return undefined
+  }
+  const event: UsageEvent = {
+    ts,
+    model,
+    tokens: {
+      input,
+      cachedInput,
+      output: outputTokens,
+      reasoning,
+      total,
+      cacheCreation: parallel ? cacheWrite : undefined
+    }
+  }
+  const cost = getRecord(usageRecord.cost)
+  const costTotal = cost ? (getNonNegativeNumber(cost.total) ?? 0) : 0
+  if (costTotal > 0) {
+    event.costUsd = costTotal
+  }
+  return event
+}
+
+// Pi 数据目录:~/.pi/agent/sessions,与官方一致支持 PI_CODING_AGENT_SESSION_DIR /
+// PI_CODING_AGENT_DIR 环境变量覆盖
+function resolvePiSessionsDir(): string {
+  const sessionDirOverride = process.env.PI_CODING_AGENT_SESSION_DIR?.trim()
+  if (sessionDirOverride) {
+    return path.resolve(sessionDirOverride === '~' ? os.homedir() : sessionDirOverride)
+  }
+  const agentDirOverride = process.env.PI_CODING_AGENT_DIR?.trim()
+  const agentDir = agentDirOverride
+    ? path.resolve(agentDirOverride === '~' ? os.homedir() : agentDirOverride)
+    : path.join(os.homedir(), '.pi', 'agent')
+  return path.join(agentDir, 'sessions')
 }
 
 async function pathExists(target: string): Promise<boolean> {

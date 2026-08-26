@@ -449,9 +449,18 @@ function registerIpcHandlers(): void {
     const previousTeamGroup = persistedState.settings.teamGroup
     const previousTeamNickname = persistedState.settings.teamNickname
     const previousAgentId = persistedState.settings.agentId
+    // 团队口令/昵称规范化:trim 首尾空白,避免"同一个口令因复制带空格"导致
+    // 组哈希不一致而互不可见
+    const normalizedPatch = { ...patch }
+    if (typeof normalizedPatch.teamGroup === 'string') {
+      normalizedPatch.teamGroup = normalizedPatch.teamGroup.trim()
+    }
+    if (typeof normalizedPatch.teamNickname === 'string') {
+      normalizedPatch.teamNickname = normalizedPatch.teamNickname.trim()
+    }
     const nextSettings = syncLaunchAtLoginPreference({
       ...persistedState.settings,
-      ...patch
+      ...normalizedPatch
     })
 
     persistedState = {
@@ -465,14 +474,14 @@ function registerIpcHandlers(): void {
     broadcastPreferences()
 
     // 团队口令/昵称变更:重启 LAN service(更新发布信息或启停)
-    if (
-      (typeof patch.teamGroup === 'string' || patch.teamGroup === undefined) &&
-      patch.teamGroup !== previousTeamGroup
-    ) {
+    // 注意必须用 'in' 判键存在:渲染层发的是部分 patch(多数设置变更不含这两个键),
+    // 缺键时 patch.teamGroup 为 undefined,不能用值比较误判为"已变更",
+    // 否则每次无关设置改动(IQ 阈值/刷新间隔等)都会重启 LAN 服务、闪断团队连接
+    if ('teamGroup' in patch && normalizedPatch.teamGroup !== previousTeamGroup) {
       syncLanService()
     } else if (
-      typeof patch.teamNickname === 'string' &&
-      patch.teamNickname !== previousTeamNickname
+      'teamNickname' in patch &&
+      normalizedPatch.teamNickname !== previousTeamNickname
     ) {
       // 仅昵称变化也需重启(更新 mDNS txt 的 nick)
       syncLanService()
@@ -1007,7 +1016,7 @@ function syncLanService(): void {
   lanService.start({
     peerId: persistedState.peerId ?? 'self',
     nickname: persistedState.settings.teamNickname ?? '我',
-    group,
+    group: group.trim(),
     getSnapshot: getLanSnapshot,
     onPeersChange: () => {
       // peer 变化时把最新 peer 表合并进 snapshot 并推送前端
