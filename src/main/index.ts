@@ -1461,35 +1461,11 @@ function resolveCapsuleWindowSize(viewMode: 'capsule' | 'orb'): {
   width: number
   height: number
 } {
-  // API Key 模式:无额度窗口,胶囊固定用单窗口尺寸(横版 160 宽 / orb 96 高),
-  // 与本地正确 mock 一致,避免按 rateLimits 数量变化导致机器间尺寸不一(250 宽会让紧凑内容两边空白)
-  if (currentSnapshot.authMode === 'api') {
-    return viewMode === 'orb'
-      ? { width: ORB_WINDOW_SIZE.width, height: SINGLE_ORB_WINDOW_HEIGHT }
-      : { width: SINGLE_CAPSULE_WINDOW_WIDTH, height: CAPSULE_WINDOW_SIZE.height }
-  }
-  const size = viewMode === 'orb' ? ORB_WINDOW_SIZE : CAPSULE_WINDOW_SIZE
-  // 短窗口(百分比段)和长窗口(周重置倒计时段)都参与胶囊展示,尺寸按总窗口数增长
-  const visibleCount = currentSnapshot.rateLimits.length
-  const rateLimitCount = visibleCount > 0 ? visibleCount : currentSnapshot.rateLimits.length
-
-  if (rateLimitCount === 0) {
-    return size
-  }
-
+  // 胶囊只展示单个窗口(5h 优先,无 5h 取 7d 兜底),尺寸不随 rateLimits 数量变化,
+  // 避免 5h 回来后窗口从 160 撑到 250 而内容不变产生大片空白
   return viewMode === 'orb'
-    ? {
-        ...size,
-        height:
-          SINGLE_ORB_WINDOW_HEIGHT +
-          (rateLimitCount - 1) * (ORB_WINDOW_SIZE.height - SINGLE_ORB_WINDOW_HEIGHT)
-      }
-    : {
-        ...size,
-        width:
-          SINGLE_CAPSULE_WINDOW_WIDTH +
-          (rateLimitCount - 1) * (CAPSULE_WINDOW_SIZE.width - SINGLE_CAPSULE_WINDOW_WIDTH)
-      }
+    ? { width: ORB_WINDOW_SIZE.width, height: SINGLE_ORB_WINDOW_HEIGHT }
+    : { width: SINGLE_CAPSULE_WINDOW_WIDTH, height: CAPSULE_WINDOW_SIZE.height }
 }
 
 function resolvePanelBounds(x?: number, y?: number): Rectangle {
