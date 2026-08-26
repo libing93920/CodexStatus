@@ -1252,8 +1252,8 @@ body {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  padding: 5px 8px;
-  gap: 10px;
+  padding: var(--capsule-h-pad-y, 5px) var(--capsule-h-pad-x, 8px);
+  gap: var(--capsule-h-gap, 10px);
 }
 
 .capsule__layout--v {
@@ -1261,8 +1261,8 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 6px 4px;
+  gap: var(--capsule-v-gap, 4px);
+  padding: var(--capsule-v-pad-y, 6px) var(--capsule-v-pad-x, 4px);
 }
 
 /* API 模式横版:三列按内容宽度居中排列,不设 1fr 拉伸列,避免 token 值短时中列被拉宽产生大片空白 */
@@ -1400,9 +1400,10 @@ body {
 .capsule__weekly {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--capsule-weekly-gap, 4px);
+  padding: var(--capsule-weekly-pad-y, 0px) var(--capsule-weekly-pad-x, 0px);
   color: rgba(220, 230, 242, 0.96);
-  font-size: 22px;
+  font-size: var(--capsule-weekly-font, 22px);
   font-weight: 760;
   line-height: 1;
   letter-spacing: 0.01em;
@@ -1424,11 +1425,12 @@ body {
   justify-content: center;
   gap: 3px;
   min-width: 0;
+  padding: var(--capsule-stat-pad-y, 0px) var(--capsule-stat-pad-x, 0px);
 }
 
 .capsule__stat-label {
   color: rgba(205, 218, 232, 0.72);
-  font-size: 9px;
+  font-size: var(--capsule-stat-label-font, 9px);
   font-weight: 520;
   letter-spacing: 0.2px;
   line-height: 1.2;
@@ -1437,6 +1439,7 @@ body {
 
 .capsule__stat-value {
   color: rgba(220, 230, 242, 0.96);
+  font-size: var(--capsule-stat-value-font, 14px);
   font-weight: 760;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -1466,7 +1469,7 @@ body {
 /* 剩余额度百分比:按 tone 变色(tone class 加在 layout/col 上,百分比和进度条共用 --metric-accent);字号小于周重置 */
 .capsule__percent {
   color: var(--metric-accent, rgba(151, 163, 176, 0.74));
-  font-size: 20px;
+  font-size: var(--capsule-percent-font, 20px);
   font-weight: 740;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -1474,7 +1477,7 @@ body {
 
 /* 百分比进度条:横版在中列底部满宽,竖版最末且缩短至与百分比数字同宽 */
 .capsule__progress {
-  height: 3px;
+  height: var(--capsule-progress-h, 3px);
   display: block;
   overflow: hidden;
   border-radius: 999px;
@@ -1482,7 +1485,7 @@ body {
 }
 
 .capsule__layout--h .capsule__progress {
-  width: 100%;
+  width: var(--capsule-progress-w, 100%);
   margin-top: 2px;
 }
 
@@ -1525,11 +1528,11 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 6px;
+  padding: var(--capsule-credit-pad-y, 2px) var(--capsule-credit-pad-x, 6px);
   border-radius: 8px;
   color: rgba(238, 218, 132, 1);
   background: rgba(0, 0, 0, 0.4);
-  font-size: 10px;
+  font-size: var(--capsule-credit-font, 10px);
   font-weight: 600;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -1545,10 +1548,10 @@ body {
 .capsule__pick {
   display: inline-flex;
   align-items: center;
-  padding: 2px 6px;
+  padding: var(--capsule-pick-pad-y, 2px) var(--capsule-pick-pad-x, 6px);
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.4);
-  font-size: 9.5px;
+  font-size: var(--capsule-pick-font, 9.5px);
   font-weight: 600;
   line-height: 1;
   font-variant-numeric: tabular-nums;

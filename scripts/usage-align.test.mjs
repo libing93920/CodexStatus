@@ -227,17 +227,28 @@ test('codex:last_token_usage 的 cachedInput 钳制不超过 input', () => {
   assert.equal(delta.cachedInput, 10) // min(999, 10)
 })
 
-test('codex:无 last_token_usage 时回落相邻累计差', () => {
+test('codex:无 last_token_usage 时回落累计差(高水位只增不减)', () => {
   const current = { input: 100, cachedInput: 50, output: 20, reasoning: 5, total: 150 }
-  const prev = { input: 40, cachedInput: 10, output: 10, reasoning: 0, total: 60 }
-  const delta = buildCodexDelta(current, undefined, prev)
+  const highWater = { input: 40, cachedInput: 10, output: 10, reasoning: 0, total: 60 }
+  const delta = buildCodexDelta(current, undefined, highWater)
   assert.equal(delta.input, 60)
   assert.equal(delta.cachedInput, 40)
   assert.equal(delta.output, 10)
   assert.equal(delta.reasoning, 5)
 })
 
-// —— dedupParsedFiles:孤儿 subagent 跳过(对齐 cc-switch mark_deferred) ——
+test('codex:total 回退时高水位不跟着回退,避免重复计入(lane 切换场景)', () => {
+  // 第一个事件 total=150,第二个 total 回退到 80(rate-limit lane 切换重新累计),
+  // 第三个 total=180(在 80 基础上重新累加)。用相邻 prev 会把 180-80=100 计入,
+  // 但其中 80 已在第一个事件计入过,应只计 180-150=30。高水位保证这点。
+  const highWater = { input: 150, cachedInput: 0, output: 0, reasoning: 0, total: 150 }
+  const afterRollback = { input: 180, cachedInput: 0, output: 0, reasoning: 0, total: 180 }
+  const delta = buildCodexDelta(afterRollback, undefined, highWater)
+  assert.equal(delta.input, 30) // 180 - 150(高水位),不是 180 - 80
+})
+
+// —— dedupParsedFiles:父子去重(对齐 cc-switch session_usage_codex.rs) ——
+// mkFile 构造 ParsedFile,含父时间线完整性字段(对齐 cc-switch ParentTokenTimeline)
 function mkSigEvent(ts, total) {
   return {
     ts,
@@ -246,26 +257,64 @@ function mkSigEvent(ts, total) {
     model: undefined
   }
 }
-
-test('codex:孤儿 subagent(父文件不在)整体跳过', () => {
-  // 子会话 forked_from_id=父,但父文件不在扫描集 → 跳过整个子会话(对齐 cc-switch mark_deferred)
-  const child = {
-    parent: 'PARENT-UUID', deferred: false, rootTs: 2000, events: [mkSigEvent(2000, 100), mkSigEvent(2100, 200)]
+function mkFile(events, opts = {}) {
+  return {
+    parent: opts.parent,
+    deferred: opts.deferred ?? false,
+    rootTs: opts.rootTs,
+    events,
+    hasTokenWithoutTimestamp: opts.hasTokenWithoutTimestamp ?? false,
+    maxTimestamp: opts.maxTimestamp ?? (events.length > 0 ? events[events.length - 1].ts : undefined)
   }
-  // 没有父文件,只有这个子会话
+}
+
+test('codex:真孤儿 subagent(父文件不在扫描集)整体跳过', () => {
+  // 父文件不在 byThread → 跳过整个子会话(对齐 cc-switch mark_deferred)
+  const child = mkFile([mkSigEvent(2000, 100), mkSigEvent(2100, 200)], { parent: 'PARENT-UUID', rootTs: 2000 })
   const events = dedupParsedFiles([{ threadId: 'CHILD-UUID', file: child }])
-  assert.equal(events.length, 0) // 父不在,子全跳
+  assert.equal(events.length, 0)
+})
+
+test('codex:父在但无签名时子会话挂起跳过(对齐 cc-switch mark_deferred)', () => {
+  // 父文件在扫描集但没解析出 events(byThread 没有),挂起跳过
+  const child = mkFile([mkSigEvent(2000, 100), mkSigEvent(2100, 200)], { parent: 'PARENT-UUID', rootTs: 2000 })
+  const events = dedupParsedFiles([{ threadId: 'CHILD-UUID', file: child }])
+  assert.equal(events.length, 0)
+})
+
+test('codex:父时间线缺 timestamp → 子会话挂起跳过(对齐 cc-switch L155-159)', () => {
+  // 父有 events 但 hasTokenWithoutTimestamp=true → 父时间线不可用 → 子 skipAll
+  const parent = mkFile([mkSigEvent(1000, 100)], { maxTimestamp: 1000, hasTokenWithoutTimestamp: true })
+  const child = mkFile([mkSigEvent(2000, 200)], { parent: 'PARENT-UUID', rootTs: 2000 })
+  const events = dedupParsedFiles([
+    { threadId: 'PARENT-UUID', file: parent },
+    { threadId: 'CHILD-UUID', file: child }
+  ])
+  assert.equal(events.length, 1) // 只有父计入,子跳过
+  assert.equal(events[0].tokens.input, 100)
+})
+
+test('codex:父 maxTimestamp < 子 rootTs → 子会话挂起跳过(对齐 cc-switch L161-168)', () => {
+  // 父最大 ts=1500 < 子 rootTs=2000 → 父尚未写到 fork 时刻 → 子 skipAll
+  const parent = mkFile([mkSigEvent(1000, 100), mkSigEvent(1500, 200)], { maxTimestamp: 1500 })
+  const child = mkFile([mkSigEvent(2000, 300)], { parent: 'PARENT-UUID', rootTs: 2000 })
+  const events = dedupParsedFiles([
+    { threadId: 'PARENT-UUID', file: parent },
+    { threadId: 'CHILD-UUID', file: child }
+  ])
+  assert.equal(events.length, 2) // 只有父计入,子跳过
 })
 
 test('codex:父文件在时子会话前缀去重保留增量', () => {
-  const parent = {
-    parent: undefined, deferred: false, rootTs: 1000, events: [mkSigEvent(1000, 100), mkSigEvent(1100, 200), mkSigEvent(1200, 300)]
-  }
+  const parent = mkFile(
+    [mkSigEvent(1000, 100), mkSigEvent(1100, 200), mkSigEvent(1200, 300)],
+    { maxTimestamp: 2500 } // 父时间线覆盖子 fork 时刻(rootTs=2000)
+  )
   // 子会话前2个事件与父签名相同(重放),第3个是新工作
-  const child = {
-    parent: 'PARENT-UUID', deferred: false, rootTs: 2000,
-    events: [mkSigEvent(2000, 100), mkSigEvent(2100, 200), mkSigEvent(2200, 999)]
-  }
+  const child = mkFile(
+    [mkSigEvent(2000, 100), mkSigEvent(2100, 200), mkSigEvent(2200, 999)],
+    { parent: 'PARENT-UUID', rootTs: 2000 }
+  )
   const events = dedupParsedFiles([
     { threadId: 'PARENT-UUID', file: parent },
     { threadId: 'CHILD-UUID', file: child }
@@ -276,10 +325,29 @@ test('codex:父文件在时子会话前缀去重保留增量', () => {
 })
 
 test('codex:无 parent 的主会话全量计入', () => {
-  const main = {
-    parent: undefined, deferred: false, rootTs: 1000, events: [mkSigEvent(1000, 500), mkSigEvent(1100, 600)]
-  }
+  const main = mkFile([mkSigEvent(1000, 500), mkSigEvent(1100, 600)], { rootTs: 1000 })
   const events = dedupParsedFiles([{ threadId: 'MAIN', file: main }])
   assert.equal(events.length, 2)
   assert.equal(events.reduce((s, e) => s + e.tokens.input, 0), 1100)
+})
+
+test('codex:deferred 文件(meta 异常)整个跳过,不全量计入', () => {
+  // cc-switch:ParentResolution::Deferred → mark_deferred,整个文件不计入(L1206-1213)
+  // deferred 文件 parent 恒为 undefined,但 deferred=true 必须触发 skipAll,不能落入全量计入
+  const child = mkFile(
+    [mkSigEvent(2000, 100), mkSigEvent(2100, 200)],
+    { parent: undefined, deferred: true, rootTs: 2000 }
+  )
+  const events = dedupParsedFiles([{ threadId: 'CHILD', file: child }])
+  assert.equal(events.length, 0) // deferred → 整个跳过,0 事件
+})
+
+test('codex:有 parent 但 rootTs 缺失 → 跳过整个文件', () => {
+  // cc-switch:有 parent 但 root meta 缺 timestamp → mark_deferred(L1215-1223)
+  const child = mkFile(
+    [mkSigEvent(2000, 100), mkSigEvent(2100, 200)],
+    { parent: 'PARENT-UUID', rootTs: undefined }
+  )
+  const events = dedupParsedFiles([{ threadId: 'CHILD', file: child }])
+  assert.equal(events.length, 0)
 })
