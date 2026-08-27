@@ -1,6 +1,6 @@
 /* =====================================================================
-   主题系统:5 套,单文件 token + 结构覆盖
-   [data-theme="midnight"] 默认深色青蓝(现状);其余 4 套对应 design-previews
+   主题系统:7 套,单文件 token + 结构覆盖
+   [data-theme="midnight"] 默认深色青蓝(现状);其余 6 套对应 design-previews
    每个 [data-theme] 块只覆盖 token 与该主题独有的结构装饰,
    布局/功能/动效完全复用 main.css,不重复
    ===================================================================== */
@@ -4499,5 +4499,1429 @@
   -webkit-text-stroke: 1px #1c1a17;
 }
 
+/* =====================================================================
+   8. COCKPIT · 机械座舱 Vintage Cockpit
+   形态语言:军绿哑光钢板 + 四角铆钉 + 拉丝纹 + 警示斜纹边
+           + Nixie 辉光数码管(百分比) + LED 分段能量条(进度条)
+           + 琥珀读数 + 应急红按钮 + 拨动开关 tabs + 铭牌带
+   策略 A:纯视觉映射,不改 DOM;横竖版统一机械仪表语言
+   ===================================================================== */
+[data-theme='cockpit'] {
+  /* 胶囊:圆角不切角,钢板边框 + 警示斜纹外缘用 box-shadow 模拟 */
+  --capsule-radius: 6px;
+  --capsule-orb-radius: 6px;
+  --capsule-clip: none;
+  /* 军绿哑光钢板 + 94° 拉丝纹 */
+  --capsule-text: #dfe3d2;
+  --capsule-bg:
+    repeating-linear-gradient(94deg, rgba(255, 255, 255, 0.03) 0 2px, transparent 2px 5px),
+    linear-gradient(180deg, #3a4534 0%, #2b3526 52%, #20281c 100%);
+  --capsule-orb-bg:
+    repeating-linear-gradient(94deg, rgba(255, 255, 255, 0.03) 0 2px, transparent 2px 5px),
+    linear-gradient(180deg, #3a4534 0%, #2b3526 52%, #20281c 100%);
+  --capsule-edge: #0c100a;
+  --capsule-edge-soft: rgba(255, 255, 255, 0.12);
+  /* 关掉毛玻璃,钢板是不透明哑光 */
+  --capsule-filter: none;
+  --capsule-accent: #ffaa00;
+  --capsule-font: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  /* panel:控制台,军绿钢板 + 2px 深边 + 内高光/外大阴影 */
+  --panel-radius: 8px;
+  --panel-clip: inset(0 round 8px);
+  --panel-border: 2px solid #0c100a;
+  --panel-tint:
+    repeating-linear-gradient(94deg, rgba(255, 255, 255, 0.02) 0 2px, transparent 2px 6px);
+  --panel-bg:
+    repeating-linear-gradient(94deg, rgba(255, 255, 255, 0.02) 0 2px, transparent 2px 6px),
+    linear-gradient(180deg, #333f2c 0%, #28321f 55%, #1e2617 100%);
+  --panel-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+    0 26px 50px -20px rgba(0, 0, 0, 0.65);
+  /* 色板:军绿/钢黑/琥珀/指针红/信号绿 */
+  --panel-card: linear-gradient(180deg, #2a3421, #1f2716);
+  --panel-card-2: linear-gradient(180deg, #2a3421, #1f2716);
+  --panel-card-3: linear-gradient(180deg, #2a3421, #1f2716);
+  --panel-inset: #141a10;
+  --panel-text: #dfe3d2;
+  --panel-text-2: #97a08b;
+  --panel-muted: #6f7a64;
+  --panel-accent: #ffaa00;
+  --panel-accent-2: #37e05f;
+  --panel-accent-soft: rgba(255, 170, 0, 0.14);
+  --panel-success: #37e05f;
+  --panel-danger: #cc1100;
+  --panel-line: rgba(74, 86, 63, 0.45);
+  --panel-line-strong: rgba(255, 170, 0, 0.3);
+  --panel-icon-blue: #79b8ff;
+  --panel-icon-violet: #d2a8ff;
+  --panel-icon-amber: #ffaa00;
+  --panel-icon-pink: #ff7b72;
+  --panel-icon-green: #37e05f;
+  --panel-font: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
 
+  /* 胶囊元素参数(横版/竖版共用;orb 专属覆盖见下文) */
+  --capsule-h-pad-y: 6px;
+  --capsule-h-pad-x: 8px;
+  --capsule-h-gap: 9px;
+  --capsule-v-pad-y: 6px;
+  --capsule-v-pad-x: 5px;
+  --capsule-v-gap: 4px;
+  --capsule-weekly-font: 16px;
+  --capsule-weekly-pad-y: 0px;
+  --capsule-weekly-pad-x: 0px;
+  --capsule-weekly-gap: 2px;
+  --capsule-percent-font: 21px;
+  --capsule-progress-h: 12px;
+  --capsule-progress-w: 100%;
+  --capsule-credit-font: 9px;
+  --capsule-credit-pad-y: 2px;
+  --capsule-credit-pad-x: 5px;
+  --capsule-pick-font: 9px;
+  --capsule-pick-pad-y: 2px;
+  --capsule-pick-pad-x: 5px;
+  --capsule-stat-label-font: 8.5px;
+  --capsule-stat-value-font: 14px;
+  --capsule-stat-pad-y: 0px;
+  --capsule-stat-pad-x: 0px;
+}
+
+/* main.css 的 .panel{} 自身重声明了一批 token,元素自身声明优先于父级继承;
+   用 [data-theme='cockpit'] .panel (特异性 0,2,0) 在 .panel 元素上重新赋主题值 */
+[data-theme='cockpit'] .panel {
+  --panel-bg:
+    repeating-linear-gradient(94deg, rgba(255, 255, 255, 0.02) 0 2px, transparent 2px 6px),
+    linear-gradient(180deg, #333f2c 0%, #28321f 55%, #1e2617 100%);
+  --panel-card: linear-gradient(180deg, #2a3421, #1f2716);
+  --panel-card-2: linear-gradient(180deg, #2a3421, #1f2716);
+  --panel-card-3: linear-gradient(180deg, #2a3421, #1f2716);
+  --panel-surface: linear-gradient(180deg, #2a3421, #1f2716);
+  --panel-surface-2: linear-gradient(180deg, #2a3421, #1f2716);
+  --panel-inset: #141a10;
+  --panel-text: #dfe3d2;
+  --panel-text-2: #97a08b;
+  --panel-muted: #6f7a64;
+  --panel-accent: #ffaa00;
+  --panel-accent-2: #37e05f;
+  --panel-accent-soft: rgba(255, 170, 0, 0.14);
+  --panel-success: #37e05f;
+  --panel-danger: #cc1100;
+  --panel-line: rgba(74, 86, 63, 0.45);
+  --panel-line-strong: rgba(255, 170, 0, 0.3);
+  --panel-icon-blue: #79b8ff;
+  --panel-icon-violet: #d2a8ff;
+  --panel-icon-amber: #ffaa00;
+  --panel-icon-pink: #ff7b72;
+  --panel-icon-green: #37e05f;
+}
+
+/* 装饰层:胶囊四角铆钉(panel deco 用警示条纹顶带) */
+[data-theme='cockpit'] .capsule__deco,
+[data-theme='cockpit'] .panel__deco {
+  display: block;
+}
+
+/* 四角铆钉:径向渐变小圆 + 立体高光/凹陷阴影;用 deco 的 ::before/::after 各画两角 */
+[data-theme='cockpit'] .capsule__deco::before,
+[data-theme='cockpit'] .capsule__deco::after {
+  content: '';
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #6a7660, #2c3524 62%, #131a0f);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.7), inset 0 1px 1px rgba(255, 255, 255, 0.25);
+}
+
+[data-theme='cockpit'] .capsule__deco::before {
+  top: 6px;
+  left: 6px;
+}
+
+[data-theme='cockpit'] .capsule__deco::after {
+  top: 6px;
+  right: 6px;
+}
+
+/* 竖版 orb 更窄,铆钉贴边稍内收避免出框 */
+[data-theme='cockpit'] .capsule--orb .capsule__deco::before,
+[data-theme='cockpit'] .capsule--orb .capsule__deco::after {
+  width: 6px;
+  height: 6px;
+  top: 5px;
+}
+
+[data-theme='cockpit'] .capsule--orb .capsule__deco::before {
+  left: 5px;
+}
+
+[data-theme='cockpit'] .capsule--orb .capsule__deco::after {
+  right: 5px;
+}
+
+/* 胶囊钢板边框:1.5px 深边 + inset 顶高光/底凹陷,警示斜纹外缘 */
+[data-theme='cockpit'] .capsule {
+  box-shadow:
+    inset 0 0 0 1.5px #0c100a,
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.5),
+    0 10px 14px rgba(0, 0, 0, 0.55);
+}
+
+/* 周重置倒计时:钢白文字(无辉光),与琥珀 Nixie 百分比区分 */
+[data-theme='cockpit'] .capsule__weekly {
+  color: #dfe3d2;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-weight: 400;
+  letter-spacing: 1px;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme='cockpit'] .capsule__weekly svg {
+  color: #dfe3d2;
+}
+
+/* 百分比:Nixie 辉光数码管,琥珀色 + 双层 glow + flicker 闪烁 */
+[data-theme='cockpit'] .capsule__percent {
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  color: #ffaa00;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 7px rgba(255, 170, 0, 0.65), 0 0 18px rgba(255, 170, 0, 0.25);
+  animation: cockpit-nixie-flicker 3.4s steps(1) infinite;
+}
+
+@keyframes cockpit-nixie-flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 1;
+  }
+  93% {
+    opacity: 0.78;
+  }
+  94% {
+    opacity: 1;
+  }
+  97% {
+    opacity: 0.86;
+  }
+  98% {
+    opacity: 1;
+  }
+}
+
+/* 进度条:LED 分段能量条槽 —— 钢黑底 + inset 凹陷 + 分段刻度;
+   span 填充用绿→黄→红能量渐变 + 分段间隙 + glow */
+/* 进度条:钢黑槽(满宽深底) + fill 随进度绿黄红渐变 + 竖线切割(照参考 .led-track/.led-fill) */
+[data-theme='cockpit'] .capsule__progress {
+  height: var(--capsule-progress-h);
+  border-radius: 2px;
+  background: #10150d;
+  border: 1px solid #0c100a;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+}
+
+[data-theme='cockpit'] .capsule__progress span {
+  border-radius: 1px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 3px, rgba(0, 0, 0, 0.55) 3px 5px),
+    linear-gradient(90deg, #37e05f 0 62%, #ffaa00 62% 84%, #ff3b2f 84% 100%);
+  box-shadow: 0 0 6px rgba(55, 224, 95, 0.35);
+}
+
+/* 重置卡:钢黑凹槽 + 琥珀文字 + 顶警示线 */
+[data-theme='cockpit'] .capsule__credit {
+  border-radius: 2px;
+  background: #141a10;
+  color: #ffaa00;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: var(--capsule-credit-font);
+  padding: var(--capsule-credit-pad-y) var(--capsule-credit-pad-x);
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  box-shadow: inset 0 0 0 1px #0c100a, inset 0 2px 0 rgba(255, 170, 0, 0.35);
+  text-shadow: 0 0 5px rgba(255, 170, 0, 0.4);
+}
+
+[data-theme='cockpit'] .capsule__credit svg {
+  color: #ffaa00;
+  filter: drop-shadow(0 0 3px rgba(255, 170, 0, 0.5));
+}
+
+/* 推荐模型:钢黑凹槽 + 琥珀描边小铭牌 */
+[data-theme='cockpit'] .capsule__pick {
+  border-radius: 2px;
+  background: #141a10;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: var(--capsule-pick-font);
+  padding: var(--capsule-pick-pad-y) var(--capsule-pick-pad-x);
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  box-shadow: inset 0 0 0 1px #0c100a, inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* API 模式统计单元:标签暗淡,数值琥珀 Nixie */
+[data-theme='cockpit'] .capsule__stat-label {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  letter-spacing: 1px;
+}
+
+[data-theme='cockpit'] .capsule__stat-value {
+  color: #ffaa00;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  text-shadow: 0 0 7px rgba(255, 170, 0, 0.65), 0 0 18px rgba(255, 170, 0, 0.25);
+}
+
+[data-theme='cockpit'] .capsule__stat--metric .capsule__stat-value {
+  color: #ffaa00;
+}
+
+/* 竖版 orb:各项尺寸沿用默认,铆钉/能量条语言一致;进度条缩窄贴合竖窗 */
+[data-theme='cockpit'] .capsule--orb .capsule__percent {
+  font-size: 17px;
+}
+
+[data-theme='cockpit'] .capsule--orb .capsule__progress {
+  width: 38px;
+  height: 8px;
+}
+
+[data-theme='cockpit'] .capsule--orb .capsule__credit {
+  font-size: 8px;
+  padding: 2px 4px;
+}
+
+[data-theme='cockpit'] .capsule--orb .capsule__pick {
+  font-size: 8px;
+  padding: 2px 4px;
+}
+
+/* ---------- panel 结构覆盖 ---------- */
+
+/* panel 顶饰:警示斜纹横带(amber/深色 -45deg),呼应机库横梁 */
+[data-theme='cockpit'] .panel__deco {
+  z-index: 0;
+}
+
+[data-theme='cockpit'] .panel__deco::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: repeating-linear-gradient(-45deg, #ffaa00 0 12px, #14180f 12px 24px);
+  opacity: 0.65;
+}
+
+/* panel 标题:stencil 字体感(用 Impact 模拟)+ 大字距,琥珀强调可选 */
+[data-theme='cockpit'] .panel__title {
+  font-family: Impact, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-size: 21px;
+  font-weight: 400;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: #dfe3d2;
+}
+
+[data-theme='cockpit'] .panel__title::after {
+  content: '';
+  flex: 1;
+  height: 6px;
+  background: repeating-linear-gradient(-45deg, #39442f 0 9px, transparent 9px 18px);
+  border-radius: 2px;
+  opacity: 0.65;
+}
+
+[data-theme='cockpit'] .panel__eyebrow {
+  color: #ffaa00;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-weight: 400;
+  letter-spacing: 3px;
+}
+
+/* panel tabs:拨动开关排,钢黑底 + 拨杆圆头(active 上浮发琥珀光) */
+[data-theme='cockpit'] .panel__tabs {
+  z-index: 5;
+  background: linear-gradient(180deg, #1e2614, #141a10);
+  border: 1.5px solid #0c100a;
+  border-radius: 4px;
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.08), 0 3px 6px rgba(0, 0, 0, 0.45);
+  gap: 8px;
+  padding: 4px;
+}
+
+[data-theme='cockpit'] .panel__tab {
+  position: relative;
+  border-radius: 4px;
+  border: 1.5px solid #0c100a;
+  background: linear-gradient(180deg, #2a3421, #1e2614);
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 12px;
+  letter-spacing: 1px;
+  font-weight: 400;
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.08), 0 3px 6px rgba(0, 0, 0, 0.45);
+  padding-top: 22px;
+}
+
+/* 拨杆圆头:active 上浮 + 琥珀辉光 */
+[data-theme='cockpit'] .panel__tab::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #8a957c, #39422c 66%, #1a2011);
+  border: 1.5px solid #0c100a;
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.6);
+  transition: all 0.15s;
+}
+
+[data-theme='cockpit'] .panel__tab:hover:not(.is-active) {
+  filter: brightness(1.12);
+  color: #dfe3d2;
+}
+
+[data-theme='cockpit'] .panel__tab.is-active {
+  color: #ffaa00;
+  background: linear-gradient(180deg, #39472c, #2a3421);
+}
+
+[data-theme='cockpit'] .panel__tab.is-active::before {
+  transform: translateX(-50%) translateY(-3px) scale(1.12);
+  background: radial-gradient(circle at 35% 28%, #ffe9b0, #ffaa00 62%, #8a5c00);
+  box-shadow: 0 0 9px rgba(255, 170, 0, 0.75);
+}
+
+/* quota-card / usage-card:钢板卡 + 1.5px 深边 + inset 高光/外阴影 */
+[data-theme='cockpit'] .quota-card,
+[data-theme='cockpit'] .usage-card {
+  border-radius: 6px;
+  border: 1.5px solid #0c100a;
+  background: linear-gradient(180deg, #2a3421, #1f2716);
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.08), 0 4px 9px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme='cockpit'] .quota-card.is-accent {
+  background: linear-gradient(180deg, #39472c, #2a3421);
+}
+
+/* 高负载角标:HIGH LOAD 红色标签,贴卡片内顶部不出框(quota-card overflow:hidden) */
+[data-theme='cockpit'] .quota-card.is-accent::after {
+  content: 'HIGH LOAD';
+  position: absolute;
+  top: 7px;
+  right: 9px;
+  z-index: 2;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 8.5px;
+  letter-spacing: 1.5px;
+  color: #fff;
+  background: #cc1100;
+  padding: 2px 7px;
+  border-radius: 2px;
+  border: 1px solid #0c100a;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  transform: rotate(2deg);
+}
+
+[data-theme='cockpit'] .quota-card:hover,
+[data-theme='cockpit'] .usage-card:hover {
+  transform: translateY(-2px);
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.12),
+    0 0 22px rgba(255, 170, 0, 0.1), 0 8px 18px rgba(0, 0, 0, 0.5);
+  border-color: rgba(255, 170, 0, 0.35);
+}
+
+/* quota-card 标签:琥珀描边小铭牌 */
+[data-theme='cockpit'] .quota-card__label {
+  font-family: Impact, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 2px;
+  color: #ffaa00;
+  padding: 1px 8px;
+  border: 1px solid #8a5c00;
+  border-radius: 2px;
+}
+
+[data-theme='cockpit'] .quota-card.is-accent .quota-card__label {
+  color: #ff3b2f;
+  border-color: #cc1100;
+}
+
+[data-theme='cockpit'] .quota-card__mode {
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 8.5px;
+  letter-spacing: 1.5px;
+  color: #97a08b;
+}
+
+/* quota-card 数值:Nixie 琥珀辉光 */
+[data-theme='cockpit'] .quota-card__value {
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 26px;
+  font-weight: 400;
+  color: #ffaa00;
+  text-shadow: 0 0 8px rgba(255, 170, 0, 0.6), 0 0 20px rgba(255, 170, 0, 0.22);
+  animation: cockpit-nixie-flicker 3s steps(1) infinite;
+}
+
+[data-theme='cockpit'] .quota-card__reset {
+  color: #dfe3d2;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 10px;
+}
+
+[data-theme='cockpit'] .quota-card__expiry {
+  color: #6f7a64;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 8.5px;
+  letter-spacing: 1px;
+}
+
+/* 额度进度条:钢黑槽 + fill 随进度绿黄红渐变 + 竖线切割(照参考 .led-track/.led-fill) */
+[data-theme='cockpit'] .quota-card__progress {
+  height: 12px;
+  border-radius: 2px;
+  background: #10150d;
+  border: 1px solid #0c100a;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+}
+
+/* is-accent(5h 主卡)进度条与普通卡同高,main.css 默认 4px 在此覆盖 */
+[data-theme='cockpit'] .quota-card.is-accent .quota-card__progress {
+  height: 12px;
+}
+
+[data-theme='cockpit'] .quota-card__progress span {
+  border-radius: 1px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 3px, rgba(0, 0, 0, 0.55) 3px 5px),
+    linear-gradient(90deg, #37e05f 0 62%, #ffaa00 62% 84%, #ff3b2f 84% 100%);
+  box-shadow: 0 0 6px rgba(55, 224, 95, 0.35);
+}
+
+/* usage-card 标题:铭牌带(浅色金属底 + 深字) */
+[data-theme='cockpit'] .usage-card__title {
+  font-family: Impact, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 3px;
+  color: #0f130b;
+  background: linear-gradient(180deg, #d9dcc4, #aeb294);
+  padding: 3px 14px 2px;
+  border-radius: 2px;
+  border: 1px solid #0c100a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 2px 3px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme='cockpit'] .usage-card__title::before {
+  content: '';
+}
+
+/* usage-summary 分类着色:Nixie 风格分类辉光 */
+[data-theme='cockpit'] .usage-summary__value {
+  color: #ffaa00;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  text-shadow: 0 0 5px rgba(255, 170, 0, 0.4);
+}
+
+[data-theme='cockpit'] .usage-summary__value--input {
+  color: #79b8ff;
+  text-shadow: 0 0 5px rgba(121, 184, 255, 0.4);
+}
+
+[data-theme='cockpit'] .usage-summary__value--output {
+  color: #d2a8ff;
+  text-shadow: 0 0 5px rgba(210, 168, 255, 0.4);
+}
+
+[data-theme='cockpit'] .usage-summary__value--cached {
+  color: #37e05f;
+  text-shadow: 0 0 5px rgba(55, 224, 95, 0.4);
+}
+
+[data-theme='cockpit'] .usage-summary__value--cost {
+  color: #ff7b72;
+  text-shadow: 0 0 5px rgba(255, 123, 114, 0.4);
+}
+
+/* usage-chart 柱状图:凹槽(bar-wrap) + 绿黄红渐变柱 + 横线切割(照参考 .chart) */
+
+/* 柱状图:gap 收窄,30 天柱多不挤 */
+[data-theme='cockpit'] .usage-chart {
+  gap: 2px;
+}
+
+/* 柱状图凹槽:宽度跟 col 自适应(100%),最大 18px;7 天宽柱居中,30 天窄柱填满不挤 */
+[data-theme='cockpit'] .usage-chart__bar-wrap {
+  width: 100%;
+  max-width: 18px;
+  background: #10150d;
+  border: 1px solid #0c100a;
+  border-bottom: none;
+  border-radius: 3px 3px 0 0;
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.8);
+  padding: 2px;
+}
+
+/* 柱:绿黄红渐变 + 横线切割(照参考 .chart__bar);比例 58/82,刻度 4/6px */
+[data-theme='cockpit'] .usage-chart__bar--stack {
+  background:
+    repeating-linear-gradient(0deg, transparent 0 4px, rgba(0, 0, 0, 0.6) 4px 6px),
+    linear-gradient(0deg, #37e05f 0 58%, #ffaa00 58% 82%, #ff3b2f 82% 100%);
+  box-shadow: 0 0 8px rgba(55, 224, 95, 0.28);
+  border: none;
+}
+
+/* 三段 seg 透明覆盖,保留堆叠高度分隔(渐变由 --stack 统一呈现) */
+[data-theme='cockpit'] .usage-chart__bar-seg.is-input,
+[data-theme='cockpit'] .usage-chart__bar-seg.is-output,
+[data-theme='cockpit'] .usage-chart__bar-seg.is-cached {
+  background: transparent;
+}
+
+/* seg 间留细分隔线,仍能看出堆叠构成 */
+[data-theme='cockpit'] .usage-chart__bar-seg + .usage-chart__bar-seg {
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.45);
+}
+
+[data-theme='cockpit'] .usage-chart__date {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 8.5px;
+}
+
+/* detail-row:接线记录,钢板行 + hover 平移 + 左色条 */
+[data-theme='cockpit'] .detail-row {
+  border-radius: 4px;
+  border: 1px solid #0c100a;
+  background: linear-gradient(180deg, #2a3421, #212a18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  transition: all 0.14s;
+}
+
+[data-theme='cockpit'] .detail-row:hover {
+  transform: translateX(4px);
+  border-color: #3c463c;
+}
+
+[data-theme='cockpit'] .detail-row__icon {
+  border-radius: 4px;
+  background: #141a10;
+  border: 1px solid #0c100a;
+  color: #ffaa00;
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme='cockpit'] .detail-row__icon svg {
+  stroke-width: 2.2;
+}
+
+[data-theme='cockpit'] .detail-row__label {
+  color: #dfe3d2;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 12.5px;
+  letter-spacing: 0.5px;
+}
+
+[data-theme='cockpit'] .detail-row__link {
+  color: #dfe3d2;
+  border-bottom: 1px dashed #4a563f;
+}
+
+[data-theme='cockpit'] .detail-row__link:hover {
+  color: #ffaa00;
+  border-bottom-color: #8a5c00;
+}
+
+[data-theme='cockpit'] .detail-row__value {
+  color: #ffaa00;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 13px;
+}
+
+[data-theme='cockpit'] .detail-row__hint {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 9.5px;
+}
+
+[data-theme='cockpit'] .detail-row__badge {
+  border-radius: 2px;
+  border: 1px solid #0c100a;
+  background: #141a10;
+  color: #dfe3d2;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* 来源信息卡:钢板墨边 */
+[data-theme='cockpit'] .panel__meta {
+  border-radius: 4px;
+  border: 1px solid #0c100a;
+  background: linear-gradient(180deg, #2a3421, #212a18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+[data-theme='cockpit'] .panel__meta-row svg {
+  border-radius: 4px;
+  background: #141a10;
+  border: 1px solid #0c100a;
+  color: #ffaa00;
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme='cockpit'] .panel__meta-main {
+  color: #dfe3d2;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .panel__meta-badge {
+  border-radius: 2px;
+  border: 1px solid #0c100a;
+  background: #141a10;
+  color: #dfe3d2;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .panel__meta-hint {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* team-row:钢板卡 + 排名金属徽章 + hover 平移 */
+[data-theme='cockpit'] .team-row {
+  border-radius: 5px;
+  border: 1.5px solid #0c100a;
+  background: linear-gradient(180deg, #2a3421, #1f2716);
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.07), 0 4px 9px rgba(0, 0, 0, 0.45);
+  transition: all 0.14s;
+}
+
+[data-theme='cockpit'] .team-row:hover {
+  transform: translateX(4px);
+}
+
+[data-theme='cockpit'] .team-row.is-self {
+  border-color: #ffaa00;
+  background: linear-gradient(180deg, #39472c, #2a3421);
+}
+
+/* 排名:圆形金属徽章,前 3 琥珀/银/铜 */
+[data-theme='cockpit'] .team-row__rank {
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 30%, #ffe9b0, #ffaa00 70%);
+  border: 2px solid #0c100a;
+  color: #141a10;
+  font-family: Impact, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 400;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme='cockpit'] .team-row.is-top-1 .team-row__rank {
+  background: radial-gradient(circle at 38% 30%, #ffe9b0, #ffaa00 70%);
+}
+
+[data-theme='cockpit'] .team-row.is-top-2 .team-row__rank {
+  background: radial-gradient(circle at 38% 30%, #e8edf4, #9fb3c8 70%);
+}
+
+[data-theme='cockpit'] .team-row.is-top-3 .team-row__rank {
+  background: radial-gradient(circle at 38% 30%, #f0c89a, #c98a5a 70%);
+}
+
+[data-theme='cockpit'] .team-row__name {
+  color: #dfe3d2;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+
+[data-theme='cockpit'] .team-row__value {
+  color: #ffaa00;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 18px;
+  text-shadow: 0 0 6px rgba(255, 170, 0, 0.4);
+}
+
+[data-theme='cockpit'] .team-row__credit {
+  color: #ff7b72;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* 团队行进度条:钢黑槽 + fill 随进度绿黄红渐变 + 竖线切割(照参考 .twin__bar)
+   单条(仅 7d)比双条(5h+7d)更粗,与其他主题单/双条比例一致 */
+[data-theme='cockpit'] .team-row__bar {
+  height: 10px;
+  border-radius: 2px;
+  background: #10150d;
+  border: 1px solid #0c100a;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+  padding: 1px;
+}
+
+[data-theme='cockpit'] .team-row__window-bar {
+  height: 8px;
+  border-radius: 2px;
+  background: #10150d;
+  border: 1px solid #0c100a;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+  padding: 1px;
+}
+
+[data-theme='cockpit'] .team-row__bar-fill,
+[data-theme='cockpit'] .team-row__window-bar-fill {
+  border-radius: 1px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 3px, rgba(0, 0, 0, 0.55) 3px 5px),
+    linear-gradient(90deg, #37e05f 0 62%, #ffaa00 62% 84%, #ff3b2f 84% 100%);
+  box-shadow: 0 0 6px rgba(55, 224, 95, 0.35);
+}
+
+[data-theme='cockpit'] .team-row__window-label {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .team-row__window-value {
+  color: #dfe3d2;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* 团队行 tooltip:钢板墨边浮层 */
+[data-theme='cockpit'] .team-row__tooltip {
+  border-radius: 4px;
+  border: 1px solid #0c100a;
+  background: linear-gradient(180deg, #2a3421, #1f2716);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+[data-theme='cockpit'] .team-row__tooltip-label {
+  color: #dfe3d2;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .team-row__tooltip-value {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* 点赞:钢黑按钮 + 琥珀 active */
+[data-theme='cockpit'] .team-row__like {
+  border-radius: 2px;
+  border: 1px solid #0c100a;
+  background: #141a10;
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+[data-theme='cockpit'] .team-row__like:hover {
+  transform: scale(1.07);
+  color: #dfe3d2;
+}
+
+[data-theme='cockpit'] .team-row__like.is-liked {
+  background: #ffaa00;
+  color: #141a10;
+  border-color: #0c100a;
+}
+
+[data-theme='cockpit'] .team-row__like-count {
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* segmented:拨动开关排,钢黑底 + 琥珀 active */
+[data-theme='cockpit'] .segmented {
+  border-radius: 3px;
+  border: 1.5px solid #0c100a;
+  background: #141a10;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
+  gap: 4px;
+  padding: 3px;
+  min-height: 32px;
+}
+
+[data-theme='cockpit'] .segmented button {
+  border-radius: 3px;
+  border: 1px solid #0c100a;
+  background: transparent;
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  font-weight: 400;
+  min-height: 24px;
+  padding: 4px 11px;
+}
+
+[data-theme='cockpit'] .segmented button.is-active {
+  color: #ffaa00;
+  background: linear-gradient(180deg, #4a5636, #39442a);
+  border-color: #0c100a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='cockpit'] .segmented button:hover:not(.is-active):not(:disabled) {
+  color: #dfe3d2;
+}
+
+/* toggle-switch:飞行器拨杆,钢黑轨道 + 琥珀/绿开态 */
+[data-theme='cockpit'] .toggle-switch__track {
+  border-radius: 4px;
+  background: #10150d;
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.8), inset 0 0 0 1.5px #0c100a;
+}
+
+[data-theme='cockpit'] .toggle-switch.is-checked .toggle-switch__track {
+  background: rgba(55, 224, 95, 0.16);
+  box-shadow: inset 0 0 0 1.5px rgba(55, 224, 95, 0.6), 0 0 8px rgba(55, 224, 95, 0.25);
+}
+
+[data-theme='cockpit'] .toggle-switch__thumb {
+  border-radius: 3px;
+  background: radial-gradient(circle at 35% 28%, #8a957c, #39422c 66%, #1a2011);
+  border: 1.5px solid #0c100a;
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme='cockpit'] .toggle-switch.is-checked .toggle-switch__thumb {
+  background: radial-gradient(circle at 35% 28%, #b8ffd0, #37e05f 66%, #14701f);
+  box-shadow: 0 0 8px rgba(55, 224, 95, 0.6);
+}
+
+/* ghost-button:钢板按钮 + 应急红 close */
+[data-theme='cockpit'] .ghost-button {
+  border-radius: 3px;
+  border: 1px solid #0c100a;
+  background: linear-gradient(180deg, #39442f, #2a3423);
+  color: #dfe3d2;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 11.5px;
+  letter-spacing: 1px;
+  padding: 7px 16px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 3px 5px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme='cockpit'] .ghost-button:hover {
+  filter: brightness(1.15);
+  color: #dfe3d2;
+}
+
+[data-theme='cockpit'] .ghost-button:active {
+  transform: translateY(2px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+[data-theme='cockpit'] .ghost-button--accent {
+  background: radial-gradient(circle at 38% 30%, #ff5c4a, #cc1100 58%, #7a0a00);
+  color: #fff;
+  border: 2px solid #0c100a;
+  border-radius: 5px;
+  box-shadow: inset 0 2px 2px rgba(255, 255, 255, 0.3), 0 4px 8px rgba(0, 0, 0, 0.5);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
+  padding: 6px 15px;
+}
+
+[data-theme='cockpit'] .about-row__btn {
+  border: 1px solid #8a5c00;
+  background: linear-gradient(180deg, #39442f, #2a3423);
+  color: #ffaa00;
+  padding: 6px 15px;
+  font-size: 10.5px;
+}
+
+[data-theme='cockpit'] .about-row__btn:hover {
+  filter: brightness(1.15);
+}
+
+[data-theme='cockpit'] .about-row__btn:active {
+  transform: translateY(2px);
+}
+
+[data-theme='cockpit'] .about-row__btn:disabled {
+  opacity: 0.5;
+}
+
+[data-theme='cockpit'] .about-row__badge {
+  border-radius: 2px;
+  border: 1px solid #0c100a;
+  background: #141a10;
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .about-row__label {
+  color: #dfe3d2;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .about-row__version {
+  color: #ffaa00;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .about-row__hint {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* 下载进度条:钢黑槽 + fill 随进度绿黄红渐变 + 竖线切割(照参考) */
+[data-theme='cockpit'] .update-progress__bar {
+  border-radius: 2px;
+  background: #10150d;
+  border: 1px solid #0c100a;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+}
+
+[data-theme='cockpit'] .update-progress__fill {
+  border-radius: 1px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 3px, rgba(0, 0, 0, 0.55) 3px 5px),
+    linear-gradient(90deg, #37e05f 0 62%, #ffaa00 62% 84%, #ff3b2f 84% 100%);
+  box-shadow: 0 0 6px rgba(55, 224, 95, 0.35);
+}
+
+[data-theme='cockpit'] .update-progress__text {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* panel 底栏:钢板深色边 */
+[data-theme='cockpit'] .panel__footer {
+  border-top: 2px solid #0c100a;
+  border-bottom: 1.5px solid #0c100a;
+  background: linear-gradient(180deg, #3d4934, #2b3524 70%, #232c1d);
+  padding-bottom: 14px;
+}
+
+[data-theme='cockpit'] .panel__footer-meta {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 9.5px;
+  letter-spacing: 1.5px;
+}
+
+/* 设置区:钢板墨边凹陷 */
+[data-theme='cockpit'] .settings-section {
+  border-radius: 6px;
+  border: 1.5px solid #0c100a;
+  background: linear-gradient(180deg, #2a3421, #1f2716);
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.07);
+}
+
+[data-theme='cockpit'] .settings-section__title {
+  color: #ffaa00;
+  font-family: Impact, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-size: 12px;
+  letter-spacing: 3px;
+  font-weight: 400;
+}
+
+[data-theme='cockpit'] .settings-section__title::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: radial-gradient(circle at 38% 30%, #ffe9b0, #ffaa00);
+  border: 1px solid #0c100a;
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(255, 170, 0, 0.5);
+}
+
+[data-theme='cockpit'] .settings-section__title::after {
+  content: '';
+  flex: 1;
+  height: 6px;
+  background: repeating-linear-gradient(-45deg, #39442f 0 9px, transparent 9px 18px);
+  border-radius: 2px;
+  opacity: 0.65;
+}
+
+[data-theme='cockpit'] .setting-row {
+  border-radius: 4px;
+  border: 1px solid #0c100a;
+  background: linear-gradient(180deg, #2a3421, #212a18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: all 0.14s;
+}
+
+[data-theme='cockpit'] .setting-row:hover {
+  transform: translateX(3px);
+  border-color: #3c463c;
+}
+
+[data-theme='cockpit'] .setting-row > span:first-child,
+[data-theme='cockpit'] .setting-field__label {
+  color: #dfe3d2;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 12px;
+}
+
+[data-theme='cockpit'] .setting-field__hint {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .inline-input {
+  border-radius: 3px;
+  border: 1px solid #0c100a;
+  background: #141a10;
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme='cockpit'] .inline-input input {
+  color: #ffaa00;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  caret-color: #ffaa00;
+}
+
+[data-theme='cockpit'] .inline-input input[type='number'] {
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .inline-input em {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .inline-input span {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .inline-input:focus-within {
+  border-color: #8a5c00;
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 170, 0, 0.3);
+}
+
+/* 团队公告:NOTICE 铭牌 + 警示边 */
+[data-theme='cockpit'] .team-announcement {
+  border-radius: 5px;
+  border: 1.5px solid #8a5c00;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 12px, rgba(255, 170, 0, 0.045) 12px 13px),
+    linear-gradient(180deg, #333d26, #27301c);
+}
+
+[data-theme='cockpit'] .team-announcement::before {
+  content: 'NOTICE';
+  top: -9px;
+  left: 12px;
+  bottom: auto;
+  width: auto;
+  height: auto;
+  border-radius: 2px;
+  background: #ffaa00;
+  color: #0f130b;
+  padding: 2px 9px;
+  border: 1px solid #0c100a;
+  font-family: Impact, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-size: 9px;
+  letter-spacing: 2px;
+  font-weight: 400;
+  transform: rotate(-2deg);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme='cockpit'] .team-announcement__label {
+  color: #ffaa00;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  letter-spacing: 2px;
+}
+
+[data-theme='cockpit'] .team-announcement__meta {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .team-announcement__text {
+  color: #dfe3d2;
+  line-height: 1.7;
+}
+
+[data-theme='cockpit'] .team-announcement__acknowledge {
+  border-radius: 3px;
+  border: 1px solid #8a5c00;
+  background: #141a10;
+  color: #ffaa00;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 6px 16px;
+}
+
+[data-theme='cockpit'] .team-announcement__acknowledge:hover {
+  background: #ffaa00;
+  color: #141a10;
+}
+
+[data-theme='cockpit'] .team-announcement__acknowledge:active {
+  transform: translateY(2px);
+}
+
+/* 团队广播消息:电传记录,钢黑底 + 左色条 */
+[data-theme='cockpit'] .team-broadcast__item {
+  border-radius: 3px;
+  border: 1px solid #0c100a;
+  background: #141a10;
+  border-left: 3px solid #ffaa00;
+}
+
+[data-theme='cockpit'] .team-broadcast__item:nth-child(even) {
+  border-left: 1px solid #0c100a;
+  border-right: 3px solid #37e05f;
+}
+
+[data-theme='cockpit'] .team-broadcast__name {
+  color: #ffaa00;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .team-broadcast__time {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .team-broadcast__text {
+  color: #dfe3d2;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  line-height: 1.65;
+}
+
+[data-theme='cockpit'] .team-broadcast__input {
+  border-radius: 3px;
+  border: 1.5px solid #0c100a;
+  background: #10150d;
+  color: #ffaa00;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  caret-color: #ffaa00;
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.7);
+}
+
+[data-theme='cockpit'] .team-broadcast__input::placeholder {
+  color: #4a563f;
+}
+
+[data-theme='cockpit'] .team-broadcast__input:focus {
+  border-color: #8a5c00;
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 170, 0, 0.3);
+}
+
+[data-theme='cockpit'] .team-broadcast__send {
+  border-radius: 3px;
+  border: 1px solid #0c100a;
+  background: linear-gradient(180deg, #4a5636, #39442a);
+  color: #141a10;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: 11.5px;
+  letter-spacing: 1px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  padding: 9px 18px;
+}
+
+[data-theme='cockpit'] .team-broadcast__send:hover {
+  background: linear-gradient(180deg, #ffaa00, #8a5c00);
+  color: #141a10;
+}
+
+[data-theme='cockpit'] .team-broadcast__send:active {
+  transform: translateY(2px);
+}
+
+[data-theme='cockpit'] .team-broadcast__error {
+  color: #ff7b72;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* 自定义时间面板:钢板墨边凹陷 */
+[data-theme='cockpit'] .usage-range-panel {
+  border-radius: 6px;
+  border: 1.5px solid #0c100a;
+  background: linear-gradient(180deg, #2a3421, #1f2716);
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.07);
+}
+
+[data-theme='cockpit'] .usage-range-field__label {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .usage-range-field input {
+  border-radius: 3px;
+  border: 1px solid #0c100a;
+  background: #141a10;
+  color: #ffaa00;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  color-scheme: dark;
+}
+
+[data-theme='cockpit'] .usage-range-field input:focus-visible {
+  border-color: #8a5c00;
+  box-shadow: 0 0 0 1px rgba(255, 170, 0, 0.3);
+}
+
+[data-theme='cockpit'] .usage-range-apply {
+  border-radius: 3px;
+  border: 1px solid #0c100a;
+  background: linear-gradient(180deg, #4a5636, #39442a);
+  color: #141a10;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-weight: 400;
+  letter-spacing: 1px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+[data-theme='cockpit'] .usage-range-apply:disabled {
+  opacity: 0.5;
+}
+
+/* 模型用量榜:钢黑轨道 + LED 能量填充 */
+[data-theme='cockpit'] .model-board__title {
+  color: #ffaa00;
+  font-family: Impact, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-size: 12.5px;
+  letter-spacing: 3px;
+  font-weight: 400;
+  border-bottom: 2px solid #8a5c00;
+  padding-bottom: 4px;
+}
+
+[data-theme='cockpit'] .model-board__title::before {
+  content: '';
+}
+
+/* 模型榜进度条:钢黑槽 + fill 随进度绿黄红渐变 + 竖线切割(照参考) */
+[data-theme='cockpit'] .model-board__track {
+  border-radius: 2px;
+  background: #10150d;
+  border: 1px solid #0c100a;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+}
+
+[data-theme='cockpit'] .model-board__fill {
+  border-radius: 1px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 3px, rgba(0, 0, 0, 0.55) 3px 5px),
+    linear-gradient(90deg, #37e05f 0 62%, #ffaa00 62% 84%, #ff3b2f 84% 100%);
+  box-shadow: 0 0 8px rgba(55, 224, 95, 0.3);
+}
+
+[data-theme='cockpit'] .model-board__name {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .model-board__meta {
+  color: #dfe3d2;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* 浮层:钢板墨边 */
+[data-theme='cockpit'] .model-board__tooltip,
+[data-theme='cockpit'] .usage-tooltip {
+  border-radius: 4px;
+  border: 1px solid #0c100a;
+  background: linear-gradient(180deg, #2a3421, #1f2716);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+[data-theme='cockpit'] .usage-tooltip__date {
+  color: #ffaa00;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  letter-spacing: 1px;
+}
+
+[data-theme='cockpit'] .usage-tooltip__row {
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='cockpit'] .usage-tooltip__row span:last-child {
+  color: #dfe3d2;
+}
+
+[data-theme='cockpit'] .usage-tooltip__cost {
+  border-top: 2px solid #0c100a;
+}
+
+/* 空状态:虚线墨框 */
+[data-theme='cockpit'] .team-empty,
+[data-theme='cockpit'] .team-broadcast__empty {
+  border-radius: 4px;
+  border: 2px dashed #4a563f;
+  color: #97a08b;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* 滚动条:钢黑粗条 + 琥珀 hover */
+[data-theme='cockpit'] .panel__content::-webkit-scrollbar,
+[data-theme='cockpit'] .team-broadcast__feed::-webkit-scrollbar {
+  width: 10px;
+}
+
+[data-theme='cockpit'] .panel__content::-webkit-scrollbar-track,
+[data-theme='cockpit'] .team-broadcast__feed::-webkit-scrollbar-track {
+  background: #141a10;
+}
+
+[data-theme='cockpit'] .panel__content::-webkit-scrollbar-thumb,
+[data-theme='cockpit'] .team-broadcast__feed::-webkit-scrollbar-thumb {
+  border: 2px solid #141a10;
+  border-radius: 99px;
+  background: #4a563c;
+}
+
+[data-theme='cockpit'] .panel__content::-webkit-scrollbar-thumb:hover,
+[data-theme='cockpit'] .team-broadcast__feed::-webkit-scrollbar-thumb:hover {
+  background: #ffaa00;
+}
+
+/* 入场:设备通电,暗→亮闪烁唤醒 */
+@keyframes cockpit-power-on {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+    filter: brightness(0.3);
+  }
+  60% {
+    opacity: 1;
+    filter: brightness(1.25);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: brightness(1);
+  }
+}
+
+[data-theme='cockpit'] .panel {
+  animation: cockpit-power-on 0.55s cubic-bezier(0.3, 0.9, 0.3, 1) backwards;
+}
+
+/* 状态反馈优先于常驻数码管闪烁 */
+[data-theme='cockpit'] .capsule__percent.is-just-refreshed {
+  animation: capsule-percent-pop 680ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 告急态:百分比变红 + 呼吸(指针红) */
+[data-theme='cockpit'] .capsule__percent.is-critical {
+  color: #ff3b2f;
+  text-shadow: 0 0 7px rgba(255, 59, 47, 0.7), 0 0 18px rgba(255, 59, 47, 0.3);
+  animation: capsule-critical-pulse 1.6s ease-in-out infinite;
+}
 
