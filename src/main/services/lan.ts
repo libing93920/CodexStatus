@@ -474,16 +474,18 @@ export class LanService {
     const entry: PeerEntry = {
       id: peerId,
       nickname: resolvedNickname,
-      authMode: snapshot?.authMode ?? existing?.authMode,
-      remainingPercent: snapshot?.remainingPercent ?? existing?.remainingPercent,
-      weeklyResetsAt: snapshot?.weeklyResetsAt ?? existing?.weeklyResetsAt,
-      bestModelLabel: snapshot?.bestModelLabel ?? existing?.bestModelLabel,
-      resetCreditCount: snapshot?.resetCreditCount ?? existing?.resetCreditCount,
-      shortWindow: snapshot?.shortWindow ?? existing?.shortWindow,
-      longWindow: snapshot?.longWindow ?? existing?.longWindow,
-      tokenUsage: snapshot?.tokenUsage ?? existing?.tokenUsage,
-      tokenUsageByAgent: snapshot?.tokenUsageByAgent ?? existing?.tokenUsageByAgent,
-      appVersion: snapshot?.appVersion ?? existing?.appVersion,
+      // 快照是"当前完整状态"的载体:字段缺失(序列化去掉 undefined)即表示对方当前无该数据,
+      // 必须覆盖旧值,否则已消失的 5h/额度等会因 ?? 兜底永久残留;只有快照本身为空(hello 未带)才保留旧值
+      authMode: snapshot ? snapshot.authMode : existing?.authMode,
+      remainingPercent: snapshot ? snapshot.remainingPercent : existing?.remainingPercent,
+      weeklyResetsAt: snapshot ? snapshot.weeklyResetsAt : existing?.weeklyResetsAt,
+      bestModelLabel: snapshot ? snapshot.bestModelLabel : existing?.bestModelLabel,
+      resetCreditCount: snapshot ? snapshot.resetCreditCount : existing?.resetCreditCount,
+      shortWindow: snapshot ? snapshot.shortWindow : existing?.shortWindow,
+      longWindow: snapshot ? snapshot.longWindow : existing?.longWindow,
+      tokenUsage: snapshot ? snapshot.tokenUsage : existing?.tokenUsage,
+      tokenUsageByAgent: snapshot ? snapshot.tokenUsageByAgent : existing?.tokenUsageByAgent,
+      appVersion: snapshot ? snapshot.appVersion : existing?.appVersion,
       updatedAt: new Date().toISOString()
     }
     this.peers.set(peerId, entry)
