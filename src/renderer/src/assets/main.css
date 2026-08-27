@@ -1498,6 +1498,12 @@ body {
   min-width: 0;
 }
 
+/* 横版:metric-box 宽度固定等于槽宽,百分比文字居中其上;
+   不再按百分比文字收缩,避免 0% 时槽比 100% 时窄 */
+.capsule__layout--h .capsule__metric-box {
+  width: var(--capsule-progress-w, 100%);
+}
+
 .capsule__metric-box .capsule__progress {
   width: 100%;
 }
