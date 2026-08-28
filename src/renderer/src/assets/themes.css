@@ -750,6 +750,20 @@
   );
 }
 
+/* 竖版 orb:槽固定 30px 宽,额度 0% 时槽不随百分比文字收缩变短(同 inksong/greenhouse) */
+[data-theme='cyber'] .capsule--orb .capsule__metric-box .capsule__progress {
+  width: 30px;
+}
+
+/* 无固定宽的主题:竖版 orb 槽统一固定 35px,额度 0% 时不随百分比文字收缩变短 */
+[data-theme='midnight'] .capsule--orb .capsule__metric-box .capsule__progress,
+[data-theme='aurora'] .capsule--orb .capsule__metric-box .capsule__progress,
+[data-theme='titan'] .capsule--orb .capsule__metric-box .capsule__progress,
+[data-theme='poster'] .capsule--orb .capsule__metric-box .capsule__progress,
+[data-theme='swiss'] .capsule--orb .capsule__metric-box .capsule__progress {
+  width: 35px;
+}
+
 /* 面板:保留 10 格分段刻度 */
 [data-theme='cyber'] .quota-card__progress span {
   background: var(--metric-accent, var(--capsule-accent));
