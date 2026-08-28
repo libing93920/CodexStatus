@@ -76,7 +76,8 @@ const THEME_OPTIONS: ReadonlyArray<{ label: string; value: ThemeId }> = [
   { label: '海报', value: 'poster' },
   { label: '孟菲斯', value: 'memphis' },
   { label: '座舱', value: 'cockpit' },
-  { label: '宋韵', value: 'inksong' }
+  { label: '宋韵', value: 'inksong' },
+  { label: '温室', value: 'greenhouse' }
 ]
 
 interface CapsulePointerState {
@@ -622,15 +623,22 @@ function App(): React.JSX.Element {
     : snapshot.rateLimitSource === 'none'
       ? copy.noData
       : snapshot.sourceHost
-  const rateLimitWindows = [...snapshot.rateLimits].sort((a, b) => {
-    // 短窗口(5h)排在前,长窗口(7d)排在后,确保胶囊取到5h优先
-    const am = a.windowMinutes ?? 0
-    const bm = b.windowMinutes ?? 0
-    return am - bm
-  }).map((w) => ({
-    ...w,
-    label: w.label === '7d' && settings.locale === 'zh-CN' ? '1周' : w.label === '5h' && settings.locale === 'zh-CN' ? '5小时' : w.label
-  }))
+  const rateLimitWindows = [...snapshot.rateLimits]
+    .sort((a, b) => {
+      // 短窗口(5h)排在前,长窗口(7d)排在后,确保胶囊取到5h优先
+      const am = a.windowMinutes ?? 0
+      const bm = b.windowMinutes ?? 0
+      return am - bm
+    })
+    .map((w) => ({
+      ...w,
+      label:
+        w.label === '7d' && settings.locale === 'zh-CN'
+          ? '1周'
+          : w.label === '5h' && settings.locale === 'zh-CN'
+            ? '5小时'
+            : w.label
+    }))
   // 所有窗口都用 QuotaCard 展示(5h+7d);胶囊百分比+进度条优先取短窗口,无短窗口则取长窗口兜底
   const cardWindows = rateLimitWindows
   const cardWindowCount = cardWindows.length
@@ -757,7 +765,8 @@ function App(): React.JSX.Element {
   // 组内最高版本(含 self):排行榜"最新"基准,低于它的成员标黄点
   const maxAppVersion = (snapshot.teamPeers ?? []).reduce<string | undefined>(
     (max, peer) =>
-      peer.appVersion !== undefined && (max === undefined || compareSemver(peer.appVersion, max) > 0)
+      peer.appVersion !== undefined &&
+      (max === undefined || compareSemver(peer.appVersion, max) > 0)
         ? peer.appVersion
         : max,
     undefined
@@ -933,9 +942,9 @@ function App(): React.JSX.Element {
               ? resolveModelColor(snapshot.bestModelPick.label)
               : undefined,
             hint: snapshot.bestModelPick
-              ? (settings.locale === 'zh-CN'
+              ? settings.locale === 'zh-CN'
                 ? `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/题`
-                : `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/task`)
+                : `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/task`
               : undefined
           }
         ]
@@ -955,9 +964,11 @@ function App(): React.JSX.Element {
 
   // 有窗口带重置倒计时时每秒 tick 刷新显示
   const hasResetWindow = rateLimitWindows.some((w) => w.resetsAt !== undefined)
-  const hasAnnouncementTime = windowRole === 'panel' && panelView === 'team' && announcement !== null
+  const hasAnnouncementTime =
+    windowRole === 'panel' && panelView === 'team' && announcement !== null
   useEffect(() => {
-    const isPanelWithResetWindow = windowRole === 'panel' && panelView === 'details' && hasResetWindow
+    const isPanelWithResetWindow =
+      windowRole === 'panel' && panelView === 'details' && hasResetWindow
     const isCapsuleWithResetWindow = windowRole === 'capsule' && hasResetWindow
     if (!isPanelWithResetWindow && !isCapsuleWithResetWindow && !hasAnnouncementTime) {
       return
@@ -1526,7 +1537,11 @@ function App(): React.JSX.Element {
                       fontPx={apiHitFont}
                       withProgress
                     />
-                    <ApiCapsuleStat label={copy.usageToday} value={apiTokenText} fontPx={apiTokenFont} />
+                    <ApiCapsuleStat
+                      label={copy.usageToday}
+                      value={apiTokenText}
+                      fontPx={apiTokenFont}
+                    />
                   </>
                 ) : (
                   <>
@@ -1549,7 +1564,11 @@ function App(): React.JSX.Element {
                 {isApiMode ? (
                   <>
                     {/* API 模式横版:今日 token → 缓存命中率(含进度) → 推荐模型 */}
-                    <ApiCapsuleStat label={copy.usageToday} value={apiTokenText} fontPx={apiTokenFont} />
+                    <ApiCapsuleStat
+                      label={copy.usageToday}
+                      value={apiTokenText}
+                      fontPx={apiTokenFont}
+                    />
                     <ApiCapsuleStat
                       label={copy.usageCacheHit}
                       value={apiHitText}
@@ -1642,10 +1661,7 @@ function App(): React.JSX.Element {
                 </div>
               ) : null}
 
-              <UsageCard
-                authMode={snapshot.authMode}
-                locale={settings.locale}
-              />
+              <UsageCard authMode={snapshot.authMode} locale={settings.locale} />
 
               <div className="panel__rows">
                 {detailRows.map((row) => (
@@ -1666,7 +1682,8 @@ function App(): React.JSX.Element {
 
             <div className="panel__footer">
               <span className="panel__footer-meta">
-                {sourceValue} · {copy.lastRefreshHint} · {formatRelativeDate(snapshot.generatedAt, settings.locale)}
+                {sourceValue} · {copy.lastRefreshHint} ·{' '}
+                {formatRelativeDate(snapshot.generatedAt, settings.locale)}
               </span>
               <button className="ghost-button" onClick={closePanel} type="button">
                 <CloseIcon />
@@ -1779,7 +1796,9 @@ function App(): React.JSX.Element {
                             locale={settings.locale}
                             maxTokens={teamTokenMax}
                             nickname={peer.nickname || copy.teamAnonymous}
-                            onLike={showLikes ? () => void handleReactionToggle(peer.id) : undefined}
+                            onLike={
+                              showLikes ? () => void handleReactionToggle(peer.id) : undefined
+                            }
                             rank={index + 1}
                             selfLiked={like?.selfLiked}
                             tokens={peer.tokenUsage?.[teamTokenWindow]}
@@ -2135,11 +2154,7 @@ function App(): React.JSX.Element {
                       </button>
                     )}
                     {updateState === 'checking' && (
-                      <button
-                        className="ghost-button about-row__btn"
-                        disabled
-                        type="button"
-                      >
+                      <button className="ghost-button about-row__btn" disabled type="button">
                         {copy.checking}
                       </button>
                     )}
@@ -2193,7 +2208,9 @@ function App(): React.JSX.Element {
                     </div>
                   )}
                   {updateState === 'downloaded' && (
-                    <p className="about-row__hint">{copy.downloaded} v{updateVersion}</p>
+                    <p className="about-row__hint">
+                      {copy.downloaded} v{updateVersion}
+                    </p>
                   )}
                   {updateState === 'error' && (
                     <p className="about-row__hint about-row__hint--error">
@@ -2495,7 +2512,10 @@ function UsageCard({
   const days = usage?.days ?? []
   const totals = usage?.totals
   const hasData = usage?.available === true && totals !== undefined
-  const chartMax = Math.max(1, days.reduce((max, day) => Math.max(max, day.input + day.output), 0))
+  const chartMax = Math.max(
+    1,
+    days.reduce((max, day) => Math.max(max, day.input + day.output), 0)
+  )
   // API Key 模式:真实账单可用时用账单金额替代 token 估算
   const spend = spendByWindow[presetWindow]
   const spendMap =
@@ -2584,7 +2604,11 @@ function UsageCard({
                 value={formatCacheHit(rangeTotals.input, rangeTotals.cachedInput)}
                 tone="cached"
               />
-              <UsageSummaryItem label={copy.usageCost} value={formatUsd(rangeTotals.cost)} tone="cost" />
+              <UsageSummaryItem
+                label={copy.usageCost}
+                value={formatUsd(rangeTotals.cost)}
+                tone="cost"
+              />
             </div>
             <UsageBar day={rangeDay} locale={locale} />
             {/* 自定义区间无真实账单口径,始终标注估算 */}
@@ -2598,7 +2622,10 @@ function UsageCard({
       ) : (
         <>
           <div className="usage-summary">
-            <UsageSummaryItem label={copy.usageTotal} value={formatCompactTokens(totals.total, locale)} />
+            <UsageSummaryItem
+              label={copy.usageTotal}
+              value={formatCompactTokens(totals.total, locale)}
+            />
             <UsageSummaryItem
               label={copy.usageInput}
               value={formatCompactTokens(totals.input, locale)}
@@ -2645,10 +2672,22 @@ function UsageCard({
                     onMouseEnter={() => setHoveredIndex(index)}
                   >
                     <span className="usage-chart__bar-wrap">
-                      <span className="usage-chart__bar usage-chart__bar--stack" style={{ height: `${percent}%` }}>
-                        <span className="usage-chart__bar-seg is-cached" style={{ height: `${cachedPct}%` }} />
-                        <span className="usage-chart__bar-seg is-input" style={{ height: `${inputPct}%` }} />
-                        <span className="usage-chart__bar-seg is-output" style={{ height: `${outputPct}%` }} />
+                      <span
+                        className="usage-chart__bar usage-chart__bar--stack"
+                        style={{ height: `${percent}%` }}
+                      >
+                        <span
+                          className="usage-chart__bar-seg is-cached"
+                          style={{ height: `${cachedPct}%` }}
+                        />
+                        <span
+                          className="usage-chart__bar-seg is-input"
+                          style={{ height: `${inputPct}%` }}
+                        />
+                        <span
+                          className="usage-chart__bar-seg is-output"
+                          style={{ height: `${outputPct}%` }}
+                        />
                       </span>
                     </span>
                     <span
@@ -2664,9 +2703,7 @@ function UsageCard({
           {costIsReal ? <p className="usage-card__spend-hint">{copy.spendReal}</p> : null}
         </>
       )}
-      {models && models.length > 0 ? (
-        <ModelLeaderboard models={models} locale={locale} />
-      ) : null}
+      {models && models.length > 0 ? <ModelLeaderboard models={models} locale={locale} /> : null}
     </section>
   )
 }
@@ -2739,11 +2776,7 @@ function RangePanel({
             max={maxDate}
             onChange={(event) => setEndDate(event.target.value)}
           />
-          <input
-            type="time"
-            value={endTime}
-            onChange={(event) => setEndTime(event.target.value)}
-          />
+          <input type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} />
         </div>
       </div>
       <button
@@ -3001,7 +3034,10 @@ function DetailRow({
       {value || badge || hint ? (
         <div className="detail-row__value-group">
           {value ? (
-            <span className="detail-row__value" style={valueColor ? { color: valueColor } : undefined}>
+            <span
+              className="detail-row__value"
+              style={valueColor ? { color: valueColor } : undefined}
+            >
               {value}
             </span>
           ) : null}
@@ -3058,7 +3094,8 @@ function TeamRow({
       ? undefined
       : Math.min(100, Math.max(0, remainingPercent))
   const accent = resolveMetricColor(percent, 'remaining')
-  const rankClass = rank === 1 ? ' is-top-1' : rank === 2 ? ' is-top-2' : rank === 3 ? ' is-top-3' : ''
+  const rankClass =
+    rank === 1 ? ' is-top-1' : rank === 2 ? ' is-top-2' : rank === 3 ? ' is-top-3' : ''
   const hasBoth = shortWindow !== undefined && longWindow !== undefined
   return (
     <div
@@ -3084,14 +3121,8 @@ function TeamRow({
       </span>
       {hasBoth ? (
         <div className="team-row__windows">
-          <WindowLine
-            label={shortWindow.label}
-            percent={shortWindow.remainingPercent}
-          />
-          <WindowLine
-            label={longWindow.label}
-            percent={longWindow.remainingPercent}
-          />
+          <WindowLine label={shortWindow.label} percent={shortWindow.remainingPercent} />
+          <WindowLine label={longWindow.label} percent={longWindow.remainingPercent} />
         </div>
       ) : (
         <span className="team-row__bar">
@@ -3235,13 +3266,7 @@ function TokenRow({
   )
 }
 
-function WindowLine({
-  label,
-  percent
-}: {
-  label: string
-  percent?: number
-}): React.JSX.Element {
+function WindowLine({ label, percent }: { label: string; percent?: number }): React.JSX.Element {
   const safePercent =
     percent === undefined || !Number.isFinite(percent)
       ? undefined
@@ -3384,14 +3409,16 @@ function SegmentedControl({
     }
   }
 
-  const handleOptionClick = (optionValue: string) => (event: React.MouseEvent<HTMLButtonElement>): void => {
-    if (hasDraggedRef.current) {
-      event.preventDefault()
-      event.stopPropagation()
-      return
+  const handleOptionClick =
+    (optionValue: string) =>
+    (event: React.MouseEvent<HTMLButtonElement>): void => {
+      if (hasDraggedRef.current) {
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+      onChange(optionValue)
     }
-    onChange(optionValue)
-  }
 
   return (
     <div
@@ -3818,7 +3845,11 @@ function HeartEffect({ kind }: { kind: HeartEffectKind }): React.JSX.Element {
         </span>
       ))}
       {params.wave.map((ring) => (
-        <span key={ring.key} className="heart-effect__wave" style={{ '--wave-delay': ring.delay } as CSSProperties} />
+        <span
+          key={ring.key}
+          className="heart-effect__wave"
+          style={{ '--wave-delay': ring.delay } as CSSProperties}
+        />
       ))}
       {params.shooting.map((shoot) => (
         <span

@@ -96,7 +96,8 @@
   --panel-radius: 26px;
   --panel-clip: inset(0 round 26px);
   --panel-border: 1px solid rgba(255, 255, 255, 0.09);
-  --panel-tint: radial-gradient(circle at 22% 0%, rgba(88, 232, 177, 0.06) 0%, transparent 46%),
+  --panel-tint:
+    radial-gradient(circle at 22% 0%, rgba(88, 232, 177, 0.06) 0%, transparent 46%),
     radial-gradient(circle at 90% 8%, rgba(88, 101, 242, 0.08) 0%, transparent 42%);
   --panel-bg: linear-gradient(168deg, #0d1118 0%, #131926 100%);
   --panel-shadow: 0 32px 72px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.07);
@@ -198,7 +199,9 @@
     #b585ff 240deg,
     #5865f2 360deg
   );
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   animation: aurora-spin 7s linear infinite;
@@ -488,17 +491,11 @@
   --capsule-orb-radius: 14px;
   --capsule-clip: none;
   --capsule-text: #eceded;
-  --capsule-bg: repeating-linear-gradient(
-      115deg,
-      rgba(255, 255, 255, 0.012) 0 2px,
-      transparent 2px 4px
-    ),
+  --capsule-bg:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.012) 0 2px, transparent 2px 4px),
     linear-gradient(170deg, #232327 0%, #131316 55%, #0d0d10 100%);
-  --capsule-orb-bg: repeating-linear-gradient(
-      115deg,
-      rgba(255, 255, 255, 0.012) 0 2px,
-      transparent 2px 4px
-    ),
+  --capsule-orb-bg:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.012) 0 2px, transparent 2px 4px),
     linear-gradient(175deg, #232327 0%, #131316 55%, #0d0d10 100%);
   --capsule-edge: rgba(255, 255, 255, 0.05);
   --capsule-edge-soft: rgba(255, 255, 255, 0.16);
@@ -507,16 +504,13 @@
   --panel-radius: 22px;
   --panel-clip: inset(0 round 22px);
   --panel-border: 0;
-  --panel-tint: repeating-linear-gradient(
-      115deg,
-      rgba(255, 255, 255, 0.008) 0 2px,
-      transparent 2px 4px
-    ),
+  --panel-tint:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.008) 0 2px, transparent 2px 4px),
     radial-gradient(circle at 18% 0%, rgba(217, 164, 65, 0.05) 0%, transparent 40%);
   --panel-bg: linear-gradient(168deg, #1a1a1e 0%, #101013 100%);
-  --panel-shadow: 0 32px 72px rgba(0, 0, 0, 0.6),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 -1px 0 rgba(0, 0, 0, 0.6),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --panel-shadow:
+    0 32px 72px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
   /* 色板 */
   --panel-card: linear-gradient(170deg, #26262b 0%, #18181c 100%);
   --panel-card-2: linear-gradient(170deg, #202024 0%, #151518 100%);
@@ -601,13 +595,23 @@
   content: '';
   position: absolute;
   inset: -40%;
-  background: linear-gradient(115deg, transparent 42%, rgba(217, 164, 65, 0.13) 50%, transparent 58%);
+  background: linear-gradient(
+    115deg,
+    transparent 42%,
+    rgba(217, 164, 65, 0.13) 50%,
+    transparent 58%
+  );
   transform: translateX(-70%);
   animation: titan-gold-sweep 5.5s ease-in-out infinite;
 }
 
 [data-theme='titan'] .capsule--orb .capsule__deco::after {
-  background: linear-gradient(175deg, transparent 42%, rgba(217, 164, 65, 0.13) 50%, transparent 58%);
+  background: linear-gradient(
+    175deg,
+    transparent 42%,
+    rgba(217, 164, 65, 0.13) 50%,
+    transparent 58%
+  );
   transform: translateY(-70%);
   animation-name: titan-gold-sweep-y;
 }
@@ -678,7 +682,12 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.75) 50%, transparent 70%);
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.75) 50%,
+    transparent 70%
+  );
   transform: translateX(-110%);
   animation: aurora-shimmer 2.8s ease-in-out infinite;
   animation-delay: 1.2s;
@@ -768,7 +777,9 @@
   height: 5px;
   border-radius: 3px;
   background: linear-gradient(180deg, #060608, #1a1a1f);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.8),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05);
   position: relative;
 }
 
@@ -850,7 +861,9 @@
   background: linear-gradient(135deg, rgba(88, 101, 242, 0.34), rgba(56, 232, 177, 0.26));
   border-color: rgba(140, 180, 255, 0.35);
   color: #fff;
-  box-shadow: 0 4px 14px rgba(88, 101, 242, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 4px 14px rgba(88, 101, 242, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 [data-theme='aurora'] .panel__tab {
   color: #93a1b5;
@@ -891,7 +904,9 @@
   background: linear-gradient(180deg, #0a0a0c, #141417);
   border: 0;
   border-radius: 12px;
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.7),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05);
 }
 [data-theme='titan'] .panel__tab {
   color: #7d8089;
@@ -906,7 +921,9 @@
   background: linear-gradient(180deg, #33333a, #232329);
   color: #ecd9ae;
   border: 0;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.14),
+  box-shadow:
+    0 3px 8px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
     inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
@@ -952,16 +969,22 @@
   background: linear-gradient(165deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02));
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 [data-theme='aurora'] .quota-card:hover {
   border-color: rgba(140, 190, 255, 0.35);
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.32), 0 0 22px rgba(88, 101, 242, 0.14),
+  box-shadow:
+    0 16px 34px rgba(0, 0, 0, 0.32),
+    0 0 22px rgba(88, 101, 242, 0.14),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 [data-theme='aurora'] .usage-card:hover {
   border-color: rgba(140, 190, 255, 0.35);
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.32), 0 0 22px rgba(88, 101, 242, 0.14);
+  box-shadow:
+    0 16px 34px rgba(0, 0, 0, 0.32),
+    0 0 22px rgba(88, 101, 242, 0.14);
 }
 [data-theme='aurora'] .quota-card.is-accent {
   background: linear-gradient(165deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025));
@@ -981,7 +1004,14 @@
 [data-theme='cyber'] .quota-card,
 [data-theme='cyber'] .usage-card {
   border-radius: 0;
-  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  clip-path: polygon(
+    10px 0,
+    100% 0,
+    100% calc(100% - 10px),
+    calc(100% - 10px) 100%,
+    0 100%,
+    0 10px
+  );
   border: 1px solid rgba(0, 255, 213, 0.2);
   background: rgba(0, 255, 213, 0.028);
   box-shadow: none;
@@ -992,7 +1022,9 @@
 }
 [data-theme='cyber'] .quota-card:hover {
   background: rgba(0, 255, 213, 0.06);
-  box-shadow: 0 0 22px rgba(0, 255, 213, 0.12), inset 0 0 18px rgba(0, 255, 213, 0.05);
+  box-shadow:
+    0 0 22px rgba(0, 255, 213, 0.12),
+    inset 0 0 18px rgba(0, 255, 213, 0.05);
   transform: translateY(-2px);
   border-color: rgba(0, 255, 213, 0.2);
 }
@@ -1006,7 +1038,9 @@
   background: rgba(255, 179, 71, 0.04);
 }
 [data-theme='cyber'] .quota-card.is-accent:hover {
-  box-shadow: 0 0 22px rgba(255, 179, 71, 0.14), inset 0 0 18px rgba(255, 179, 71, 0.05);
+  box-shadow:
+    0 0 22px rgba(255, 179, 71, 0.14),
+    inset 0 0 18px rgba(255, 179, 71, 0.05);
 }
 [data-theme='cyber'] .quota-card__label {
   font-weight: 700;
@@ -1050,22 +1084,29 @@
   border-radius: 16px;
   border: 0;
   background: linear-gradient(170deg, #26262b 0%, #18181c 100%);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1),
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
     inset 0 0 0 1px rgba(255, 255, 255, 0.045);
 }
 [data-theme='titan'] .usage-card {
   background: linear-gradient(170deg, #222227 0%, #16161a 100%);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.09),
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
     inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 [data-theme='titan'] .quota-card:hover {
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5),
+  box-shadow:
+    0 16px 34px rgba(0, 0, 0, 0.5),
     0 0 24px color-mix(in srgb, var(--metric-accent, #d9a441) 10%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
     inset 0 0 0 1px color-mix(in srgb, var(--metric-accent, #d9a441) 30%, transparent);
 }
 [data-theme='titan'] .usage-card:hover {
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 16px 34px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 [data-theme='titan'] .quota-card.is-accent::before {
   content: '';
@@ -1151,7 +1192,9 @@
 }
 [data-theme='titan'] .usage-chart__bar {
   background: linear-gradient(180deg, #e3c078, #8a6a2c);
-  box-shadow: 0 0 10px rgba(217, 164, 65, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  box-shadow:
+    0 0 10px rgba(217, 164, 65, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 /* ---------- detail-row ---------- */
@@ -1168,7 +1211,8 @@
 }
 [data-theme='aurora'] .detail-row__icon {
   border-radius: 10px;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--icon-tone, var(--panel-accent)) 22%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--icon-tone, var(--panel-accent)) 22%, transparent);
 }
 [data-theme='aurora'] .detail-row__value {
   text-shadow: 0 0 12px color-mix(in srgb, var(--icon-tone, var(--panel-accent)) 30%, transparent);
@@ -1209,19 +1253,28 @@
   border-radius: 13px;
   border: 0;
   background: linear-gradient(170deg, #202024 0%, #151518 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.035),
     0 4px 10px rgba(0, 0, 0, 0.3);
 }
 [data-theme='titan'] .detail-row:hover {
   transform: translateX(3px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12),
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
     inset 0 0 0 1px color-mix(in srgb, var(--icon-tone, var(--panel-accent)) 35%, transparent),
     0 6px 16px rgba(0, 0, 0, 0.4);
 }
 [data-theme='titan'] .detail-row__icon {
   border-radius: 10px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--icon-tone, var(--panel-accent)) 20%, #1a1a1e), #121215);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--icon-tone, var(--panel-accent)) 20%, #1a1a1e),
+    #121215
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.4);
 }
 [data-theme='titan'] .detail-row__label {
   color: #d5d6da;
@@ -1300,12 +1353,15 @@
   border-radius: 13px;
   border: 0;
   background: linear-gradient(170deg, #202024 0%, #151518 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.035),
     0 4px 10px rgba(0, 0, 0, 0.3);
 }
 [data-theme='titan'] .team-row:hover {
   transform: translateX(3px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12),
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
     inset 0 0 0 1px color-mix(in srgb, var(--metric-accent, #d9a441) 32%, transparent),
     0 6px 16px rgba(0, 0, 0, 0.4);
 }
@@ -1313,12 +1369,16 @@
   border-radius: 9px;
   background: linear-gradient(180deg, #1a1a1e, #101013);
   color: #6b6e76;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 0 0 1px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.5);
 }
 [data-theme='titan'] .team-row.is-top-1 .team-row__rank {
   background: linear-gradient(135deg, #f0cd82, #c9962e);
   color: #1a140a;
-  box-shadow: 0 0 12px rgba(217, 164, 65, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 0 12px rgba(217, 164, 65, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 [data-theme='titan'] .team-row.is-top-2 .team-row__rank {
   background: linear-gradient(135deg, #dfe3ea, #9aa2ae);
@@ -1452,7 +1512,9 @@
 [data-theme='titan'] .segmented button.is-active {
   color: #f0e6cf;
   background: linear-gradient(180deg, #3a3325, #2a2519);
-  box-shadow: inset 0 1px 0 rgba(240, 205, 130, 0.25), 0 2px 6px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(240, 205, 130, 0.25),
+    0 2px 6px rgba(0, 0, 0, 0.4);
 }
 [data-theme='titan'] .segmented button:hover:not(.is-active):not(:disabled) {
   color: #d5d6da;
@@ -1463,7 +1525,9 @@
 /* A 极光:渐变开态 */
 [data-theme='aurora'] .toggle-switch.is-checked .toggle-switch__track {
   background: linear-gradient(135deg, #5865f2, #38b8a1);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2), 0 0 12px rgba(88, 101, 242, 0.35);
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.2),
+    0 0 12px rgba(88, 101, 242, 0.35);
 }
 [data-theme='aurora'] .toggle-switch__thumb {
   background: linear-gradient(180deg, #fff, #cfd6df);
@@ -1478,7 +1542,9 @@
 }
 [data-theme='cyber'] .toggle-switch.is-checked .toggle-switch__track {
   background: rgba(0, 255, 213, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(0, 255, 213, 0.6), 0 0 12px rgba(0, 255, 213, 0.2);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 255, 213, 0.6),
+    0 0 12px rgba(0, 255, 213, 0.2);
 }
 [data-theme='cyber'] .toggle-switch__thumb {
   background: #33544c;
@@ -1492,15 +1558,21 @@
 [data-theme='titan'] .toggle-switch__track {
   border-radius: 999px;
   background: linear-gradient(180deg, #060608, #1a1a1f);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.7),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05);
 }
 [data-theme='titan'] .toggle-switch.is-checked .toggle-switch__track {
   background: linear-gradient(180deg, #8a6a2c, #6e521e);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 12px rgba(217, 164, 65, 0.3);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.3),
+    0 0 12px rgba(217, 164, 65, 0.3);
 }
 [data-theme='titan'] .toggle-switch__thumb {
   background: linear-gradient(180deg, #3a3a41, #26262b);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 [data-theme='titan'] .toggle-switch.is-checked .toggle-switch__thumb {
   background: linear-gradient(180deg, #f5e2b0, #e3bd6d);
@@ -1590,37 +1662,49 @@
   border: 0;
   background: linear-gradient(180deg, #33333a, #232329);
   color: #e8e8ea;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 4px 10px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
   padding: 7px 17px;
   font-size: 12px;
 }
 [data-theme='titan'] .ghost-button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 7px 16px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 7px 16px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
   background: linear-gradient(180deg, #33333a, #232329);
   color: #e8e8ea;
 }
 [data-theme='titan'] .ghost-button--accent {
   background: linear-gradient(180deg, #e3bd6d, #c9962e);
   color: #241a08;
-  box-shadow: 0 4px 12px rgba(217, 164, 65, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow:
+    0 4px 12px rgba(217, 164, 65, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
   padding: 6px 15px;
   font-size: 11.5px;
 }
 [data-theme='titan'] .ghost-button--accent:hover {
   background: linear-gradient(180deg, #e3bd6d, #c9962e);
-  box-shadow: 0 7px 18px rgba(217, 164, 65, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow:
+    0 7px 18px rgba(217, 164, 65, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
   color: #241a08;
 }
 [data-theme='titan'] .about-row__btn {
   background: linear-gradient(180deg, #e3bd6d, #c9962e);
   color: #241a08;
-  box-shadow: 0 4px 12px rgba(217, 164, 65, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow:
+    0 4px 12px rgba(217, 164, 65, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
   padding: 7px 17px;
   font-size: 11.5px;
 }
 [data-theme='titan'] .about-row__btn:hover {
-  box-shadow: 0 7px 18px rgba(217, 164, 65, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow:
+    0 7px 18px rgba(217, 164, 65, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 /* ---------- panel__footer ---------- */
@@ -1724,19 +1808,25 @@
   border-radius: 12px;
   border: 0;
   background: linear-gradient(170deg, #202024 0%, #151518 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.035),
     0 4px 10px rgba(0, 0, 0, 0.3);
 }
 [data-theme='titan'] .setting-row:hover {
   transform: translateX(3px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 0 0 1px rgba(217, 164, 65, 0.3), 0 6px 16px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 0 0 1px rgba(217, 164, 65, 0.3),
+    0 6px 16px rgba(0, 0, 0, 0.4);
 }
 [data-theme='titan'] .inline-input {
   border-radius: 10px;
   border: 0;
   background: rgba(0, 0, 0, 0.35);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 /* inline-input input 聚焦态(各主题 accent 描边) */
@@ -1749,7 +1839,9 @@
   box-shadow: 0 0 12px rgba(0, 255, 213, 0.15);
 }
 [data-theme='titan'] .inline-input:focus-within {
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(217, 164, 65, 0.55);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(217, 164, 65, 0.55);
 }
 
 /* ---------- team-announcement ---------- */
@@ -1788,7 +1880,9 @@
   border: 1px solid rgba(0, 255, 213, 0.25);
   border-left: 2px solid #00ffd5;
   background: rgba(0, 255, 213, 0.03);
-  box-shadow: 0 0 18px rgba(0, 255, 213, 0.07), inset 0 0 16px rgba(0, 255, 213, 0.04);
+  box-shadow:
+    0 0 18px rgba(0, 255, 213, 0.07),
+    inset 0 0 16px rgba(0, 255, 213, 0.04);
 }
 [data-theme='cyber'] .team-announcement::before {
   display: none;
@@ -1829,7 +1923,9 @@
   border-radius: 14px;
   border: 0;
   background: linear-gradient(170deg, #222227 0%, #16161a 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), inset 0 0 0 1px rgba(217, 164, 65, 0.18),
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    inset 0 0 0 1px rgba(217, 164, 65, 0.18),
     0 6px 16px rgba(0, 0, 0, 0.35);
 }
 [data-theme='titan'] .team-announcement::before {
@@ -1850,13 +1946,17 @@
   border: 0;
   background: linear-gradient(180deg, #3a3325, #2a2519);
   color: #f0e6cf;
-  box-shadow: inset 0 1px 0 rgba(240, 205, 130, 0.25), 0 3px 8px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(240, 205, 130, 0.25),
+    0 3px 8px rgba(0, 0, 0, 0.4);
   padding: 5px 17px;
   font-size: 11.5px;
 }
 [data-theme='titan'] .team-announcement__acknowledge:hover {
   transform: translateY(-1px);
-  box-shadow: inset 0 1px 0 rgba(240, 205, 130, 0.35), 0 6px 14px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(240, 205, 130, 0.35),
+    0 6px 14px rgba(0, 0, 0, 0.5);
 }
 
 /* ---------- team-broadcast(消息流 + 输入框 + 发送) ---------- */
@@ -1911,7 +2011,9 @@
   border-radius: 12px 12px 12px 4px;
   border: 0;
   background: linear-gradient(170deg, #222227, #18181c);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 [data-theme='titan'] .team-broadcast__name {
   color: #9aa2ae;
@@ -1920,10 +2022,14 @@
   border-radius: 11px;
   border: 0;
   background: rgba(0, 0, 0, 0.4);
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.6),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 [data-theme='titan'] .team-broadcast__input:focus {
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(217, 164, 65, 0.5);
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.6),
+    inset 0 0 0 1px rgba(217, 164, 65, 0.5);
 }
 [data-theme='titan'] .team-broadcast__send {
   padding: 9px 19px;
@@ -2031,7 +2137,9 @@
   border-radius: var(--panel-radius-md);
   border: 0;
   background: rgba(0, 0, 0, 0.35);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 [data-theme='titan'] .usage-range-field input {
   border-radius: 7px;
@@ -2048,7 +2156,9 @@
   background: linear-gradient(180deg, #e3bd6d, #c9962e);
   color: #241a08;
   border: 0;
-  box-shadow: 0 4px 12px rgba(217, 164, 65, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow:
+    0 4px 12px rgba(217, 164, 65, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 /* ---------- model-board ---------- */
@@ -2126,7 +2236,9 @@
   border-radius: var(--panel-radius-sm);
   border: 0;
   background: linear-gradient(170deg, #26262b, #18181c);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.045),
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.045),
     0 8px 20px rgba(0, 0, 0, 0.45);
 }
 
@@ -2148,7 +2260,9 @@
   border-radius: var(--panel-radius-sm);
   border: 0;
   background: linear-gradient(170deg, #26262b, #18181c);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.045),
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.045),
     0 8px 20px rgba(0, 0, 0, 0.45);
 }
 
@@ -2179,9 +2293,7 @@
   --panel-tint: none;
   /* 纯色包成单色 gradient,与 aurora 同为 background-image 层,避免被 background 简写忽略 */
   --panel-bg: linear-gradient(#f3ecd8, #f3ecd8);
-  --panel-shadow:
-    12px 12px 0 rgba(34, 51, 59, 0.22),
-    0 0 0 1.5px rgba(34, 51, 59, 0.92);
+  --panel-shadow: 12px 12px 0 rgba(34, 51, 59, 0.22), 0 0 0 1.5px rgba(34, 51, 59, 0.92);
   /* 色板:纸/墨/落日/芥末/锈红/松绿 */
   --panel-card: #faf4e4;
   --panel-card-2: #f3ecd8;
@@ -2485,7 +2597,11 @@
 
 [data-theme='poster'] .quota-card__progress span {
   border-radius: 0;
-  background: repeating-linear-gradient(-45deg, var(--metric-accent, #d95d18) 0 8px, color-mix(in srgb, var(--metric-accent, #d95d18) 72%, #000) 8px 11px);
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--metric-accent, #d95d18) 0 8px,
+    color-mix(in srgb, var(--metric-accent, #d95d18) 72%, #000) 8px 11px
+  );
 }
 
 [data-theme='poster'] .quota-card__reset {
@@ -2705,7 +2821,11 @@
 [data-theme='poster'] .team-row__bar-fill,
 [data-theme='poster'] .team-row__window-bar-fill {
   border-radius: 0;
-  background: repeating-linear-gradient(-45deg, var(--metric-accent, #d95d18) 0 5px, color-mix(in srgb, var(--metric-accent, #d95d18) 72%, #000) 5px 8px);
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--metric-accent, #d95d18) 0 5px,
+    color-mix(in srgb, var(--metric-accent, #d95d18) 72%, #000) 5px 8px
+  );
 }
 
 /* 重置卡:墨边小印章 */
@@ -2886,7 +3006,9 @@
 
 [data-theme='poster'] .inline-input:focus-within {
   border-color: #d95d18;
-  box-shadow: inset 2px 2px 0 rgba(34, 51, 59, 0.15), 3px 3px 0 rgba(217, 93, 24, 0.4);
+  box-shadow:
+    inset 2px 2px 0 rgba(34, 51, 59, 0.15),
+    3px 3px 0 rgba(217, 93, 24, 0.4);
 }
 
 /* 团队公告:图钉 + 纸底墨边,落日左边条换图钉顶饰 */
@@ -2973,7 +3095,9 @@
 
 [data-theme='poster'] .team-broadcast__input:focus {
   border-color: #d95d18;
-  box-shadow: inset 2px 2px 0 rgba(34, 51, 59, 0.15), 3px 3px 0 rgba(217, 93, 24, 0.4);
+  box-shadow:
+    inset 2px 2px 0 rgba(34, 51, 59, 0.15),
+    3px 3px 0 rgba(217, 93, 24, 0.4);
 }
 
 [data-theme='poster'] .team-broadcast__send {
@@ -3032,7 +3156,11 @@
 
 [data-theme='poster'] .model-board__fill {
   border-radius: 0;
-  background: repeating-linear-gradient(-45deg, var(--panel-accent) 0 5px, color-mix(in srgb, var(--panel-accent) 72%, #000) 5px 8px);
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--panel-accent) 0 5px,
+    color-mix(in srgb, var(--panel-accent) 72%, #000) 5px 8px
+  );
 }
 
 [data-theme='poster'] .model-board__name {
@@ -3144,9 +3272,7 @@
   --panel-border: 5px solid #1c1a17;
   --panel-tint: none;
   --panel-bg: linear-gradient(#fdf6ec, #fdf6ec);
-  --panel-shadow:
-    14px 14px 0 #00c2b2,
-    0 0 0 1.5px rgba(28, 26, 23, 0.92);
+  --panel-shadow: 14px 14px 0 #00c2b2, 0 0 0 1.5px rgba(28, 26, 23, 0.92);
   /* 色板:奶油/墨/粉/芥末/青/钴蓝/橘/淡紫 */
   --panel-card: #fffdf7;
   --panel-card-2: #fdf6ec;
@@ -3242,8 +3368,10 @@
   right: 0;
   height: 26px;
   background:
-    radial-gradient(circle at 12px 50%, #ff5c8a 5px, transparent 5.6px) 0 0 / 40px 100% no-repeat content-box,
-    radial-gradient(circle at 12px 50%, #3a6cff 5px, transparent 5.6px) 20px 0 / 40px 100% no-repeat content-box,
+    radial-gradient(circle at 12px 50%, #ff5c8a 5px, transparent 5.6px) 0 0 / 40px 100% no-repeat
+      content-box,
+    radial-gradient(circle at 12px 50%, #3a6cff 5px, transparent 5.6px) 20px 0 / 40px 100% no-repeat
+      content-box,
     repeating-linear-gradient(-45deg, #ffc93c 0 12px, #ffe08a 12px 24px);
   border-bottom: 5px solid #1c1a17;
 }
@@ -3340,7 +3468,9 @@
 
 @keyframes memphis-bubble-roll {
   to {
-    background-position: 20px 0, 30px 0;
+    background-position:
+      20px 0,
+      30px 0;
   }
 }
 
@@ -3653,7 +3783,8 @@
   bottom: 0;
   height: var(--seg, 30%);
   background:
-    radial-gradient(circle at 6px 5px, rgba(255, 255, 255, 0.85) 2.4px, transparent 3px) 0 0 / 12px 10px,
+    radial-gradient(circle at 6px 5px, rgba(255, 255, 255, 0.85) 2.4px, transparent 3px) 0 0 / 12px
+      10px,
     rgba(0, 0, 0, 0.18);
 }
 
@@ -3663,7 +3794,11 @@
 }
 
 [data-theme='memphis'] .usage-chart__bar-seg.is-cached {
-  background: repeating-linear-gradient(-45deg, rgba(255, 107, 53, 0.85) 0 5px, transparent 5px 9px);
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 107, 53, 0.85) 0 5px,
+    transparent 5px 9px
+  );
 }
 
 [data-theme='memphis'] .usage-chart__bar-seg.is-input {
@@ -4067,8 +4202,8 @@
 /* panel 底栏:圆点底纹 + 墨边 */
 [data-theme='memphis'] .panel__footer {
   border-top: 5px solid #1c1a17;
-  background:
-    radial-gradient(circle at 14px 50%, rgba(255, 92, 138, 0.5) 4px, transparent 4.6px) 0 0 / 34px 100%;
+  background: radial-gradient(circle at 14px 50%, rgba(255, 92, 138, 0.5) 4px, transparent 4.6px) 0
+    0 / 34px 100%;
 }
 
 [data-theme='memphis'] .panel__footer-meta {
@@ -4121,8 +4256,13 @@
   flex: 1;
   height: 12px;
   margin-left: 9px;
-  background:
-    repeating-linear-gradient(-45deg, #1c1a17 0 10px, transparent 10px 20px, #ff5c8a 20px 24px, transparent 24px 34px);
+  background: repeating-linear-gradient(
+    -45deg,
+    #1c1a17 0 10px,
+    transparent 10px 20px,
+    #ff5c8a 20px 24px,
+    transparent 24px 34px
+  );
   border-radius: 99px;
 }
 
@@ -4529,14 +4669,16 @@
   --panel-radius: 8px;
   --panel-clip: inset(0 round 8px);
   --panel-border: 2px solid #0c100a;
-  --panel-tint:
-    repeating-linear-gradient(94deg, rgba(255, 255, 255, 0.02) 0 2px, transparent 2px 6px);
+  --panel-tint: repeating-linear-gradient(
+    94deg,
+    rgba(255, 255, 255, 0.02) 0 2px,
+    transparent 2px 6px
+  );
   --panel-bg:
     repeating-linear-gradient(94deg, rgba(255, 255, 255, 0.02) 0 2px, transparent 2px 6px),
     linear-gradient(180deg, #333f2c 0%, #28321f 55%, #1e2617 100%);
   --panel-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.1),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.1), inset 0 -1px 0 rgba(0, 0, 0, 0.5),
     0 26px 50px -20px rgba(0, 0, 0, 0.65);
   /* 色板:军绿/钢黑/琥珀/指针红/信号绿 */
   --panel-card: linear-gradient(180deg, #2a3421, #1f2716);
@@ -4630,7 +4772,9 @@
   height: 7px;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #6a7660, #2c3524 62%, #131a0f);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.7), inset 0 1px 1px rgba(255, 255, 255, 0.25);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.7),
+    inset 0 1px 1px rgba(255, 255, 255, 0.25);
 }
 
 [data-theme='cockpit'] .capsule__deco::before {
@@ -4687,7 +4831,9 @@
   color: #ffaa00;
   font-weight: 400;
   letter-spacing: 0.5px;
-  text-shadow: 0 0 7px rgba(255, 170, 0, 0.65), 0 0 18px rgba(255, 170, 0, 0.25);
+  text-shadow:
+    0 0 7px rgba(255, 170, 0, 0.65),
+    0 0 18px rgba(255, 170, 0, 0.25);
   animation: cockpit-nixie-flicker 3.4s steps(1) infinite;
 }
 
@@ -4743,7 +4889,9 @@
   padding: var(--capsule-credit-pad-y) var(--capsule-credit-pad-x);
   font-weight: 400;
   letter-spacing: 0.5px;
-  box-shadow: inset 0 0 0 1px #0c100a, inset 0 2px 0 rgba(255, 170, 0, 0.35);
+  box-shadow:
+    inset 0 0 0 1px #0c100a,
+    inset 0 2px 0 rgba(255, 170, 0, 0.35);
   text-shadow: 0 0 5px rgba(255, 170, 0, 0.4);
 }
 
@@ -4761,7 +4909,9 @@
   padding: var(--capsule-pick-pad-y) var(--capsule-pick-pad-x);
   font-weight: 400;
   letter-spacing: 0.5px;
-  box-shadow: inset 0 0 0 1px #0c100a, inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow:
+    inset 0 0 0 1px #0c100a,
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 /* API 模式统计单元:标签暗淡,数值琥珀 Nixie */
@@ -4774,7 +4924,9 @@
 [data-theme='cockpit'] .capsule__stat-value {
   color: #ffaa00;
   font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
-  text-shadow: 0 0 7px rgba(255, 170, 0, 0.65), 0 0 18px rgba(255, 170, 0, 0.25);
+  text-shadow:
+    0 0 7px rgba(255, 170, 0, 0.65),
+    0 0 18px rgba(255, 170, 0, 0.25);
 }
 
 [data-theme='cockpit'] .capsule__stat--metric .capsule__stat-value {
@@ -4851,7 +5003,9 @@
   background: linear-gradient(180deg, #1e2614, #141a10);
   border: 1.5px solid #0c100a;
   border-radius: 4px;
-  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.08), 0 3px 6px rgba(0, 0, 0, 0.45);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.08),
+    0 3px 6px rgba(0, 0, 0, 0.45);
   gap: 8px;
   padding: 4px;
 }
@@ -4866,7 +5020,9 @@
   font-size: 12px;
   letter-spacing: 1px;
   font-weight: 400;
-  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.08), 0 3px 6px rgba(0, 0, 0, 0.45);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.08),
+    0 3px 6px rgba(0, 0, 0, 0.45);
   padding-top: 22px;
 }
 
@@ -4908,7 +5064,9 @@
   border-radius: 6px;
   border: 1.5px solid #0c100a;
   background: linear-gradient(180deg, #2a3421, #1f2716);
-  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.08), 0 4px 9px rgba(0, 0, 0, 0.45);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.08),
+    0 4px 9px rgba(0, 0, 0, 0.45);
 }
 
 [data-theme='cockpit'] .quota-card.is-accent {
@@ -4937,8 +5095,10 @@
 [data-theme='cockpit'] .quota-card:hover,
 [data-theme='cockpit'] .usage-card:hover {
   transform: translateY(-2px);
-  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.12),
-    0 0 22px rgba(255, 170, 0, 0.1), 0 8px 18px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.12),
+    0 0 22px rgba(255, 170, 0, 0.1),
+    0 8px 18px rgba(0, 0, 0, 0.5);
   border-color: rgba(255, 170, 0, 0.35);
 }
 
@@ -4972,7 +5132,9 @@
   font-size: 26px;
   font-weight: 400;
   color: #ffaa00;
-  text-shadow: 0 0 8px rgba(255, 170, 0, 0.6), 0 0 20px rgba(255, 170, 0, 0.22);
+  text-shadow:
+    0 0 8px rgba(255, 170, 0, 0.6),
+    0 0 20px rgba(255, 170, 0, 0.22);
   animation: cockpit-nixie-flicker 3s steps(1) infinite;
 }
 
@@ -5023,7 +5185,9 @@
   padding: 3px 14px 2px;
   border-radius: 2px;
   border: 1px solid #0c100a;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 2px 3px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 2px 3px rgba(0, 0, 0, 0.5);
 }
 
 [data-theme='cockpit'] .usage-card__title::before {
@@ -5205,7 +5369,9 @@
   border-radius: 5px;
   border: 1.5px solid #0c100a;
   background: linear-gradient(180deg, #2a3421, #1f2716);
-  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.07), 0 4px 9px rgba(0, 0, 0, 0.45);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.07),
+    0 4px 9px rgba(0, 0, 0, 0.45);
   transition: all 0.14s;
 }
 
@@ -5306,7 +5472,9 @@
   border-radius: 4px;
   border: 1px solid #0c100a;
   background: linear-gradient(180deg, #2a3421, #1f2716);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
 [data-theme='cockpit'] .team-row__tooltip-label {
@@ -5383,12 +5551,16 @@
 [data-theme='cockpit'] .toggle-switch__track {
   border-radius: 4px;
   background: #10150d;
-  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.8), inset 0 0 0 1.5px #0c100a;
+  box-shadow:
+    inset 0 0 6px rgba(0, 0, 0, 0.8),
+    inset 0 0 0 1.5px #0c100a;
 }
 
 [data-theme='cockpit'] .toggle-switch.is-checked .toggle-switch__track {
   background: rgba(55, 224, 95, 0.16);
-  box-shadow: inset 0 0 0 1.5px rgba(55, 224, 95, 0.6), 0 0 8px rgba(55, 224, 95, 0.25);
+  box-shadow:
+    inset 0 0 0 1.5px rgba(55, 224, 95, 0.6),
+    0 0 8px rgba(55, 224, 95, 0.25);
 }
 
 [data-theme='cockpit'] .toggle-switch__thumb {
@@ -5413,7 +5585,9 @@
   font-size: 11.5px;
   letter-spacing: 1px;
   padding: 7px 16px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 3px 5px rgba(0, 0, 0, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 3px 5px rgba(0, 0, 0, 0.45);
 }
 
 [data-theme='cockpit'] .ghost-button:hover {
@@ -5431,7 +5605,9 @@
   color: #fff;
   border: 2px solid #0c100a;
   border-radius: 5px;
-  box-shadow: inset 0 2px 2px rgba(255, 255, 255, 0.3), 0 4px 8px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    inset 0 2px 2px rgba(255, 255, 255, 0.3),
+    0 4px 8px rgba(0, 0, 0, 0.5);
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
   padding: 6px 15px;
 }
@@ -5605,7 +5781,9 @@
 
 [data-theme='cockpit'] .inline-input:focus-within {
   border-color: #8a5c00;
-  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 170, 0, 0.3);
+  box-shadow:
+    inset 0 0 6px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 170, 0, 0.3);
 }
 
 /* 团队公告:NOTICE 铭牌 + 警示边 */
@@ -5718,7 +5896,9 @@
 
 [data-theme='cockpit'] .team-broadcast__input:focus {
   border-color: #8a5c00;
-  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 170, 0, 0.3);
+  box-shadow:
+    inset 0 0 8px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 170, 0, 0.3);
 }
 
 [data-theme='cockpit'] .team-broadcast__send {
@@ -5837,7 +6017,9 @@
   border-radius: 4px;
   border: 1px solid #0c100a;
   background: linear-gradient(180deg, #2a3421, #1f2716);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
 [data-theme='cockpit'] .usage-tooltip__date {
@@ -5921,7 +6103,9 @@
 /* 告急态:百分比变红 + 呼吸(指针红) */
 [data-theme='cockpit'] .capsule__percent.is-critical {
   color: #ff3b2f;
-  text-shadow: 0 0 7px rgba(255, 59, 47, 0.7), 0 0 18px rgba(255, 59, 47, 0.3);
+  text-shadow:
+    0 0 7px rgba(255, 59, 47, 0.7),
+    0 0 18px rgba(255, 59, 47, 0.3);
   animation: capsule-critical-pulse 1.6s ease-in-out infinite;
 }
 
@@ -5965,9 +6149,7 @@
     repeating-linear-gradient(91deg, rgba(120, 100, 60, 0.045) 0 1px, transparent 1px 3px),
     repeating-linear-gradient(1deg, rgba(120, 100, 60, 0.035) 0 1px, transparent 1px 4px),
     linear-gradient(174deg, #f4eddc 0%, #ede4cd 58%, #e4d8bc 100%);
-  --panel-shadow:
-    0 32px 68px rgba(0, 0, 0, 0.5),
-    inset 0 0 44px rgba(150, 125, 70, 0.15);
+  --panel-shadow: 0 32px 68px rgba(0, 0, 0, 0.5), inset 0 0 44px rgba(150, 125, 70, 0.15);
   /* 色板:纸/墨/朱砂/赭金/苔绿/司南青 */
   --panel-card: #f2ecdd;
   --panel-card-2: #f6f0e1;
@@ -7373,3 +7555,1634 @@
   animation: inksong-scroll-unroll 0.9s cubic-bezier(0.24, 0.8, 0.28, 1) backwards;
 }
 
+/* =====================================================================
+   10. GREENHOUSE · 生态温室 Solarpunk Greenhouse
+   形态语言:木牌植物标签胶囊(年轮/挂绳孔/藤蔓生长进度/新芽苞)
+           + 玻璃温室断面 Panel(山墙桁架/光斑游移/瓢虫爬行/苗床额度卡)
+           + 幼苗柱状图(子叶拍动/苗床木梁) + 浇灌阀开关 + 园丁合作社
+   策略 A:纯视觉映射,不改 DOM;横版=横向木牌,竖版=竖向木牌(同语言不同布局)
+   注:胶囊/Orb 窗口即元素边界,出界装饰(挂绳孔/年轮)改为贴边半露
+   ===================================================================== */
+[data-theme='greenhouse'] {
+  /* 胶囊:木质植物标签牌,右缘略宽的不对称圆角;木底不透明,
+     圆角外残留用 clip 裁净(clip 圆角与外形一致) */
+  --capsule-radius: 10px 14px 14px 10px / 12px;
+  --capsule-orb-radius: 12px 12px 16px 16px;
+  --capsule-clip: inset(0 round 10px 14px 14px 10px / 12px);
+  --capsule-text: #43301d;
+  /* 木牌面:91° 细木纹 + 纵向木色渐变(横版) */
+  --capsule-bg:
+    repeating-linear-gradient(91deg, rgba(90, 60, 30, 0.09) 0 2px, transparent 2px 11px),
+    linear-gradient(174deg, #f2e7cf 0%, #eadcbc 52%, #dcc9a2 100%);
+  /* 竖版木牌面:同款木纹 + 纵向木色渐变(与横版一致,仅渐变角度适配窄窗) */
+  --capsule-orb-bg:
+    repeating-linear-gradient(91deg, rgba(90, 60, 30, 0.09) 0 2px, transparent 2px 11px),
+    linear-gradient(180deg, #f2e7cf 0%, #eadcbc 52%, #dcc9a2 100%);
+  --capsule-edge: rgba(120, 86, 46, 0.42);
+  --capsule-edge-soft: rgba(255, 250, 235, 0.35);
+  /* 木牌不透明,关毛玻璃;竖版玻璃管留一点通透 */
+  --capsule-filter: none;
+  --capsule-accent: #4d8b5a;
+  /* 温室色对:嫩叶/茎秆(参考稿 --leaf/--stem) */
+  --gh-leaf: #4d8b5a;
+  --gh-stem: #35684a;
+  --capsule-font: 'Trebuchet MS', 'Microsoft YaHei UI', Verdana, sans-serif;
+
+  /* panel:玻璃温室断面,20px 圆角 + clip 裁净不透明浅底的外角残留 */
+  --panel-radius: 20px;
+  --panel-clip: inset(0 round 20px);
+  --panel-border: 1px solid rgba(120, 150, 110, 0.55);
+  --panel-tint:
+    radial-gradient(circle at 14% -6%, rgba(242, 201, 76, 0.22) 0%, transparent 42%),
+    radial-gradient(circle at 88% 4%, rgba(156, 195, 224, 0.2) 0%, transparent 44%);
+  /* 玻璃分格竖梁 + 温室晨光渐变 */
+  --panel-bg:
+    repeating-linear-gradient(90deg, rgba(120, 150, 110, 0.07) 0 1px, transparent 1px 34px),
+    linear-gradient(176deg, #eef2e2 0%, #e3ecda 55%, #d8e4cc 100%);
+  --panel-shadow: 0 30px 64px rgba(8, 20, 10, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  /* 色板:苗圃绿/木棕/陶土橙/司南青/浆果紫 */
+  --panel-card: linear-gradient(172deg, #fbfcf3, #edf3e3);
+  --panel-card-2: #fafbf1;
+  --panel-card-3: #fbfcf3;
+  --panel-inset: #dbe3cc;
+  --panel-text: #39492f;
+  --panel-text-2: #5c6b4a;
+  --panel-muted: #93a382;
+  --panel-accent: #4d8b5a;
+  --panel-accent-2: #4a7fa5;
+  --panel-accent-soft: rgba(77, 139, 90, 0.14);
+  --panel-success: #4d8b5a;
+  --panel-danger: #c0442c;
+  --panel-line: rgba(122, 92, 64, 0.3);
+  --panel-line-strong: rgba(122, 92, 64, 0.5);
+  --panel-icon-blue: #4a7fa5;
+  --panel-icon-violet: #b06ab3;
+  --panel-icon-amber: #d97f4e;
+  --panel-icon-pink: #a3622a;
+  --panel-icon-green: #4d8b5a;
+  --panel-font: 'Trebuchet MS', 'Microsoft YaHei UI', Verdana, sans-serif;
+
+  /* 胶囊元素参数(横版 250×50:weekly 19px/percent 19px/藤蔓 9px 对齐参考;
+     竖版覆盖见下文) */
+  --capsule-h-pad-y: 4px;
+  --capsule-h-pad-x: 12px;
+  --capsule-h-gap: 10px;
+  --capsule-v-pad-y: 12px;
+  --capsule-v-pad-x: 4px;
+  --capsule-v-gap: 2.5px;
+  --capsule-weekly-font: 19px;
+  --capsule-weekly-pad-y: 0px;
+  --capsule-weekly-pad-x: 0px;
+  --capsule-weekly-gap: 3px;
+  --capsule-percent-font: 19px;
+  --capsule-progress-h: 9px;
+  --capsule-progress-w: 100%;
+  --capsule-credit-font: 9.5px;
+  --capsule-credit-pad-y: 2px;
+  --capsule-credit-pad-x: 8px;
+  --capsule-pick-font: 9.5px;
+  --capsule-pick-pad-y: 2px;
+  --capsule-pick-pad-x: 8px;
+  --capsule-stat-label-font: 8.5px;
+  --capsule-stat-value-font: 13px;
+  --capsule-stat-pad-y: 0px;
+  --capsule-stat-pad-x: 0px;
+}
+
+/* main.css 的 .panel{} 自身重声明了一批 token,元素自身声明优先于父级继承;
+   用 [data-theme='greenhouse'] .panel (特异性 0,2,0) 在 .panel 元素上重新赋主题值;
+   顶部 padding 加宽到 64px,给 52px 山墙桁架让位(桁架画在 .panel__deco::before) */
+[data-theme='greenhouse'] .panel {
+  --panel-bg:
+    repeating-linear-gradient(90deg, rgba(120, 150, 110, 0.07) 0 1px, transparent 1px 34px),
+    radial-gradient(circle at 14% -6%, rgba(242, 201, 76, 0.22) 0%, transparent 42%),
+    radial-gradient(circle at 88% 4%, rgba(156, 195, 224, 0.2) 0%, transparent 44%),
+    linear-gradient(176deg, #eef2e2 0%, #e3ecda 55%, #d8e4cc 100%);
+  --panel-card: linear-gradient(172deg, #fbfcf3, #edf3e3);
+  --panel-card-2: #fafbf1;
+  --panel-card-3: #fbfcf3;
+  --panel-surface: linear-gradient(172deg, #fbfcf3, #edf3e3);
+  --panel-surface-2: #fafbf1;
+  --panel-inset: #dbe3cc;
+  --panel-text: #39492f;
+  --panel-text-2: #5c6b4a;
+  --panel-muted: #93a382;
+  --panel-accent: #4d8b5a;
+  --panel-accent-2: #4a7fa5;
+  --panel-accent-soft: rgba(77, 139, 90, 0.14);
+  --panel-success: #4d8b5a;
+  --panel-danger: #c0442c;
+  --panel-line: rgba(122, 92, 64, 0.3);
+  --panel-line-strong: rgba(122, 92, 64, 0.5);
+  --panel-icon-blue: #4a7fa5;
+  --panel-icon-violet: #b06ab3;
+  --panel-icon-amber: #d97f4e;
+  --panel-icon-pink: #a3622a;
+  --panel-icon-green: #4d8b5a;
+  /* 晨光光晕已并入下方 --panel-bg,tint 置 none 避免叠画两次(海报先例) */
+  --panel-tint: none;
+  padding: 64px var(--panel-space-page) 0;
+}
+
+/* ---------- 胶囊:木质植物标签牌 ---------- */
+
+/* 木牌立体:细木色描边环 + 外落影 + 顶缘高光 + 底缘压暗(替代默认玻璃描边) */
+[data-theme='greenhouse'] .capsule {
+  box-shadow:
+    inset 0 0 0 1px rgba(120, 86, 46, 0.42),
+    0 10px 22px rgba(0, 0, 0, 0.45),
+    inset 0 1.5px 0 rgba(255, 250, 235, 0.75),
+    inset 0 -2px 4px rgba(120, 86, 46, 0.28);
+}
+
+/* 装饰层:横版 = 左端年轮圈(::before)+ 左上挂绳孔(::after);
+   竖版 Orb 重新定义为 顶端挂绳孔(::before)+ 底端年轮横截面(::after),见下方竖版段 */
+[data-theme='greenhouse'] .capsule__deco,
+[data-theme='greenhouse'] .panel__deco {
+  display: block;
+}
+
+/* 牌面左端年轮圈:大部分探出牌外被裁,只余同心弧纹 */
+[data-theme='greenhouse'] .capsule:not(.capsule--orb) .capsule__deco::before {
+  content: '';
+  position: absolute;
+  left: -26px;
+  top: 50%;
+  width: 66px;
+  height: 66px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: repeating-radial-gradient(
+    circle at 50% 50%,
+    rgba(120, 86, 46, 0.16) 0 2.5px,
+    transparent 2.5px 7.5px
+  );
+  filter: blur(0.4px);
+}
+
+/* 挂绳环:窗口即边界,只露环的下半(裁切线正在环直径上,视觉是绳子出画);
+   位置对齐参考稿 left:18px */
+[data-theme='greenhouse'] .capsule:not(.capsule--orb) .capsule__deco::after {
+  content: '';
+  position: absolute;
+  top: -7.5px;
+  left: 18px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2.5px solid #8a6a48;
+  background: #3c2c1a;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.3),
+    0 1.5px 3px rgba(40, 20, 5, 0.45);
+}
+
+/* 周重置倒计时:立柱上小苗图标 + Georgia 斜体数字,上下堆叠 */
+[data-theme='greenhouse'] .capsule__weekly {
+  flex-direction: column;
+  font-family: Georgia, 'Times New Roman', 'Microsoft YaHei UI', serif;
+  font-style: italic;
+  font-weight: 700;
+  color: #43301d;
+}
+
+/* 沙漏图标换小苗:隐藏原 svg,用 mask 画参考稿同款双子叶苗 */
+[data-theme='greenhouse'] .capsule__weekly svg {
+  display: none;
+}
+
+[data-theme='greenhouse'] .capsule__weekly::before {
+  content: '';
+  width: 17px;
+  height: 17px;
+  background: var(--gh-leaf);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 22V10'/%3E%3Cpath d='M12 10C12 6 9 4 5 4c0 4 3 6 7 6z'/%3E%3Cpath d='M12 13c0-4 3-6 7-6 0 4-3 6-7 6z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 22V10'/%3E%3Cpath d='M12 10C12 6 9 4 5 4c0 4 3 6 7 6z'/%3E%3Cpath d='M12 13c0-4 3-6 7-6 0 4-3 6-7 6z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+/* 百分比:Georgia 斜体茎绿 */
+[data-theme='greenhouse'] .capsule__percent {
+  color: var(--gh-stem);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* 藤蔓进度:槽透明只留藤架虚线,藤条随额度伸缩,新芽苞出槽探在牌面留白里
+   (overflow visible 沿用宋韵墨条先例;100% 时芽苞落在 12px 横向留白内不裁切) */
+[data-theme='greenhouse'] .capsule__progress {
+  border-radius: 99px;
+  background: transparent;
+  overflow: visible;
+  position: relative;
+}
+
+/* 藤架底细虚线 */
+[data-theme='greenhouse'] .capsule__progress::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 0;
+  border-top: 1.5px dashed rgba(122, 92, 64, 0.65);
+}
+
+/* 藤条:沿茎三片嫩叶(34%/58%/84%) + 茎色渐变 */
+[data-theme='greenhouse'] .capsule__progress span {
+  position: relative;
+  border-radius: 99px;
+  transition: width 1.15s cubic-bezier(0.22, 0.9, 0.3, 1);
+  background:
+    radial-gradient(8px 5px at 34% 20%, var(--gh-leaf), transparent 68%) no-repeat,
+    radial-gradient(7px 4.5px at 58% 82%, #8aa86b, transparent 68%) no-repeat,
+    radial-gradient(6px 4px at 84% 22%, var(--gh-leaf), transparent 66%) no-repeat,
+    linear-gradient(180deg, #63a06a, var(--gh-stem));
+}
+
+/* 茎端新芽苞:轻轻搏动等待生长 */
+[data-theme='greenhouse'] .capsule__progress span::after,
+[data-theme='greenhouse'] .quota-card__progress span::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  transform: translateY(-50%);
+  background: radial-gradient(circle at 36% 32%, #bfe3a8, #63a06a 74%);
+  border-radius: 62% 44% 58% 50% / 55% 60% 42% 48%;
+  box-shadow:
+    0 0 0 1.5px rgba(255, 255, 255, 0.53),
+    0 1px 4px rgba(53, 104, 74, 0.5);
+  animation: gh-bud-pulse 2.8s ease-in-out infinite;
+}
+
+@keyframes gh-bud-pulse {
+  0%,
+  100% {
+    transform: translateY(-50%) scale(0.9);
+  }
+  50% {
+    transform: translateY(-50%) scale(1.12) rotate(8deg);
+  }
+}
+
+/* 重置卡:奶油票签,赭木描边 */
+[data-theme='greenhouse'] .capsule__credit {
+  border-radius: 999px;
+  color: #a3622a;
+  background: rgba(255, 252, 242, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(163, 98, 42, 0.45);
+  font-size: var(--capsule-credit-font);
+  padding: var(--capsule-credit-pad-y) var(--capsule-credit-pad-x);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+[data-theme='greenhouse'] .capsule__credit svg {
+  color: #a3622a;
+}
+
+/* 推荐模型:奶油票签,木色描边;文字色保持模型品牌色(inline) */
+[data-theme='greenhouse'] .capsule__pick {
+  border-radius: 999px;
+  background: rgba(255, 252, 242, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(122, 92, 64, 0.4);
+  font-size: var(--capsule-pick-font);
+  padding: var(--capsule-pick-pad-y) var(--capsule-pick-pad-x);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+/* API 模式统计单元:淡木标签 + 深木数值,命中率沿用茎绿 */
+[data-theme='greenhouse'] .capsule__stat-label {
+  color: rgba(122, 92, 64, 0.75);
+}
+
+[data-theme='greenhouse'] .capsule__stat-value {
+  color: #43301d;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 700;
+}
+
+[data-theme='greenhouse'] .capsule__stat--metric .capsule__stat-value {
+  color: var(--gh-stem);
+}
+
+/* 广播跑马灯文字:木底上改深木色(默认冷白在原木上不可读) */
+[data-theme='greenhouse'] .capsule__message-copy {
+  color: #43301d;
+}
+
+/* 告急态:陶土红 + 呼吸(需压过本主题 0,2,0 的茎绿基础色) */
+[data-theme='greenhouse'] .capsule__percent.is-critical {
+  color: #c0442c;
+  animation: capsule-critical-pulse 1.6s ease-in-out infinite;
+}
+
+/* ---------- 竖版 Orb:竖向木牌(横版木牌语言的窄窗再设计) ----------
+   50×165 窄窗:木纹牌身 + 顶端挂绳孔 + 底端年轮横截面 + 藤蔓 + 票签 + 立体描边。
+   横版年轮在牌左外探(被裁只露弧纹),竖版改为底端一截年轮横截面贴边收尾;
+   挂绳孔从左上改为正上(窗口即边界,只露孔的下半,视觉是绳子从顶出画) */
+
+/* 竖牌立体:沿用横版木牌描边环 + 落影 + 顶缘高光 + 底缘压暗 */
+[data-theme='greenhouse'] .capsule--orb {
+  /* clip 用对称圆角(竖牌上下同形),裁净圆角外残留 */
+  --capsule-clip: inset(0 round 12px 12px 16px 16px);
+  box-shadow:
+    inset 0 0 0 1px rgba(120, 86, 46, 0.42),
+    0 10px 22px rgba(0, 0, 0, 0.45),
+    inset 0 1.5px 0 rgba(255, 250, 235, 0.75),
+    inset 0 -2px 4px rgba(120, 86, 46, 0.28);
+}
+
+/* 竖版 deco:承载顶端挂绳孔(::before)+ 底端年轮横截面(::after) */
+[data-theme='greenhouse'] .capsule--orb .capsule__deco {
+  display: block;
+}
+
+/* 顶端挂绳孔:正上方居中,只露孔的下半(裁切线在孔直径上,视觉是绳子从顶出画) */
+[data-theme='greenhouse'] .capsule--orb .capsule__deco::before {
+  content: '';
+  position: absolute;
+  top: -7.5px;
+  left: 50%;
+  width: 15px;
+  height: 15px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  border: 2.5px solid #8a6a48;
+  background: #3c2c1a;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.3),
+    0 1.5px 3px rgba(40, 20, 5, 0.45);
+}
+
+/* 底端年轮横截面:贴牌底居中,同心弧纹收尾(横版左端年轮的竖版对位) */
+[data-theme='greenhouse'] .capsule--orb .capsule__deco::after {
+  content: '';
+  position: absolute;
+  bottom: -26px;
+  left: 50%;
+  width: 66px;
+  height: 66px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: repeating-radial-gradient(
+    circle at 50% 50%,
+    rgba(120, 86, 46, 0.16) 0 2.5px,
+    transparent 2.5px 7.5px
+  );
+  filter: blur(0.4px);
+}
+
+/* 竖版去掉小苗图标(weekly::before),腾出空间给额度信息;只保留倒计时数字 */
+[data-theme='greenhouse'] .capsule--orb .capsule__weekly::before {
+  display: none;
+}
+
+/* 竖版文字:倒计时 15px、百分比 16px(窄窗收紧,保证可读不挤) */
+[data-theme='greenhouse'] .capsule--orb .capsule__weekly {
+  font-size: 15px;
+}
+
+[data-theme='greenhouse'] .capsule--orb .capsule__percent {
+  font-size: 16px;
+}
+
+/* 竖版藤蔓固定 30px 宽 8px 高,与百分比同轴 */
+[data-theme='greenhouse'] .capsule--orb .capsule__metric-box .capsule__progress {
+  width: 30px;
+  height: 8px;
+}
+
+/* 竖版两枚小签收紧(窄窗留白有限,但保持票签可读) */
+[data-theme='greenhouse'] .capsule--orb .capsule__credit {
+  font-size: 8.5px;
+  padding: 1.5px 6px;
+}
+
+[data-theme='greenhouse'] .capsule--orb .capsule__pick {
+  font-size: 8.5px;
+  padding: 1.5px 6px;
+}
+
+/* ---------- panel:玻璃温室断面 ---------- */
+
+/* 山墙桁架屋顶(::before)+ 两团游移光斑(deco 自身背景)+ 瓢虫(::after);
+   光斑用双层 background-position 同步漂移,替代参考稿两个独立元素 */
+[data-theme='greenhouse'] .panel__deco {
+  background-image:
+    radial-gradient(closest-side, rgba(242, 201, 76, 0.4), transparent 70%),
+    radial-gradient(closest-side, rgba(242, 201, 76, 0.32), transparent 70%);
+  background-size:
+    120px 78px,
+    90px 66px;
+  background-repeat: no-repeat;
+  background-position:
+    58px 0px,
+    330px 0px;
+  animation: gh-sun-drift 18s ease-in-out infinite alternate;
+}
+
+@keyframes gh-sun-drift {
+  from {
+    background-position:
+      58px 0px,
+      330px 0px;
+  }
+  to {
+    background-position:
+      130px 26px,
+      266px 20px;
+  }
+}
+
+/* 玻璃山墙分格 + 中脊通风口(参考稿 svg 原样转 data-URI) */
+[data-theme='greenhouse'] .panel__deco::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 52px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 480 52' preserveAspectRatio='none'%3E%3Cpolygon points='0,52 86,8 394,8 480,52' fill='rgba(214,232,208,.45)' stroke='%238aa87e' stroke-width='1'/%3E%3Cline x1='120' y1='52' x2='146' y2='8' stroke='%238aa87e' stroke-width='1'/%3E%3Cline x1='240' y1='52' x2='240' y2='8' stroke='%238aa87e' stroke-width='1'/%3E%3Cline x1='360' y1='52' x2='334' y2='8' stroke='%238aa87e' stroke-width='1'/%3E%3Cline x1='86' y1='8' x2='394' y2='8' stroke='%236d8a5f' stroke-width='2.5'/%3E%3Crect x='216' y='2' width='48' height='6' rx='3' fill='%238aa87e'/%3E%3C/svg%3E")
+    center top / 100% 100% no-repeat;
+}
+
+/* 瓢虫:沿屋檐横梁爬过(缝线并入背景层;animate left 适配任意窗宽) */
+[data-theme='greenhouse'] .panel__deco::after {
+  content: '';
+  position: absolute;
+  top: 37px;
+  left: -40px;
+  width: 11px;
+  height: 9px;
+  border-radius: 50%;
+  background:
+    linear-gradient(
+      90deg,
+      transparent calc(50% - 0.5px),
+      #23140a calc(50% - 0.5px) calc(50% + 0.5px),
+      transparent calc(50% + 0.5px)
+    ),
+    radial-gradient(circle at 50% 100%, #23140a 0 2.5px, transparent 3px),
+    repeating-linear-gradient(180deg, transparent 0 1px, rgba(255, 255, 255, 0.55) 1px 1.5px),
+    radial-gradient(circle at 32% 30%, #ff7a5e, #c92d18 74%);
+  box-shadow: 0 1px 2px rgba(30, 10, 5, 0.4);
+  animation: gh-ladybug-crawl 26s cubic-bezier(0.4, 0.1, 0.6, 0.9) infinite;
+  animation-delay: 2.5s;
+}
+
+@keyframes gh-ladybug-crawl {
+  0% {
+    left: -40px;
+    opacity: 1;
+  }
+  42% {
+    left: calc(100% + 20px);
+    opacity: 1;
+  }
+  49% {
+    left: calc(100% + 60px);
+    opacity: 1;
+  }
+  50%,
+  100% {
+    left: calc(100% + 80px);
+    opacity: 0;
+  }
+}
+
+/* panel 标题:🏡 眉标 + 深绿大字 */
+[data-theme='greenhouse'] .panel__title {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #33452c;
+}
+
+[data-theme='greenhouse'] .panel__title::before {
+  content: '🏡';
+  font-size: 17px;
+}
+
+/* API 徽标:奶油小签 */
+[data-theme='greenhouse'] .details-badge {
+  border-radius: 999px;
+  color: #a3622a;
+  background: rgba(202, 171, 110, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(122, 92, 64, 0.35);
+}
+
+/* tabs:木质种植牌插销 + 滑动绿苗滑块(项目 tabs 无滑块 DOM,
+   用 ::before + :has(nth-child) 纯 CSS 复刻参考稿 glider 滑动) */
+[data-theme='greenhouse'] .panel__tabs {
+  background: #cdbfa2;
+  border: 1px solid rgba(122, 92, 64, 0.45);
+  border-radius: 14px;
+  box-shadow: inset 0 2px 5px rgba(90, 60, 30, 0.3);
+  gap: 5px;
+  padding: 5px;
+}
+
+[data-theme='greenhouse'] .panel__tabs::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: calc((100% - 20px) / 3);
+  height: calc(100% - 10px);
+  border-radius: 10px;
+  background: linear-gradient(174deg, #c8e2ba, #93bd85);
+  border: 1px solid rgba(67, 112, 90, 0.5);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.7),
+    0 3px 7px rgba(70, 110, 80, 0.3);
+  transition: transform 0.34s cubic-bezier(0.3, 1.35, 0.5, 1);
+  pointer-events: none;
+}
+
+[data-theme='greenhouse'] .panel__tabs:has(.panel__tab:nth-child(2).is-active)::before {
+  transform: translateX(calc(100% + 5px));
+}
+
+[data-theme='greenhouse'] .panel__tabs:has(.panel__tab:nth-child(3).is-active)::before {
+  transform: translateX(calc(200% + 10px));
+}
+
+[data-theme='greenhouse'] .panel__tab {
+  position: relative;
+  z-index: 1;
+  border-radius: 10px;
+  color: #6d5a40;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+[data-theme='greenhouse'] .panel__tab:hover:not(.is-active) {
+  color: #43301d;
+  background: rgba(255, 252, 242, 0.45);
+}
+
+[data-theme='greenhouse'] .panel__tab.is-active {
+  color: #28402c;
+  background: transparent;
+  border-color: transparent;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+/* ---------- quota-card:苗床标签 ---------- */
+
+[data-theme='greenhouse'] .quota-card,
+[data-theme='greenhouse'] .usage-card {
+  border-radius: 15px;
+  border: 1px solid rgba(122, 92, 64, 0.35);
+  background: linear-gradient(172deg, #fbfcf3, #edf3e3);
+  box-shadow:
+    0 7px 16px rgba(50, 70, 45, 0.18),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.85);
+  transition:
+    transform 0.24s cubic-bezier(0.22, 0.9, 0.3, 1),
+    box-shadow 0.24s;
+}
+
+/* 卡角一株装饰小苗(基础 ::before 的顶部柔光一并覆盖;
+   inset:auto 必须重置,基础 is-accent::before 的 inset 简写会把元素拉伸)。
+   去掉常驻摇摆:transform-origin 对 emoji 字符作用在底部中点,旋转 ±8° 时
+   字符顶部左右位移数像素,视觉上像整个图标在平移,干扰读数;改为静止贴角 */
+[data-theme='greenhouse'] .quota-card::before,
+[data-theme='greenhouse'] .quota-card.is-accent::before {
+  content: '🌱';
+  position: absolute;
+  inset: auto;
+  right: 9px;
+  top: 6px;
+  font-size: 14px;
+  background: none;
+  box-shadow: none;
+}
+
+/* hover 时才轻摆(origin 改 center 缩小位移) */
+[data-theme='greenhouse'] .quota-card:hover::before,
+[data-theme='greenhouse'] .quota-card.is-accent:hover::before {
+  transform-origin: center;
+  animation: gh-sprout-sway 3.8s ease-in-out infinite;
+}
+
+@keyframes gh-sprout-sway {
+  0%,
+  100% {
+    transform: rotate(-4deg);
+  }
+  50% {
+    transform: rotate(4deg);
+  }
+}
+
+[data-theme='greenhouse'] .quota-card:hover,
+[data-theme='greenhouse'] .usage-card:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 13px 26px rgba(50, 70, 45, 0.26),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.9);
+}
+
+[data-theme='greenhouse'] .quota-card__label {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #33452c;
+}
+
+[data-theme='greenhouse'] .quota-card__mode {
+  font-size: 10px;
+  font-weight: 700;
+  color: #93a382;
+}
+
+/* 额度数值:Georgia 斜体大字,颜色跟随额度动态色 */
+[data-theme='greenhouse'] .quota-card__value {
+  color: var(--metric-accent, var(--gh-stem));
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-size: 29px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* 额度藤蔓:藤架虚线槽 + 叶茎随额度动态色 */
+[data-theme='greenhouse'] .quota-card__progress {
+  height: 10px;
+  border-radius: 99px;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+  position: relative;
+}
+
+[data-theme='greenhouse'] .quota-card__progress::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 0;
+  border-top: 1.5px dashed rgba(122, 92, 64, 0.65);
+}
+
+[data-theme='greenhouse'] .quota-card__progress span {
+  position: relative;
+  border-radius: 99px;
+  transition: width 1.15s cubic-bezier(0.22, 0.9, 0.3, 1);
+  background:
+    radial-gradient(
+        8px 5px at 34% 20%,
+        color-mix(in srgb, var(--metric-accent, #4d8b5a) 55%, #ffd9a8),
+        transparent 68%
+      )
+      no-repeat,
+    radial-gradient(7px 4.5px at 58% 82%, #f2c94c, transparent 68%) no-repeat,
+    radial-gradient(
+        6px 4px at 84% 22%,
+        color-mix(in srgb, var(--metric-accent, #4d8b5a) 70%, white),
+        transparent 66%
+      )
+      no-repeat,
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--metric-accent, #4d8b5a) 60%, white),
+      var(--metric-accent, #4d8b5a)
+    );
+}
+
+[data-theme='greenhouse'] .quota-card.is-accent .quota-card__progress {
+  height: 10px;
+}
+
+[data-theme='greenhouse'] .quota-card__reset {
+  color: #5c6b4a;
+  font-size: 12px;
+}
+
+[data-theme='greenhouse'] .quota-card__expiry {
+  color: #93a382;
+  font-size: 10.5px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+}
+
+/* ---------- usage-card:收成记录 ---------- */
+
+[data-theme='greenhouse'] .usage-card {
+  padding: 13px 15px 15px;
+  border-radius: 16px;
+  background: linear-gradient(172deg, #fafbf1, #eaf1dd);
+  border-color: rgba(122, 92, 64, 0.3);
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.8);
+}
+
+[data-theme='greenhouse'] .usage-card:hover {
+  transform: none;
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.8);
+}
+
+[data-theme='greenhouse'] .usage-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #5c6b4a;
+}
+
+/* 标题尾随虚线(工具棚清单味道) */
+[data-theme='greenhouse'] .usage-card__title::after {
+  content: '';
+  flex: 1;
+  height: 0;
+  border-top: 1px dashed rgba(122, 92, 64, 0.4);
+}
+
+[data-theme='greenhouse'] .usage-card__empty,
+[data-theme='greenhouse'] .usage-card__spend-hint {
+  color: #93a382;
+}
+
+/* 用量汇总:五列按内容宽两端对齐(对齐参考 .usage-summary) */
+[data-theme='greenhouse'] .usage-summary {
+  grid-template-columns: repeat(5, auto);
+  justify-content: space-between;
+  gap: 0;
+  margin: 12px 2px 4px;
+}
+
+[data-theme='greenhouse'] .usage-summary__item {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  gap: 3px;
+}
+
+[data-theme='greenhouse'] .usage-summary__value {
+  color: #33452c;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+[data-theme='greenhouse'] .usage-summary__label {
+  color: #93a382;
+  font-size: 9.5px;
+}
+
+[data-theme='greenhouse'] .usage-summary__value--input {
+  color: #4a7fa5;
+}
+
+[data-theme='greenhouse'] .usage-summary__value--output {
+  color: #b06ab3;
+}
+
+[data-theme='greenhouse'] .usage-summary__value--cached {
+  color: #4d8b5a;
+}
+
+[data-theme='greenhouse'] .usage-summary__value--cost {
+  color: #d97f4e;
+}
+
+/* 柱状图:苗圃——苗床木梁 + 幼苗(子叶拍动/整株摇摆/今日陶土橙新芽) */
+[data-theme='greenhouse'] .usage-chart {
+  height: 78px;
+  gap: 5px;
+}
+
+/* 苗床土面:横贯木梁,柱根扎进土里 */
+[data-theme='greenhouse'] .usage-chart::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  bottom: 9px;
+  height: 7px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #8a6a48, #6b4e30);
+  box-shadow:
+    inset 0 1.5px 2px rgba(255, 240, 210, 0.3),
+    0 1.5px 3px rgba(60, 40, 20, 0.3);
+}
+
+[data-theme='greenhouse'] .usage-chart__col {
+  gap: 3px;
+}
+
+/* 整株轻摇:风向一致,奇偶错拍 */
+[data-theme='greenhouse'] .usage-chart__bar-wrap {
+  transform-origin: bottom center;
+}
+
+[data-theme='greenhouse'] .usage-chart__col:nth-child(odd) .usage-chart__bar-wrap {
+  animation: gh-plot-sway 4.6s ease-in-out infinite;
+}
+
+[data-theme='greenhouse'] .usage-chart__col:nth-child(even) .usage-chart__bar-wrap {
+  animation: gh-plot-sway 5.4s ease-in-out infinite reverse;
+}
+
+@keyframes gh-plot-sway {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(2.2deg);
+  }
+}
+
+/* 幼苗茎:细圆茎。
+   生长动画(scaleY 0→1)统一由 main.css 的 usage-bar-rise 在窗口切换时播放,
+   主题不再单独设生长动画 —— 两个 scaleY 动画在不同时机各播一次会导致
+   "进页面播一次 + 切窗口播一次"的重复;主题只保留茎的静态样式与子叶装饰动画 */
+[data-theme='greenhouse'] .usage-chart__bar--stack {
+  position: relative;
+  width: 5px;
+  border-radius: 99px;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+  transform-origin: bottom;
+}
+
+/* 分段着色:近根一段是成熟组织(陶土),茎身青绿,梢头橄榄 */
+[data-theme='greenhouse'] .usage-chart__bar-seg.is-cached {
+  background: linear-gradient(180deg, #caa06d, #8a6a48);
+}
+
+[data-theme='greenhouse'] .usage-chart__bar-seg.is-input {
+  background: linear-gradient(180deg, #6fae6a, #3f7a4e);
+}
+
+[data-theme='greenhouse'] .usage-chart__bar-seg.is-output {
+  background: linear-gradient(180deg, #9dbb76, #7a9c58);
+}
+
+/* overflow 放开后首尾分段补回圆角 */
+[data-theme='greenhouse'] .usage-chart__bar-seg:first-child {
+  border-radius: 0 0 99px 99px;
+}
+
+[data-theme='greenhouse'] .usage-chart__bar-seg:last-child {
+  border-radius: 99px 99px 0 0;
+}
+
+/* 顶端两片子叶,错拍轻拍 */
+[data-theme='greenhouse'] .usage-chart__bar--stack::before,
+[data-theme='greenhouse'] .usage-chart__bar--stack::after {
+  content: '';
+  position: absolute;
+  top: -6px;
+  width: 11px;
+  height: 7px;
+  background: radial-gradient(closest-side, #8fd06e, #5a9a54);
+  transform-origin: bottom center;
+}
+
+[data-theme='greenhouse'] .usage-chart__bar--stack::before {
+  left: -9px;
+  border-radius: 80% 4px 60% 40%;
+  transform: rotate(-26deg);
+  animation: gh-leaves-flap-l 3.4s ease-in-out infinite;
+}
+
+[data-theme='greenhouse'] .usage-chart__bar--stack::after {
+  right: -9px;
+  border-radius: 4px 80% 40% 60%;
+  transform: rotate(26deg);
+  animation: gh-leaves-flap-r 3.9s ease-in-out infinite;
+}
+
+@keyframes gh-leaves-flap-l {
+  0%,
+  100% {
+    transform: rotate(-22deg);
+  }
+  50% {
+    transform: rotate(-34deg);
+  }
+}
+
+@keyframes gh-leaves-flap-r {
+  0%,
+  100% {
+    transform: rotate(24deg);
+  }
+  50% {
+    transform: rotate(35deg);
+  }
+}
+
+/* 今天的一株:陶土橙新芽 */
+[data-theme='greenhouse'] .usage-chart__col:last-child .usage-chart__bar-seg.is-cached {
+  background: linear-gradient(180deg, #caa06d, #8a6a48);
+}
+
+[data-theme='greenhouse'] .usage-chart__col:last-child .usage-chart__bar-seg.is-input {
+  background: linear-gradient(180deg, #eda86f, #c96a3a);
+}
+
+[data-theme='greenhouse'] .usage-chart__col:last-child .usage-chart__bar--stack::before,
+[data-theme='greenhouse'] .usage-chart__col:last-child .usage-chart__bar--stack::after {
+  background: radial-gradient(closest-side, #ffd9a8, #eda86f);
+}
+
+[data-theme='greenhouse'] .usage-chart__date {
+  color: #93a382;
+  font-size: 8.5px;
+  font-weight: 600;
+}
+
+[data-theme='greenhouse'] .usage-chart__col:last-child .usage-chart__date {
+  color: #d97f4e;
+}
+
+/* 1 天/自定义区间横向堆叠条:成熟陶土/茎绿/橄榄三阶 */
+[data-theme='greenhouse'] .usage-bar__track {
+  border-radius: 99px;
+  background: rgba(122, 92, 64, 0.15);
+}
+
+[data-theme='greenhouse'] .usage-bar__seg.is-input,
+[data-theme='greenhouse'] .usage-bar__dot.is-input {
+  background: #3f7a4e;
+}
+
+[data-theme='greenhouse'] .usage-bar__seg.is-cached,
+[data-theme='greenhouse'] .usage-bar__dot.is-cached {
+  background: #caa06d;
+}
+
+[data-theme='greenhouse'] .usage-bar__seg.is-output,
+[data-theme='greenhouse'] .usage-bar__dot.is-output {
+  background: #8aa86b;
+}
+
+[data-theme='greenhouse'] .usage-bar__legend-item {
+  color: #93a382;
+}
+
+/* ---------- detail-row:工具棚清单 ---------- */
+
+[data-theme='greenhouse'] .detail-row {
+  border-radius: 13px;
+  border: 1px solid rgba(122, 92, 64, 0.3);
+  background: rgba(252, 253, 246, 0.8);
+}
+
+[data-theme='greenhouse'] .detail-row:hover {
+  border-color: rgba(77, 139, 90, 0.6);
+  transform: translateX(3px);
+  background: #ffffff;
+}
+
+[data-theme='greenhouse'] .detail-row__icon {
+  width: 29px;
+  height: 29px;
+  flex-basis: 29px;
+  border-radius: 10px;
+  color: var(--icon-tone, var(--gh-leaf));
+  background: color-mix(in srgb, var(--icon-tone, var(--gh-leaf)) 16%, #fdfdf6);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--icon-tone, var(--gh-leaf)) 30%, transparent);
+}
+
+[data-theme='greenhouse'] .detail-row__label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #39492f;
+}
+
+[data-theme='greenhouse'] .detail-row__link {
+  color: #4a7fa5;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+[data-theme='greenhouse'] .detail-row__link:hover {
+  color: #35608a;
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 3px;
+}
+
+[data-theme='greenhouse'] .detail-row__value {
+  color: #33452c;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+[data-theme='greenhouse'] .detail-row__hint {
+  color: #93a382;
+  font-size: 10.5px;
+}
+
+/* ---------- team-announcement:园长记事(插着小木桩的记事笺) ---------- */
+
+[data-theme='greenhouse'] .team-announcement {
+  border-radius: 15px;
+  border: 1px dashed rgba(122, 92, 64, 0.55);
+  background:
+    repeating-linear-gradient(178deg, rgba(202, 171, 110, 0.14) 0 1.5px, transparent 1.5px 9px),
+    linear-gradient(174deg, #faf3dc, #f3e6c4);
+  box-shadow: none;
+}
+
+/* 基础左色条改插着的小木桩图钉 */
+[data-theme='greenhouse'] .team-announcement::before {
+  content: '📌';
+  position: absolute;
+  left: 13px;
+  top: 11px;
+  width: auto;
+  height: auto;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  font-size: 19px;
+  animation: gh-pinned-wiggle 5.5s ease-in-out infinite;
+}
+
+@keyframes gh-pinned-wiggle {
+  0%,
+  100% {
+    transform: rotate(-7deg);
+  }
+  50% {
+    transform: rotate(6deg);
+  }
+}
+
+[data-theme='greenhouse'] .team-announcement__label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #a3622a;
+}
+
+[data-theme='greenhouse'] .team-announcement__meta {
+  font-size: 10px;
+  color: #93a382;
+}
+
+[data-theme='greenhouse'] .team-announcement__text {
+  color: #43301d;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+[data-theme='greenhouse'] .team-announcement__acknowledge {
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(174deg, #c8e2ba, #93bd85);
+  color: #28402c;
+  font-size: 11.5px;
+  font-weight: 700;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 2px 7px rgba(70, 110, 80, 0.3);
+  padding: 5px 16px;
+}
+
+[data-theme='greenhouse'] .team-announcement__acknowledge:hover {
+  filter: brightness(1.04);
+  transform: scale(1.04);
+}
+
+[data-theme='greenhouse'] .team-announcement__acknowledge:active {
+  transform: scale(0.94);
+}
+
+/* ---------- team-row:园丁合作社(丰收叶形名次徽章) ---------- */
+
+[data-theme='greenhouse'] .team-row {
+  border-radius: 14px;
+  border: 1px solid rgba(122, 92, 64, 0.26);
+  background: rgba(252, 253, 246, 0.85);
+}
+
+[data-theme='greenhouse'] .team-row:hover {
+  border-color: rgba(77, 139, 90, 0.55);
+  transform: translateX(3px);
+}
+
+[data-theme='greenhouse'] .team-row.is-self {
+  border-color: rgba(77, 139, 90, 0.55);
+  background: rgba(232, 242, 224, 0.9);
+}
+
+/* 名次 = 叶形丰收徽章(grid 子项,补盒模型 + 居中) */
+[data-theme='greenhouse'] .team-row__rank {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border-radius: 50% 42% 50% 42%;
+  color: #f2f7ec;
+  background: #7aa86b;
+  box-shadow:
+    inset 0 -2px 3px rgba(30, 70, 25, 0.4),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.5);
+  transform: rotate(-4deg);
+}
+
+/* 前 3 名:基础规则对 is-top-N 另设了文字色(0,3,0),需同特异性压回白字 */
+[data-theme='greenhouse'] .team-row.is-top-1 .team-row__rank {
+  color: #f2f7ec;
+  background: linear-gradient(160deg, #f2c94c, #d97f4e);
+}
+
+[data-theme='greenhouse'] .team-row.is-top-2 .team-row__rank {
+  color: #f2f7ec;
+  background: linear-gradient(160deg, #b9c4ac, #8fa482);
+}
+
+[data-theme='greenhouse'] .team-row.is-top-3 .team-row__rank {
+  color: #f2f7ec;
+  background: linear-gradient(160deg, #d9a06b, #b3703f);
+}
+
+[data-theme='greenhouse'] .team-row__name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #33452c;
+}
+
+[data-theme='greenhouse'] .team-row__value {
+  color: var(--metric-accent, var(--gh-stem));
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+/* 双窗藤蔓:浅木槽 + 带嫩叶的茎蔓填充 */
+[data-theme='greenhouse'] .team-row__bar,
+[data-theme='greenhouse'] .team-row__window-bar {
+  border-radius: 99px;
+  background: rgba(122, 92, 64, 0.2);
+}
+
+[data-theme='greenhouse'] .team-row__bar-fill,
+[data-theme='greenhouse'] .team-row__window-bar-fill {
+  border-radius: inherit;
+  background:
+    radial-gradient(
+        6px 4px at 36% 30%,
+        color-mix(in srgb, var(--metric-accent, #4d8b5a) 60%, #dff0cd),
+        transparent 66%
+      )
+      no-repeat,
+    var(--metric-accent, #4d8b5a);
+}
+
+[data-theme='greenhouse'] .team-row__window-label {
+  color: #93a382;
+  font-size: 9.5px;
+}
+
+[data-theme='greenhouse'] .team-row__window-value {
+  color: #6d7c58;
+  font-size: 10px;
+}
+
+/* 重置卡小签 */
+[data-theme='greenhouse'] .team-row__credit {
+  color: #a3622a;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1.5px 7px;
+  border-radius: 99px;
+  background: rgba(202, 171, 110, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(122, 92, 64, 0.35);
+}
+
+/* 点赞:陶土暖橙,点赞后实心 */
+[data-theme='greenhouse'] .team-row__like {
+  border-radius: 999px;
+  background: rgba(217, 127, 78, 0.12);
+  color: #c96a3a;
+}
+
+[data-theme='greenhouse'] .team-row__like:hover {
+  background: rgba(217, 127, 78, 0.26);
+  transform: scale(1.09) rotate(-2deg);
+}
+
+[data-theme='greenhouse'] .team-row__like.is-liked {
+  background: #d97f4e;
+  color: #ffffff;
+}
+
+/* 团队行 tooltip:纸底木框浮层 */
+[data-theme='greenhouse'] .team-row__tooltip {
+  border-radius: 12px;
+  border: 1px solid rgba(122, 92, 64, 0.4);
+  background: rgba(253, 252, 242, 0.97);
+  box-shadow: 0 8px 20px rgba(50, 40, 20, 0.25);
+}
+
+[data-theme='greenhouse'] .team-row__tooltip-label {
+  color: #5c6b4a;
+}
+
+[data-theme='greenhouse'] .team-row__tooltip-value {
+  color: #39492f;
+}
+
+/* ---------- segmented:木盘苗签 ---------- */
+
+[data-theme='greenhouse'] .segmented {
+  border-radius: 11px;
+  background: #dbe3cc;
+  border: 1px solid rgba(122, 92, 64, 0.3);
+  box-shadow: inset 0 1.5px 3px rgba(90, 110, 80, 0.25);
+  gap: 3px;
+  padding: 3px;
+}
+
+[data-theme='greenhouse'] .segmented button {
+  border-radius: 8px;
+  color: #6d7c58;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 12px;
+}
+
+[data-theme='greenhouse'] .segmented button.is-active {
+  color: #20321e;
+  background: linear-gradient(174deg, #c8e2ba, #93bd85);
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+[data-theme='greenhouse'] .segmented button:hover:not(.is-active):not(:disabled) {
+  color: #39492f;
+  background: rgba(255, 252, 242, 0.5);
+}
+
+/* ---------- toggle-switch:浇灌阀旋钮 ---------- */
+
+[data-theme='greenhouse'] .toggle-switch__track {
+  background: #d8ccb0;
+  box-shadow:
+    inset 0 0 0 1px rgba(122, 92, 64, 0.5),
+    inset 0 2px 4px rgba(90, 60, 30, 0.35);
+}
+
+[data-theme='greenhouse'] .toggle-switch__thumb {
+  background: radial-gradient(circle at 34% 30%, #fdfaf2, #cbb995 76%);
+  box-shadow: 0 2px 4px rgba(60, 40, 15, 0.4);
+}
+
+[data-theme='greenhouse'] .toggle-switch.is-checked .toggle-switch__track {
+  background: linear-gradient(174deg, #9ed294, #63a06a);
+  box-shadow:
+    inset 0 0 0 1px rgba(53, 104, 74, 0.55),
+    inset 0 2px 4px rgba(53, 104, 74, 0.25);
+}
+
+[data-theme='greenhouse'] .toggle-switch.is-checked .toggle-switch__thumb {
+  background: radial-gradient(circle at 34% 30%, #ffffff, #bfe3a8 76%);
+}
+
+/* ---------- ghost-button:木牌按钮(合上窗门/刷新) ---------- */
+
+[data-theme='greenhouse'] .ghost-button {
+  border-radius: 999px;
+  border: 1px solid rgba(107, 78, 48, 0.55);
+  background: linear-gradient(180deg, #8a6a48, #6b4e30);
+  color: #fdf6ea;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 240, 210, 0.4),
+    0 3px 9px rgba(60, 40, 15, 0.4);
+  padding: 7px 16px;
+}
+
+[data-theme='greenhouse'] .ghost-button:hover {
+  filter: brightness(1.08);
+  background: linear-gradient(180deg, #8a6a48, #6b4e30);
+  color: #fdf6ea;
+  border-color: rgba(107, 78, 48, 0.55);
+}
+
+[data-theme='greenhouse'] .ghost-button:active {
+  transform: translateY(1.5px);
+}
+
+/* 团队刷新:嫩叶绿实心 */
+[data-theme='greenhouse'] .ghost-button--accent {
+  border: none;
+  background: linear-gradient(174deg, #6fae6a, #3f7a4e);
+  color: #f2f7ec;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 4px 12px rgba(63, 122, 78, 0.4);
+  padding: 6px 14px;
+  font-size: 11.5px;
+}
+
+[data-theme='greenhouse'] .ghost-button--accent:hover {
+  filter: brightness(1.06);
+  background: linear-gradient(174deg, #6fae6a, #3f7a4e);
+  color: #f2f7ec;
+  transform: translateY(-1px);
+}
+
+/* 检查更新:陶土描边小签 */
+[data-theme='greenhouse'] .about-row__btn {
+  border-radius: 999px;
+  border: 1px solid rgba(163, 98, 42, 0.5);
+  background: rgba(217, 127, 78, 0.1);
+  color: #a3622a;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 6px 16px;
+}
+
+[data-theme='greenhouse'] .about-row__btn:hover {
+  background: rgba(217, 127, 78, 0.24);
+  color: #a3622a;
+}
+
+/* ---------- panel__footer:木底横梁 ---------- */
+
+[data-theme='greenhouse'] .panel__footer {
+  border-top: 1px solid rgba(122, 92, 64, 0.32);
+  background: linear-gradient(180deg, #ded3b4, #d3c5a2);
+  box-shadow: inset 0 2px 5px rgba(90, 60, 30, 0.22);
+}
+
+[data-theme='greenhouse'] .panel__footer-meta {
+  color: #6d5a40;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ---------- settings:温室自动化 ---------- */
+
+[data-theme='greenhouse'] .settings-section {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-theme='greenhouse'] .settings-section__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: #8f9f7c;
+}
+
+[data-theme='greenhouse'] .settings-section__title::before {
+  content: '❧';
+  color: #4d8b5a;
+}
+
+[data-theme='greenhouse'] .settings-section__title::after {
+  content: '';
+  flex: 1;
+  height: 0;
+  border-top: 1px dashed rgba(122, 92, 64, 0.4);
+}
+
+[data-theme='greenhouse'] .setting-row {
+  border-radius: 14px;
+  border: 1px solid rgba(122, 92, 64, 0.26);
+  background: rgba(252, 253, 246, 0.85);
+}
+
+[data-theme='greenhouse'] .setting-row:hover {
+  background: #ffffff;
+  border-color: rgba(77, 139, 90, 0.5);
+}
+
+[data-theme='greenhouse'] .inline-input {
+  border-radius: 11px;
+  border: 1px solid rgba(122, 92, 64, 0.4);
+  background: #fdfdfa;
+}
+
+[data-theme='greenhouse'] .inline-input span {
+  color: #93a382;
+  font-weight: 700;
+}
+
+[data-theme='greenhouse'] .inline-input input {
+  border-radius: 8px;
+  border: 1px solid rgba(122, 92, 64, 0.4);
+  background: #eef3e4;
+  color: #33452c;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+[data-theme='greenhouse'] .inline-input:focus-within {
+  border-color: #4d8b5a;
+}
+
+/* ---------- team-broadcast:水塔下的闲谈 ---------- */
+
+[data-theme='greenhouse'] .team-broadcast__title {
+  color: #6d7c58;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+[data-theme='greenhouse'] .team-broadcast__item {
+  border-radius: 14px 14px 14px 4px;
+  border: 1px solid rgba(122, 150, 110, 0.35);
+  background: rgba(213, 228, 204, 0.65);
+}
+
+[data-theme='greenhouse'] .team-broadcast__name,
+[data-theme='greenhouse'] .team-broadcast__time {
+  color: #93a382;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+[data-theme='greenhouse'] .team-broadcast__text {
+  color: #39492f;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+[data-theme='greenhouse'] .team-broadcast__input {
+  border-radius: 12px;
+  border: 1px solid rgba(122, 92, 64, 0.45);
+  background: #fdfdfa;
+}
+
+[data-theme='greenhouse'] .team-broadcast__input::placeholder {
+  color: #93a382;
+}
+
+[data-theme='greenhouse'] .team-broadcast__input:focus {
+  border-color: #4d8b5a;
+  box-shadow: 0 0 0 3px rgba(77, 139, 90, 0.15);
+}
+
+[data-theme='greenhouse'] .team-broadcast__send {
+  border-radius: 12px;
+  background: linear-gradient(174deg, #6fae6a, #3f7a4e);
+  color: #f2f7ec;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 4px 12px rgba(63, 122, 78, 0.4);
+  padding: 9px 18px;
+}
+
+[data-theme='greenhouse'] .team-broadcast__send:hover {
+  transform: translateY(-1px);
+}
+
+/* ---------- usage-range-panel:自定义区间(木框苗圃登记条) ---------- */
+
+[data-theme='greenhouse'] .usage-range-panel {
+  border-radius: 12px;
+  border: 1px solid rgba(122, 92, 64, 0.35);
+  background: rgba(252, 253, 246, 0.7);
+}
+
+[data-theme='greenhouse'] .usage-range-field input {
+  border-radius: 8px;
+  border: 1px solid rgba(122, 92, 64, 0.4);
+  background: #fdfdfa;
+  color: #33452c;
+  color-scheme: light;
+}
+
+[data-theme='greenhouse'] .usage-range-field input:focus-visible {
+  border-color: #4d8b5a;
+}
+
+[data-theme='greenhouse'] .usage-range-apply {
+  border-radius: 10px;
+  background: linear-gradient(174deg, #6fae6a, #3f7a4e);
+  color: #f2f7ec;
+  border: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 4px 12px rgba(63, 122, 78, 0.4);
+  font-weight: 700;
+}
+
+/* ---------- model-board:模型用量榜(藤蔓横条) ---------- */
+
+[data-theme='greenhouse'] .model-board__title {
+  color: #5c6b4a;
+  font-weight: 700;
+}
+
+[data-theme='greenhouse'] .model-board__track {
+  border-radius: 99px;
+  background: rgba(122, 92, 64, 0.15);
+}
+
+[data-theme='greenhouse'] .model-board__fill {
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6fae6a, #3f7a4e);
+  box-shadow: 0 0 6px rgba(63, 122, 78, 0.35);
+}
+
+[data-theme='greenhouse'] .model-board__name {
+  color: #93a382;
+}
+
+[data-theme='greenhouse'] .model-board__meta {
+  color: #39492f;
+  font-weight: 600;
+}
+
+/* ---------- 浮层:纸底木框 ---------- */
+
+[data-theme='greenhouse'] .model-board__tooltip,
+[data-theme='greenhouse'] .usage-tooltip {
+  border-radius: 12px;
+  border: 1px solid rgba(122, 92, 64, 0.4);
+  background: rgba(253, 252, 244, 0.97);
+  box-shadow: 0 8px 20px rgba(50, 40, 20, 0.25);
+}
+
+[data-theme='greenhouse'] .usage-tooltip__date {
+  color: #33452c;
+  font-weight: 700;
+}
+
+[data-theme='greenhouse'] .usage-tooltip__row {
+  color: #93a382;
+}
+
+[data-theme='greenhouse'] .usage-tooltip__row span:last-child {
+  color: #39492f;
+}
+
+[data-theme='greenhouse'] .usage-tooltip__cost {
+  border-top: 1px solid rgba(122, 92, 64, 0.3);
+}
+
+/* ---------- 空状态:虚线木框 ---------- */
+
+[data-theme='greenhouse'] .team-empty,
+[data-theme='greenhouse'] .team-broadcast__empty {
+  border-radius: 12px;
+  border: 1.5px dashed rgba(122, 92, 64, 0.45);
+  color: #93a382;
+}
+
+/* ---------- 滚动条:细绿藤 ---------- */
+
+[data-theme='greenhouse'] .panel__content,
+[data-theme='greenhouse'] .team-broadcast__feed {
+  scrollbar-color: rgba(120, 150, 110, 0.4) transparent;
+}
+
+[data-theme='greenhouse'] .panel__content::-webkit-scrollbar,
+[data-theme='greenhouse'] .team-broadcast__feed::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-theme='greenhouse'] .panel__content::-webkit-scrollbar-thumb,
+[data-theme='greenhouse'] .team-broadcast__feed::-webkit-scrollbar-thumb {
+  border-radius: 99px;
+  background: rgba(120, 150, 110, 0.4);
+}
+
+[data-theme='greenhouse'] .panel__content::-webkit-scrollbar-thumb:hover,
+[data-theme='greenhouse'] .team-broadcast__feed::-webkit-scrollbar-thumb:hover {
+  background: rgba(77, 139, 90, 0.6);
+}
+
+/* 入场:推开温室门,整棚植物迎面而来 */
+@keyframes greenhouse-in {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+}
+
+[data-theme='greenhouse'] .panel {
+  animation: greenhouse-in 0.65s cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+}
