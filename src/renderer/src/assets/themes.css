@@ -1,6 +1,6 @@
 /* =====================================================================
-   主题系统:7 套,单文件 token + 结构覆盖
-   [data-theme="midnight"] 默认深色青蓝(现状);其余 6 套对应 design-previews
+   主题系统:8 套,单文件 token + 结构覆盖
+   [data-theme="midnight"] 默认深色青蓝(现状);其余 7 套对应 design-previews
    每个 [data-theme] 块只覆盖 token 与该主题独有的结构装饰,
    布局/功能/动效完全复用 main.css,不重复
    ===================================================================== */
@@ -5923,5 +5923,1453 @@
   color: #ff3b2f;
   text-shadow: 0 0 7px rgba(255, 59, 47, 0.7), 0 0 18px rgba(255, 59, 47, 0.3);
   animation: capsule-critical-pulse 1.6s ease-in-out infinite;
+}
+
+/* =====================================================================
+   9. INKSONG · 宋韵水墨 Ink Song
+   形态语言:宣纸册页(横竖胶囊) + 朱丝栏内框 + 墨条笔触进度(飞白+收笔顿点)
+           + 朱砂印章 + 竹节柱状图(顶梢竹叶/今日朱笔) + 线装书脊
+           + 洒金笺公告 + 墨玉珠开关 + 卷轴展开入场
+   策略 A:纯视觉映射,不改 DOM;横竖版统一纸墨语言
+   ===================================================================== */
+[data-theme='inksong'] {
+  /* 胶囊:宣纸铭牌,3px 微圆角;纸不透明,无毛玻璃 → 无圆角外残留,不需要 clip 裁切 */
+  --capsule-radius: 3px;
+  --capsule-orb-radius: 3px;
+  --capsule-clip: none;
+  /* 纸身:虫蛀微斑(四角)+ 宣纸竖横帘纹 + 纸色渐变,一层 background 叠出 */
+  --capsule-text: #37301f;
+  --capsule-bg:
+    radial-gradient(6px 4px at 96% 8%, rgba(112, 88, 48, 0.22), transparent 70%),
+    radial-gradient(5px 3px at 4% 92%, rgba(112, 88, 48, 0.2), transparent 70%),
+    repeating-linear-gradient(93deg, rgba(120, 100, 60, 0.05) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(2deg, rgba(120, 100, 60, 0.04) 0 1px, transparent 1px 4px),
+    linear-gradient(172deg, #f6f0e1 0%, #efe7d2 62%, #e6dbc2 100%);
+  --capsule-orb-bg:
+    radial-gradient(6px 4px at 96% 8%, rgba(112, 88, 48, 0.22), transparent 70%),
+    radial-gradient(5px 3px at 4% 92%, rgba(112, 88, 48, 0.2), transparent 70%),
+    repeating-linear-gradient(93deg, rgba(120, 100, 60, 0.05) 0 1px, transparent 1px 3px),
+    linear-gradient(184deg, #f6f0e1 0%, #efe7d2 60%, #e6dbc2 100%);
+  --capsule-edge: rgba(120, 95, 45, 0.16);
+  --capsule-edge-soft: rgba(120, 100, 60, 0.05);
+  --capsule-filter: none;
+  /* 横版百分比/印章主色=朱砂,竖版 orb 换赭金(见下方覆盖) */
+  --capsule-accent: #b3402f;
+  --capsule-font: Georgia, 'Noto Serif SC', 'Microsoft YaHei UI', serif;
+  /* panel:一册摊开的线装书,方角无外框;书脊/锁线在 .panel__deco */
+  --panel-radius: 0px;
+  --panel-clip: none;
+  --panel-border: none;
+  --panel-tint: none;
+  --panel-bg:
+    repeating-linear-gradient(91deg, rgba(120, 100, 60, 0.045) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(1deg, rgba(120, 100, 60, 0.035) 0 1px, transparent 1px 4px),
+    linear-gradient(174deg, #f4eddc 0%, #ede4cd 58%, #e4d8bc 100%);
+  --panel-shadow:
+    0 32px 68px rgba(0, 0, 0, 0.5),
+    inset 0 0 44px rgba(150, 125, 70, 0.15);
+  /* 色板:纸/墨/朱砂/赭金/苔绿/司南青 */
+  --panel-card: #f2ecdd;
+  --panel-card-2: #f6f0e1;
+  --panel-card-3: #fbf4e2;
+  --panel-inset: rgba(90, 75, 45, 0.16);
+  --panel-text: #37301f;
+  --panel-text-2: #574c34;
+  --panel-muted: #8d8069;
+  --panel-accent: #b3402f;
+  --panel-accent-2: #46696e;
+  --panel-accent-soft: rgba(179, 64, 47, 0.1);
+  --panel-success: #4e7d43;
+  --panel-danger: #9e3223;
+  --panel-line: rgba(90, 75, 45, 0.4);
+  --panel-line-strong: rgba(90, 75, 45, 0.6);
+  --panel-icon-blue: #46696e;
+  --panel-icon-violet: #31579c;
+  --panel-icon-amber: #8a5a1e;
+  --panel-icon-pink: #b3402f;
+  --panel-icon-green: #4e7d43;
+  --panel-font: Georgia, 'Noto Serif SC', 'Microsoft YaHei UI', serif;
+
+  /* 胶囊元素参数(横版:weekly 21px/percent 19px 对齐参考;竖版覆盖见下文) */
+  --capsule-h-pad-y: 0px;
+  --capsule-h-pad-x: 8px;
+  --capsule-h-gap: 8px;
+  --capsule-v-pad-y: 8px;
+  --capsule-v-pad-x: 4px;
+  --capsule-v-gap: 5px;
+  --capsule-weekly-font: 18px;
+  --capsule-weekly-pad-y: 0px;
+  --capsule-weekly-pad-x: 0px;
+  --capsule-weekly-gap: 2px;
+  --capsule-percent-font: 19px;
+  --capsule-progress-h: 5px;
+  --capsule-progress-w: 100%;
+  --capsule-credit-font: 9px;
+  --capsule-credit-pad-y: 2px;
+  --capsule-credit-pad-x: 5px;
+  --capsule-pick-font: 9px;
+  --capsule-pick-pad-y: 2px;
+  --capsule-pick-pad-x: 5px;
+  --capsule-stat-label-font: 8.5px;
+  --capsule-stat-value-font: 13px;
+  --capsule-stat-pad-y: 0px;
+  --capsule-stat-pad-x: 0px;
+}
+
+/* main.css 的 .panel{} 自身重声明了一批 token,元素自身声明优先于父级继承;
+   用 [data-theme='inksong'] .panel (特异性 0,2,0) 在 .panel 元素上重新赋主题值;
+   左 padding 加宽到 36px,给 20px 线装书脊让位(参考 .panel__content 34px 左内距) */
+[data-theme='inksong'] .panel {
+  --panel-bg:
+    repeating-linear-gradient(91deg, rgba(120, 100, 60, 0.045) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(1deg, rgba(120, 100, 60, 0.035) 0 1px, transparent 1px 4px),
+    linear-gradient(174deg, #f4eddc 0%, #ede4cd 58%, #e4d8bc 100%);
+  --panel-card: #f2ecdd;
+  --panel-card-2: #f6f0e1;
+  --panel-card-3: #fbf4e2;
+  --panel-surface: #f2ecdd;
+  --panel-surface-2: #f6f0e1;
+  --panel-inset: rgba(90, 75, 45, 0.16);
+  --panel-text: #37301f;
+  --panel-text-2: #574c34;
+  --panel-muted: #8d8069;
+  --panel-accent: #b3402f;
+  --panel-accent-2: #46696e;
+  --panel-accent-soft: rgba(179, 64, 47, 0.1);
+  --panel-success: #4e7d43;
+  --panel-danger: #9e3223;
+  --panel-line: rgba(90, 75, 45, 0.4);
+  --panel-line-strong: rgba(90, 75, 45, 0.6);
+  --panel-icon-blue: #46696e;
+  --panel-icon-violet: #31579c;
+  --panel-icon-amber: #8a5a1e;
+  --panel-icon-pink: #b3402f;
+  --panel-icon-green: #4e7d43;
+  padding: 24px 24px 0 36px;
+}
+
+/* ---------- 胶囊:宣纸铭牌 ---------- */
+
+/* 纸身内阴影:大面积黄褐晕染 + 底缘压暗,替代默认玻璃描边 */
+[data-theme='inksong'] .capsule {
+  box-shadow:
+    inset 0 0 26px rgba(150, 125, 70, 0.18),
+    inset 0 -2px 5px rgba(120, 95, 45, 0.16);
+}
+
+/* 朱丝栏:内缩 4px 一圈的细红栏线 + 极淡红栏底,横竖共用 */
+[data-theme='inksong'] .capsule__layout--h,
+[data-theme='inksong'] .capsule__layout--v {
+  width: calc(100% - 8px);
+  height: calc(100% - 8px);
+  margin: 4px;
+  border: 1px solid rgba(179, 64, 47, 0.34);
+  border-radius: 2px;
+  background-image: linear-gradient(rgba(179, 64, 47, 0.05), rgba(179, 64, 47, 0.05));
+}
+
+[data-theme='inksong'] .capsule__layout--h {
+  padding: 0 var(--capsule-h-pad-x);
+  gap: var(--capsule-h-gap);
+}
+
+[data-theme='inksong'] .capsule__layout--v {
+  padding: var(--capsule-v-pad-y) var(--capsule-v-pad-x);
+  gap: var(--capsule-v-gap);
+}
+
+/* 周重置倒计时:楷体重墨大字,沙漏图标淡墨收窄(给墨条让宽) */
+[data-theme='inksong'] .capsule__weekly {
+  color: #211c12;
+  font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
+  font-weight: 700;
+}
+
+[data-theme='inksong'] .capsule__weekly svg {
+  color: #574c34;
+  width: 12px;
+  height: 12px;
+}
+
+/* 百分比:楷体朱砂(横版);竖版 orb 换赭金并收紧字号 */
+[data-theme='inksong'] .capsule__percent {
+  color: #b3402f;
+  font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
+  font-weight: 700;
+}
+
+[data-theme='inksong'] .capsule--orb .capsule__percent {
+  color: #8a5a1e;
+  font-size: 15px;
+}
+
+[data-theme='inksong'] .capsule--orb .capsule__weekly {
+  font-size: 17px;
+}
+
+/* 墨条进度:淡墨底槽给出全宽参照(能读出剩余占比),槽不裁切,笔触可出界收笔 */
+[data-theme='inksong'] .capsule__progress {
+  height: var(--capsule-progress-h);
+  border-radius: 2px;
+  background: rgba(90, 75, 45, 0.15);
+  overflow: visible;
+}
+
+/* 笔触本体:飞白竖纹 + 墨色渐变,毛笔状圆角 + 起收笔参差轮廓 */
+[data-theme='inksong'] .capsule__progress span,
+[data-theme='inksong'] .quota-card__progress span {
+  position: relative;
+  border-radius: 1px 60% 60% 1px / 1px 50% 50% 1px;
+  background:
+    repeating-linear-gradient(178deg, rgba(255, 255, 255, 0) 0 2px, rgba(43, 36, 28, 0.24) 2px 3px),
+    linear-gradient(90deg, rgba(33, 28, 18, 0.92), #3a3226);
+  clip-path: polygon(
+    0 18%,
+    4% 0,
+    55% 8%,
+    78% 0,
+    97% 14%,
+    100% 42%,
+    99% 74%,
+    96% 100%,
+    54% 94%,
+    22% 100%,
+    3% 86%,
+    0 55%
+  );
+  transition: width 1.1s cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+
+/* 收笔顿点:笔锋尽处一枚不规则的浓墨点 */
+[data-theme='inksong'] .capsule__progress span::after,
+[data-theme='inksong'] .quota-card__progress span::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  transform: translateY(-50%) rotate(18deg);
+  background: radial-gradient(circle at 35% 35%, #4a4234, #211c12 70%);
+  border-radius: 62% 44% 56% 50%;
+}
+
+/* 竖版 orb:墨条固定 30px 宽,与百分比数字同轴 */
+[data-theme='inksong'] .capsule--orb .capsule__metric-box .capsule__progress {
+  width: 30px;
+}
+
+/* 重置卡:纸笺小签,赭金字 + 赭金细框(描边用 inset 阴影,不占布局) */
+[data-theme='inksong'] .capsule__credit {
+  border-radius: 2px;
+  color: #8a5a1e;
+  background: rgba(255, 252, 244, 0.65);
+  box-shadow: inset 0 0 0 1px rgba(138, 90, 30, 0.45);
+  font-size: var(--capsule-credit-font);
+  padding: var(--capsule-credit-pad-y) var(--capsule-credit-pad-x);
+  font-weight: 600;
+}
+
+/* 推荐模型:纸笺小签,朱砂细框;文字色保持模型品牌色(inline) */
+[data-theme='inksong'] .capsule__pick {
+  border-radius: 2px;
+  background: rgba(255, 252, 244, 0.65);
+  box-shadow: inset 0 0 0 1px rgba(179, 64, 47, 0.4);
+  font-size: var(--capsule-pick-font);
+  padding: var(--capsule-pick-pad-y) var(--capsule-pick-pad-x);
+  font-weight: 600;
+}
+
+/* API 模式统计单元:淡墨标签 + 楷体墨字,命中率数值朱砂 */
+[data-theme='inksong'] .capsule__stat-label {
+  color: rgba(141, 128, 105, 0.9);
+}
+
+[data-theme='inksong'] .capsule__stat-value {
+  color: #211c12;
+  font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
+  font-weight: 700;
+}
+
+[data-theme='inksong'] .capsule__stat--metric .capsule__stat-value {
+  color: #b3402f;
+}
+
+/* 竖版 orb:两枚小签同步收紧 */
+[data-theme='inksong'] .capsule--orb .capsule__credit {
+  font-size: 8.5px;
+  padding: 1.5px 5px;
+}
+
+[data-theme='inksong'] .capsule--orb .capsule__pick {
+  font-size: 8.5px;
+  padding: 1.5px 5px;
+}
+
+/* 广播跑马灯文字:纸底上改墨色(默认冷白在宣纸上不可读) */
+[data-theme='inksong'] .capsule__message-copy {
+  color: #37301f;
+}
+
+/* 告急态:深朱砂 + 呼吸(必须高于本主题 0,2,0 的基础覆盖) */
+[data-theme='inksong'] .capsule__percent.is-critical {
+  color: #9e3223;
+  animation: capsule-critical-pulse 1.6s ease-in-out infinite;
+}
+
+/* ---------- panel:线装书 ---------- */
+
+/* 左侧布脊装订:20px 深色书脊 + 横向缝线压纹 */
+[data-theme='inksong'] .panel__deco {
+  display: block;
+}
+
+[data-theme='inksong'] .panel__deco::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  background:
+    repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.18) 0 2px, transparent 2px 26px),
+    linear-gradient(90deg, #241d12 0%, #3a2f1c 68%, rgba(58, 47, 28, 0) 100%);
+  box-shadow: inset -3px 0 6px rgba(0, 0, 0, 0.25);
+}
+
+/* 锁线装订孔:书脊上等距的墨孔 + 金线 */
+[data-theme='inksong'] .panel__deco::after {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background-image: repeating-linear-gradient(
+    180deg,
+    transparent 0 34px,
+    #14100a 34px 42px,
+    rgba(201, 167, 92, 0.35) 42px 44px,
+    transparent 44px 76px
+  );
+  opacity: 0.85;
+}
+
+/* panel 标题:楷体重墨大字,宽字距居中 */
+[data-theme='inksong'] .panel__title {
+  font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 6px;
+  text-indent: 6px;
+  color: #211c12;
+  margin: 2px 0 14px;
+}
+
+/* panel tabs:书签折页——纸底通栏 + 底部墨线,楷体宽字距 */
+[data-theme='inksong'] .panel__tabs {
+  background: #f1e9d6;
+  border: none;
+  border-bottom: 1px solid rgba(90, 75, 45, 0.4);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  gap: 0;
+  margin-bottom: 16px;
+}
+
+[data-theme='inksong'] .panel__tab {
+  position: relative;
+  border-radius: 0;
+  border: none;
+  background: none;
+  color: #8d8069;
+  font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 4px;
+  text-indent: 4px;
+  padding: 8px 0 9px;
+}
+
+[data-theme='inksong'] .panel__tab:hover:not(.is-active) {
+  background: none;
+  color: #574c34;
+}
+
+[data-theme='inksong'] .panel__tab.is-active {
+  background: none;
+  color: #211c12;
+  font-weight: 700;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* 书签舌头:选中页底边折出一角朱红 */
+[data-theme='inksong'] .panel__tab::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -1px;
+  width: 34px;
+  height: 3px;
+  transform: translateX(-50%) scaleX(0);
+  background: #b3402f;
+  transition: transform 0.3s cubic-bezier(0.34, 1.3, 0.5, 1);
+}
+
+[data-theme='inksong'] .panel__tab.is-active::after {
+  transform: translateX(-50%) scaleX(1);
+}
+
+/* quota-card:额度笺——纸底 + 朱红细框 + 内晕染,hover 上浮微旋 */
+[data-theme='inksong'] .quota-card {
+  border-radius: 2px;
+  border: 1px solid rgba(179, 64, 47, 0.36);
+  background: linear-gradient(170deg, rgba(255, 252, 242, 0.8), rgba(248, 241, 225, 0.6));
+  box-shadow:
+    inset 0 0 16px rgba(160, 135, 80, 0.12),
+    0 3px 8px rgba(60, 45, 20, 0.14);
+}
+
+[data-theme='inksong'] .quota-card.is-accent {
+  background: linear-gradient(170deg, rgba(255, 252, 242, 0.8), rgba(248, 241, 225, 0.6));
+}
+
+[data-theme='inksong'] .quota-card:hover {
+  transform: translateY(-3px) rotate(-0.4deg);
+  box-shadow:
+    inset 0 0 16px rgba(160, 135, 80, 0.16),
+    0 9px 18px rgba(60, 45, 20, 0.2);
+  border-color: rgba(179, 64, 47, 0.36);
+}
+
+/* 笺纸角花:左上一枚对折三角(覆盖 main.css 主卡顶部柔光) */
+[data-theme='inksong'] .quota-card::before,
+[data-theme='inksong'] .quota-card.is-accent::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(135deg, rgba(179, 64, 47, 0.5) 0 49%, transparent 50%);
+}
+
+/* 朱砂印:数据落定后盖上;主卡(5h)印「限」,余卡印「宽」 */
+[data-theme='inksong'] .quota-card::after {
+  content: '宽';
+  position: absolute;
+  right: 9px;
+  bottom: 7px;
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: #f6ead6;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.2), transparent 42%),
+    linear-gradient(148deg, #c04a35, #9e3223);
+  border-radius: 3px;
+  box-shadow:
+    0 2px 5px rgba(158, 50, 35, 0.4),
+    inset 0 0 4px rgba(70, 15, 8, 0.5);
+  transform: rotate(-7deg);
+  animation: inksong-seal-stamp 0.5s cubic-bezier(0.34, 1.3, 0.4, 1) 1.15s backwards;
+}
+
+[data-theme='inksong'] .quota-card.is-accent::after {
+  content: '限';
+}
+
+@keyframes inksong-seal-stamp {
+  0% {
+    transform: scale(2.1) rotate(-26deg);
+    opacity: 0;
+  }
+  62% {
+    transform: scale(0.92) rotate(-5deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(-7deg);
+  }
+}
+
+[data-theme='inksong'] .quota-card__label {
+  font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: #211c12;
+}
+
+[data-theme='inksong'] .quota-card__mode {
+  font-size: 10px;
+  color: #8d8069;
+  letter-spacing: 2px;
+}
+
+/* 额度数值:楷体大字,颜色跟随额度动态色 */
+[data-theme='inksong'] .quota-card__value {
+  color: var(--metric-accent, #b3402f);
+  font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
+  font-size: 29px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+[data-theme='inksong'] .quota-card.is-accent .quota-card__value {
+  font-size: 29px;
+  font-weight: 700;
+}
+
+/* 额度墨条:与胶囊同款淡墨底槽,不裁切,笔触收笔可出界 */
+[data-theme='inksong'] .quota-card__progress {
+  height: 5px;
+  border-radius: 2px;
+  background: rgba(90, 75, 45, 0.15);
+  overflow: visible;
+}
+
+[data-theme='inksong'] .quota-card.is-accent .quota-card__progress {
+  height: 5px;
+}
+
+[data-theme='inksong'] .quota-card__reset {
+  color: #574c34;
+  font-size: 12px;
+}
+
+[data-theme='inksong'] .quota-card__expiry {
+  color: #8d8069;
+  font-size: 10.5px;
+  margin-top: 0;
+}
+
+/* usage-card:墨账——纸底墨框内晕染,标题楷体 + 两侧朱红短线 */
+[data-theme='inksong'] .usage-card {
+  padding: 13px 15px 15px;
+  border-radius: 2px;
+  border: 1px solid rgba(90, 75, 45, 0.4);
+  background: linear-gradient(172deg, rgba(255, 252, 242, 0.72), rgba(248, 241, 225, 0.5));
+  box-shadow: inset 0 0 16px rgba(160, 135, 80, 0.1);
+}
+
+[data-theme='inksong'] .usage-card:hover {
+  transform: none;
+  border-color: rgba(90, 75, 45, 0.4);
+  box-shadow: inset 0 0 16px rgba(160, 135, 80, 0.1);
+}
+
+[data-theme='inksong'] .usage-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: #211c12;
+}
+
+[data-theme='inksong'] .usage-card__title::before,
+[data-theme='inksong'] .usage-card__title::after {
+  content: '';
+  height: 1px;
+  flex: 0 0 14px;
+  background: linear-gradient(90deg, #b3402f, transparent);
+}
+
+[data-theme='inksong'] .usage-card__title::after {
+  transform: scaleX(-1);
+}
+
+/* 用量汇总:去卡片底,五列文字按内容宽两端对齐(对齐参考 .usage-summary) */
+[data-theme='inksong'] .usage-summary {
+  grid-template-columns: repeat(5, auto);
+  justify-content: space-between;
+  gap: 0;
+  margin: 12px 2px 4px;
+}
+
+[data-theme='inksong'] .usage-summary__item {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  gap: 3px;
+}
+
+[data-theme='inksong'] .usage-summary__value {
+  color: #211c12;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+[data-theme='inksong'] .usage-summary__label {
+  color: #8d8069;
+  font-size: 9.5px;
+  letter-spacing: 1px;
+}
+
+/* 汇总分类着色:研墨青/落纸蓝/宿墨绿/资费朱 */
+[data-theme='inksong'] .usage-summary__value--input {
+  color: #46696e;
+}
+
+[data-theme='inksong'] .usage-summary__value--output {
+  color: #31579c;
+}
+
+[data-theme='inksong'] .usage-summary__value--cached {
+  color: #4e7d43;
+}
+
+[data-theme='inksong'] .usage-summary__value--cost {
+  color: #b3402f;
+}
+
+/* 墨竹柱状图:茎为柱、节间留白、末日前一天挂朱批 */
+[data-theme='inksong'] .usage-chart {
+  height: 74px;
+  gap: 5px;
+}
+
+[data-theme='inksong'] .usage-chart__col {
+  gap: 5px;
+}
+
+/* 竹茎:7px 墨柱,压平默认发光;分段透明化,统一呈现整根墨竹 */
+[data-theme='inksong'] .usage-chart__bar--stack {
+  position: relative;
+  width: 7px;
+  border-radius: 3px 3px 1px 1px;
+  background: linear-gradient(180deg, #574c34, #211c12);
+  box-shadow: none;
+  overflow: visible;
+}
+
+[data-theme='inksong'] .usage-chart__bar-seg.is-cached,
+[data-theme='inksong'] .usage-chart__bar-seg.is-input,
+[data-theme='inksong'] .usage-chart__bar-seg.is-output {
+  background: transparent;
+}
+
+/* 分段间留白细线,保留堆叠构成可读 */
+[data-theme='inksong'] .usage-chart__bar-seg + .usage-chart__bar-seg {
+  box-shadow: inset 0 1px 0 rgba(239, 231, 210, 0.55);
+}
+
+/* 竹节:柱上两道横节(30% 处 + 14px 处) */
+[data-theme='inksong'] .usage-chart__bar--stack::before {
+  content: '';
+  position: absolute;
+  left: -2.5px;
+  right: -2.5px;
+  top: 30%;
+  height: 1.5px;
+  background: #efe7d2;
+  box-shadow: 0 14px 0 #efe7d2;
+  opacity: 0.9;
+}
+
+/* 顶梢一笔竹叶 */
+[data-theme='inksong'] .usage-chart__bar--stack::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  width: 14px;
+  height: 5px;
+  transform: translateX(-30%) rotate(-28deg);
+  background: linear-gradient(120deg, #4e7d43cc, #4e7d4366 70%, transparent);
+  border-radius: 0 80% 4px 80%;
+}
+
+/* 今日一枝朱笔 */
+[data-theme='inksong'] .usage-chart__col:last-child .usage-chart__bar--stack {
+  background: linear-gradient(180deg, #c25a44, #9e3223);
+}
+
+[data-theme='inksong'] .usage-chart__col:last-child .usage-chart__bar--stack::before {
+  background: #f2ecdd;
+  box-shadow: 0 14px 0 #f2ecdd;
+}
+
+[data-theme='inksong'] .usage-chart__date {
+  color: #8d8069;
+  font-size: 8.5px;
+}
+
+[data-theme='inksong'] .usage-chart__col:last-child .usage-chart__date {
+  color: #b3402f;
+  font-weight: 700;
+}
+
+/* 1 天/自定义区间横向堆叠条:浓墨/中墨/淡墨三阶 */
+[data-theme='inksong'] .usage-bar__track {
+  border-radius: 2px;
+  border: 1px solid rgba(90, 75, 45, 0.4);
+  background: rgba(90, 75, 45, 0.12);
+}
+
+[data-theme='inksong'] .usage-bar__seg.is-input,
+[data-theme='inksong'] .usage-bar__dot.is-input {
+  background: #37301f;
+}
+
+[data-theme='inksong'] .usage-bar__seg.is-cached,
+[data-theme='inksong'] .usage-bar__dot.is-cached {
+  background: #9c8f74;
+}
+
+[data-theme='inksong'] .usage-bar__seg.is-output,
+[data-theme='inksong'] .usage-bar__dot.is-output {
+  background: #6b614c;
+}
+
+/* detail-row:册页条目——纸底墨框,左端装订孔,hover 右移换红框 */
+[data-theme='inksong'] .detail-row {
+  border-radius: 2px;
+  border: 1px solid rgba(90, 75, 45, 0.28);
+  background: rgba(255, 252, 242, 0.55);
+}
+
+[data-theme='inksong'] .detail-row:hover {
+  background: #fffef8;
+  border-color: rgba(179, 64, 47, 0.5);
+  transform: translateX(3px);
+}
+
+/* 装订孔:挂在 label-group 首位(grid 行的直接伪元素会挤占列) */
+[data-theme='inksong'] .detail-row__label-group::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #3a2f1c;
+  box-shadow:
+    0 0 0 1.5px #d8cbae,
+    inset 0 1px 1px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme='inksong'] .detail-row__icon {
+  border-radius: 2px;
+  background: #f2ecdd;
+  box-shadow: inset 0 0 0 1px rgba(90, 75, 45, 0.4);
+}
+
+[data-theme='inksong'] .detail-row__label {
+  color: #37301f;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* 司南荐式等链接:司南青 + 虚线下划 */
+[data-theme='inksong'] .detail-row__link {
+  color: #46696e;
+  font-weight: 600;
+  border-bottom: 1px dashed rgba(70, 105, 110, 0.5);
+}
+
+[data-theme='inksong'] .detail-row__link:hover {
+  color: #31579c;
+  text-decoration: none;
+  border-bottom-color: rgba(49, 87, 156, 0.7);
+}
+
+[data-theme='inksong'] .detail-row__value {
+  color: #211c12;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+[data-theme='inksong'] .detail-row__hint {
+  color: #8d8069;
+  font-size: 10.5px;
+}
+
+/* 来源信息卡:册页纸底 */
+[data-theme='inksong'] .panel__meta {
+  border-radius: 2px;
+  border: 1px solid rgba(90, 75, 45, 0.28);
+  background: rgba(255, 252, 242, 0.55);
+  box-shadow: none;
+}
+
+[data-theme='inksong'] .panel__meta-row svg {
+  border-radius: 2px;
+  background: #f2ecdd;
+  box-shadow: inset 0 0 0 1px rgba(90, 75, 45, 0.4);
+}
+
+/* 团队公告:洒金笺——金点洒金纸面 + 朱红边框 */
+[data-theme='inksong'] .team-announcement {
+  border-radius: 2px;
+  border: 1px solid rgba(179, 64, 47, 0.45);
+  background:
+    radial-gradient(circle at 18% 30%, rgba(201, 167, 92, 0.5) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 64% 66%, rgba(201, 167, 92, 0.45) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 84% 18%, rgba(201, 167, 92, 0.5) 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 38% 84%, rgba(201, 167, 92, 0.4) 0 0.8px, transparent 1.4px),
+    linear-gradient(170deg, rgba(255, 250, 235, 0.9), rgba(248, 238, 214, 0.75));
+  background-size:
+    90px 70px,
+    130px 90px,
+    70px 60px,
+    110px 80px,
+    cover;
+  box-shadow: none;
+}
+
+[data-theme='inksong'] .team-announcement::before {
+  display: none;
+}
+
+[data-theme='inksong'] .team-announcement.is-unread {
+  border-color: #b3402f;
+  box-shadow:
+    0 0 0 1px rgba(179, 64, 47, 0.25),
+    0 6px 16px rgba(60, 45, 20, 0.18);
+}
+
+/* 示谕标签:朱红楷体宽字距,未读点同色 */
+[data-theme='inksong'] .team-announcement__label {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #b3402f;
+  font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 4px;
+}
+
+[data-theme='inksong'] .team-announcement.is-unread .team-announcement__label::before {
+  background: #b3402f;
+}
+
+[data-theme='inksong'] .team-announcement__meta {
+  color: #8d8069;
+}
+
+[data-theme='inksong'] .team-announcement__text {
+  color: #37301f;
+  font-weight: 400;
+  line-height: 1.7;
+}
+
+[data-theme='inksong'] .team-announcement__acknowledge {
+  border-radius: 2px;
+  border: 1px solid #37301f;
+  background: transparent;
+  color: #211c12;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 2px;
+}
+
+[data-theme='inksong'] .team-announcement__acknowledge:hover {
+  background: #37301f;
+  border-color: #37301f;
+  color: #f6ead6;
+}
+
+/* team-row:同门名录——纸底墨框,hover 右移换红框 */
+[data-theme='inksong'] .team-row {
+  border-radius: 2px;
+  border: 1px solid rgba(90, 75, 45, 0.26);
+  background: rgba(255, 252, 242, 0.55);
+}
+
+[data-theme='inksong'] .team-row:hover {
+  background: #fffef8;
+  border-color: rgba(179, 64, 47, 0.5);
+  transform: translateX(3px);
+}
+
+[data-theme='inksong'] .team-row.is-self {
+  border-color: rgba(179, 64, 47, 0.45);
+  background: rgba(179, 64, 47, 0.06);
+}
+
+/* 名次即墨玉牌:前 3 名分别朱漆/深墨/中墨 */
+[data-theme='inksong'] .team-row__rank {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 2px;
+  background: #37301f;
+  color: #f2ecdd;
+  font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* 前三名文字色须显式压回米白:main.css 的 is-top-N 规则(0,3,0)会把字改成
+   accent/accent-2/success,叠在朱漆/深墨牌面上近于不可读 */
+[data-theme='inksong'] .team-row.is-top-1 .team-row__rank,
+[data-theme='inksong'] .team-row.is-top-2 .team-row__rank,
+[data-theme='inksong'] .team-row.is-top-3 .team-row__rank {
+  color: #f2ecdd;
+}
+
+[data-theme='inksong'] .team-row.is-top-1 .team-row__rank {
+  background: #9e3223;
+  box-shadow: 0 0 0 1.5px #d8ab84;
+}
+
+[data-theme='inksong'] .team-row.is-top-2 .team-row__rank {
+  background: #4a4234;
+}
+
+[data-theme='inksong'] .team-row.is-top-3 .team-row__rank {
+  background: #574c34;
+}
+
+[data-theme='inksong'] .team-row__name {
+  color: #211c12;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+/* 版本点:最新苔绿 / 落后洒金 */
+[data-theme='inksong'] .team-row__dot.is-outdated {
+  background: #c9a75c;
+}
+
+[data-theme='inksong'] .team-row__value {
+  color: var(--metric-accent, #211c12);
+  font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+/* 双窗口细条:淡墨槽 + 笔形圆头填充 */
+[data-theme='inksong'] .team-row__bar,
+[data-theme='inksong'] .team-row__window-bar {
+  height: 4px;
+  border-radius: 1px;
+  background: rgba(90, 75, 45, 0.18);
+}
+
+[data-theme='inksong'] .team-row__bar-fill,
+[data-theme='inksong'] .team-row__window-bar-fill {
+  border-radius: 1px 50% 50% 1px;
+  background: var(--metric-accent, #211c12);
+}
+
+[data-theme='inksong'] .team-row__window-label {
+  color: #8d8069;
+  font-size: 9.5px;
+}
+
+[data-theme='inksong'] .team-row__window-value {
+  color: #211c12;
+  font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
+  font-weight: 700;
+}
+
+/* 重置卡:洒金小签 */
+[data-theme='inksong'] .team-row__credit {
+  color: #8a5a1e;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: rgba(201, 167, 92, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(138, 90, 30, 0.3);
+}
+
+/* 点赞:朱批小印,已赞实底 */
+[data-theme='inksong'] .team-row__like {
+  border-radius: 2px;
+  color: #8d8069;
+}
+
+[data-theme='inksong'] .team-row__like:hover {
+  background: rgba(179, 64, 47, 0.1);
+  color: #b3402f;
+  transform: scale(1.1) rotate(-2deg);
+}
+
+[data-theme='inksong'] .team-row__like.is-liked {
+  background: #b3402f;
+  color: #f6ead6;
+}
+
+/* 悬停工具条:笺纸浮层 */
+[data-theme='inksong'] .team-row__tooltip {
+  border-radius: 2px;
+  border: 1px solid rgba(90, 75, 45, 0.45);
+  background: #fbf4e2;
+  box-shadow: 0 8px 20px rgba(60, 45, 20, 0.25);
+}
+
+[data-theme='inksong'] .team-row__tooltip-label {
+  color: #211c12;
+}
+
+[data-theme='inksong'] .team-row__tooltip-value {
+  color: #8d8069;
+}
+
+/* segmented:墨框拼板,选中项墨玉实底 */
+[data-theme='inksong'] .segmented {
+  border-radius: 2px;
+  border: 1px solid rgba(90, 75, 45, 0.45);
+  background: transparent;
+  box-shadow: none;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+[data-theme='inksong'] .segmented button {
+  border-radius: 0;
+  border: none;
+  border-right: 1px solid rgba(90, 75, 45, 0.25);
+  background: none;
+  color: #574c34;
+  font-size: 11.5px;
+  font-weight: 400;
+  min-height: 24px;
+  padding: 4px 12px;
+}
+
+[data-theme='inksong'] .segmented button:last-child {
+  border-right: none;
+}
+
+[data-theme='inksong'] .segmented button.is-active {
+  color: #f6ead6;
+  background: #37301f;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+[data-theme='inksong'] .segmented button:hover:not(.is-active):not(:disabled) {
+  color: #211c12;
+  background: rgba(90, 75, 45, 0.08);
+}
+
+/* toggle:墨玉珠滑轨——纸轨墨珠,开态朱轨金珠 */
+[data-theme='inksong'] .toggle-switch__track {
+  border-radius: 11px;
+  background: #d8cbae;
+  box-shadow:
+    inset 0 0 0 1px rgba(90, 75, 45, 0.5),
+    inset 0 2px 4px rgba(70, 55, 25, 0.3);
+}
+
+[data-theme='inksong'] .toggle-switch.is-checked .toggle-switch__track {
+  background: #9e3223;
+  box-shadow: inset 0 0 0 1px #7c2419;
+}
+
+[data-theme='inksong'] .toggle-switch__thumb {
+  background: radial-gradient(circle at 32% 30%, #6a5f4c, #211c12 72%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45);
+  /* 墨玉珠滑入带回弹 */
+  transition: transform 0.28s cubic-bezier(0.34, 1.5, 0.5, 1);
+}
+
+[data-theme='inksong'] .toggle-switch.is-checked .toggle-switch__thumb {
+  background: radial-gradient(circle at 32% 30%, #e8b98a, #c25a44 72%);
+}
+
+/* ghost-button:合卷——纸底墨框 + 硬偏移墨影,按压回弹 */
+[data-theme='inksong'] .ghost-button {
+  border-radius: 2px;
+  border: 1px solid #37301f;
+  background: #f2ecdd;
+  color: #211c12;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 6px 15px;
+  box-shadow: 2px 2px 0 #37301f;
+}
+
+[data-theme='inksong'] .ghost-button svg {
+  color: inherit;
+}
+
+[data-theme='inksong'] .ghost-button:hover {
+  background: #fffef6;
+  color: #211c12;
+  border-color: #37301f;
+  transform: none;
+}
+
+[data-theme='inksong'] .ghost-button:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+/* accent(团队页更录按钮):司南青描边按钮 */
+[data-theme='inksong'] .ghost-button--accent {
+  background: transparent;
+  color: #46696e;
+  border: 1px solid #46696e;
+  box-shadow: none;
+  font-weight: 600;
+  letter-spacing: 1px;
+  padding: 5px 13px;
+}
+
+[data-theme='inksong'] .ghost-button--accent:hover {
+  background: #46696e;
+  color: #f2ecdd;
+  border-color: #46696e;
+}
+
+[data-theme='inksong'] .ghost-button--accent:active {
+  transform: translate(1px, 1px);
+  box-shadow: none;
+}
+
+/* 广播寄出按钮:墨玉实底 + 硬偏移墨影(覆盖 accent 青描边);
+   padding 显式恢复 0 18px,避免被上面 ghost-button 的 padding 压矮,与输入框等高 */
+[data-theme='inksong'] .team-broadcast__send {
+  border-radius: 2px;
+  border: 1px solid #211c12;
+  background: #37301f;
+  color: #f6ead6;
+  box-shadow: 2px 2px 0 #211c12;
+  padding: 0 18px;
+}
+
+[data-theme='inksong'] .team-broadcast__send:hover {
+  background: #211c12;
+  color: #f6ead6;
+}
+
+[data-theme='inksong'] .team-broadcast__send:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+/* 检查更新按钮:赭金描边(稽查新本) */
+[data-theme='inksong'] .about-row__btn {
+  border: 1px solid #8a5a1e;
+  background: transparent;
+  color: #8a5a1e;
+  box-shadow: none;
+  font-weight: 600;
+  letter-spacing: 1px;
+  padding: 6px 15px;
+}
+
+[data-theme='inksong'] .about-row__btn:hover {
+  background: #8a5a1e;
+  color: #fdf6ec;
+}
+
+[data-theme='inksong'] .about-row__btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: none;
+}
+
+[data-theme='inksong'] .about-row__btn:disabled {
+  opacity: 0.5;
+}
+
+[data-theme='inksong'] .about-row__badge {
+  border-radius: 2px;
+  border: 1px dashed rgba(90, 75, 45, 0.4);
+  background: transparent;
+  color: #8d8069;
+}
+
+[data-theme='inksong'] .about-row__label {
+  color: #37301f;
+}
+
+[data-theme='inksong'] .about-row__version {
+  color: #211c12;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-theme='inksong'] .about-row__hint {
+  color: #8d8069;
+}
+
+/* 下载进度条:淡墨槽 + 墨玉填充 */
+[data-theme='inksong'] .update-progress__bar {
+  border-radius: 1px;
+  background: rgba(90, 75, 45, 0.18);
+}
+
+[data-theme='inksong'] .update-progress__fill {
+  border-radius: 1px;
+  background: #37301f;
+}
+
+[data-theme='inksong'] .update-progress__text {
+  color: #8d8069;
+}
+
+/* panel 底栏:纸色调暗一档 + 墨线 */
+[data-theme='inksong'] .panel__footer {
+  border-top: 1px solid rgba(90, 75, 45, 0.35);
+  background: rgba(240, 230, 208, 0.5);
+}
+
+[data-theme='inksong'] .panel__footer-meta {
+  color: #8d8069;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+/* 设置区:文房清供——纸底墨框,标题朱印符号 + 渐隐墨线 */
+[data-theme='inksong'] .settings-section {
+  border-radius: 2px;
+  border: 1px solid rgba(90, 75, 45, 0.26);
+  background: rgba(255, 252, 242, 0.55);
+  box-shadow: none;
+}
+
+[data-theme='inksong'] .settings-section__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: #8d8069;
+  text-transform: none;
+}
+
+[data-theme='inksong'] .settings-section__title::before {
+  content: '◈';
+  color: #b3402f;
+  font-size: 9px;
+}
+
+[data-theme='inksong'] .settings-section__title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(90, 75, 45, 0.4), transparent);
+}
+
+[data-theme='inksong'] .setting-row {
+  border-radius: 2px;
+  border: 1px solid rgba(90, 75, 45, 0.26);
+  background: rgba(255, 252, 242, 0.55);
+}
+
+[data-theme='inksong'] .setting-row:hover {
+  background: #fffef8;
+  border-color: rgba(179, 64, 47, 0.4);
+}
+
+[data-theme='inksong'] .setting-field__label {
+  color: #37301f;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+[data-theme='inksong'] .setting-field__hint {
+  color: #8d8069;
+}
+
+[data-theme='inksong'] .inline-input {
+  border-radius: 2px;
+  border: 1px solid rgba(90, 75, 45, 0.4);
+  background: #fffef6;
+}
+
+[data-theme='inksong'] .inline-input input {
+  color: #211c12;
+}
+
+[data-theme='inksong'] .inline-input span,
+[data-theme='inksong'] .inline-input em {
+  color: #8d8069;
+}
+
+[data-theme='inksong'] .inline-input:focus-within {
+  border-color: #b3402f;
+  box-shadow: 0 0 0 3px rgba(179, 64, 47, 0.12);
+}
+
+/* 团队广播:鱼雁往还——信笺格纹纸条 */
+[data-theme='inksong'] .team-broadcast {
+  border-top: 1px solid rgba(90, 75, 45, 0.35);
+}
+
+[data-theme='inksong'] .team-broadcast__item {
+  border-radius: 2px;
+  border: 1px solid rgba(90, 75, 45, 0.3);
+  background:
+    repeating-linear-gradient(180deg, transparent 0 19px, rgba(70, 105, 110, 0.16) 19px 20px),
+    rgba(255, 252, 242, 0.7);
+}
+
+[data-theme='inksong'] .team-broadcast__name {
+  color: #46696e;
+  font-weight: 600;
+}
+
+[data-theme='inksong'] .team-broadcast__time {
+  color: #8d8069;
+}
+
+[data-theme='inksong'] .team-broadcast__text {
+  color: #37301f;
+  font-size: 11.5px;
+}
+
+[data-theme='inksong'] .team-broadcast__input {
+  border-radius: 2px;
+  border: 1px solid rgba(90, 75, 45, 0.45);
+  background: #fffef6;
+  color: #37301f;
+}
+
+[data-theme='inksong'] .team-broadcast__input:focus {
+  border-color: #b3402f;
+  box-shadow: 0 0 0 3px rgba(179, 64, 47, 0.12);
+}
+
+/* 自定义时间面板:笺纸凹陷 */
+[data-theme='inksong'] .usage-range-panel {
+  border-radius: 2px;
+  border: 1px solid rgba(90, 75, 45, 0.4);
+  background: rgba(255, 252, 242, 0.55);
+}
+
+[data-theme='inksong'] .usage-range-field__label {
+  color: #8d8069;
+}
+
+[data-theme='inksong'] .usage-range-field input {
+  border-radius: 2px;
+  border: 1px solid rgba(90, 75, 45, 0.4);
+  background: #fffef6;
+  color: #37301f;
+  color-scheme: light;
+}
+
+[data-theme='inksong'] .usage-range-field input:focus-visible {
+  border-color: #b3402f;
+}
+
+[data-theme='inksong'] .usage-range-apply {
+  border-radius: 2px;
+  border: 1px solid #211c12;
+  background: #37301f;
+  color: #f6ead6;
+  box-shadow: 2px 2px 0 #211c12;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+[data-theme='inksong'] .usage-range-apply:disabled {
+  opacity: 0.45;
+}
+
+/* 模型用量榜:淡墨槽 + 笔形圆头填充 */
+[data-theme='inksong'] .model-board {
+  border-top: 1px solid rgba(90, 75, 45, 0.35);
+}
+
+[data-theme='inksong'] .model-board__title {
+  color: #211c12;
+  font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 3px;
+}
+
+[data-theme='inksong'] .model-board__name {
+  color: #8d8069;
+}
+
+[data-theme='inksong'] .model-board__track {
+  border-radius: 1px;
+  background: rgba(90, 75, 45, 0.18);
+}
+
+[data-theme='inksong'] .model-board__fill {
+  border-radius: 1px 50% 50% 1px;
+  background: var(--panel-accent);
+}
+
+[data-theme='inksong'] .model-board__meta {
+  color: #211c12;
+  font-weight: 700;
+}
+
+/* 浮层:笺纸墨框 */
+[data-theme='inksong'] .model-board__tooltip,
+[data-theme='inksong'] .usage-tooltip {
+  border-radius: 2px;
+  border: 1px solid rgba(90, 75, 45, 0.45);
+  background: #fbf4e2;
+  box-shadow: 0 8px 20px rgba(60, 45, 20, 0.25);
+}
+
+[data-theme='inksong'] .usage-tooltip__date {
+  color: #211c12;
+  font-weight: 700;
+}
+
+[data-theme='inksong'] .usage-tooltip__row {
+  color: #8d8069;
+}
+
+[data-theme='inksong'] .usage-tooltip__row span:last-child {
+  color: #37301f;
+}
+
+[data-theme='inksong'] .usage-tooltip__cost {
+  border-top: 1px solid rgba(90, 75, 45, 0.3);
+}
+
+/* 空状态:虚线墨框 */
+[data-theme='inksong'] .team-empty,
+[data-theme='inksong'] .team-broadcast__empty {
+  border-radius: 2px;
+  border: 1px dashed rgba(90, 75, 45, 0.4);
+  color: #8d8069;
+}
+
+/* 滚动条:细墨条 */
+[data-theme='inksong'] .panel__content::-webkit-scrollbar,
+[data-theme='inksong'] .team-broadcast__feed::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-theme='inksong'] .panel__content::-webkit-scrollbar-thumb,
+[data-theme='inksong'] .team-broadcast__feed::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(90, 75, 45, 0.35);
+}
+
+/* 入场:卷轴展开——从中缝向两侧摊开,随后印章落定(1.15s 延时衔接) */
+@keyframes inksong-scroll-unroll {
+  from {
+    clip-path: inset(0 50% 0 50%);
+    opacity: 0.4;
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+}
+
+[data-theme='inksong'] .panel {
+  animation: inksong-scroll-unroll 0.9s cubic-bezier(0.24, 0.8, 0.28, 1) backwards;
 }
 
