@@ -3622,6 +3622,7 @@ body {
   border: 1px solid var(--panel-line);
   background: var(--panel-card);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  min-width: 0;
 }
 
 .settings-section__title {
@@ -3647,6 +3648,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 9px;
+  min-width: 0;
 }
 
 .setting-field + .setting-field {
@@ -3719,6 +3721,44 @@ body {
 
 .segmented button:disabled {
   cursor: default;
+}
+
+/* 主题切换横滑:单行 nowrap + 隐藏滚动条,12 项内横向滚动不撑高 */
+.segmented--scrollable {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  -webkit-app-region: no-drag;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  cursor: grab;
+  /* 左右 10px 渐隐,提示可横滑,不遮挡点击 */
+  mask-image: linear-gradient(to right, transparent 0, black 10px, black calc(100% - 10px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 10px, black calc(100% - 10px), transparent 100%);
+}
+
+.segmented--scrollable:active {
+  cursor: grabbing;
+}
+
+.segmented--scrollable::-webkit-scrollbar {
+  display: none;
+}
+
+.segmented--scrollable button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding: 0 12px;
+  scroll-snap-align: center;
+  touch-action: pan-x;
+  -webkit-app-region: no-drag;
 }
 
 .toggle-switch {

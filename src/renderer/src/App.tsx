@@ -1904,6 +1904,7 @@ function App(): React.JSX.Element {
                   <p className="settings-section__title">{copy.groupAppearance}</p>
                   <SettingField label={copy.theme} hint={copy.themeHint}>
                     <SegmentedControl
+                      scrollable
                       onChange={(value) => {
                         void handleSettingsPatch({ theme: value as ThemeId })
                       }}
@@ -3298,21 +3299,115 @@ function SegmentedControl({
   value,
   options,
   onChange,
-  disabled
+  disabled,
+  scrollable
 }: {
   value: string
   options: Array<{ label: string; value: string }>
   onChange: (value: string) => void
   disabled?: boolean
+  scrollable?: boolean
 }): React.JSX.Element {
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const isDraggingRef = useRef(false)
+  const hasDraggedRef = useRef(false)
+  const startXRef = useRef(0)
+  const scrollStartRef = useRef(0)
+
+  // 横滑模式:选中项自动滚动居中,便于 12 项内快速定位
+  useLayoutEffect(() => {
+    if (!scrollable) return
+    const container = scrollRef.current
+    const active = container?.querySelector<HTMLButtonElement>('.is-active')
+    active?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+  }, [value, scrollable])
+
+  // 纵向滚轮转为横向滚动(原生监听 + passive:false 才能 preventDefault)
+  useEffect(() => {
+    if (!scrollable) return
+    const container = scrollRef.current
+    if (!container) return
+    const onWheelNative = (event: WheelEvent): void => {
+      if (container.scrollWidth <= container.clientWidth) return
+      if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+        event.preventDefault()
+        container.scrollLeft += event.deltaY
+      }
+    }
+    container.addEventListener('wheel', onWheelNative, { passive: false })
+    return () => {
+      container.removeEventListener('wheel', onWheelNative)
+    }
+  }, [scrollable])
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (!scrollable || disabled) return
+    const container = scrollRef.current
+    if (!container || container.scrollWidth <= container.clientWidth) return
+    // 轻点阈值提高到 6px,避免手抖误判为拖动导致点击被吞
+    isDraggingRef.current = true
+    hasDraggedRef.current = false
+    startXRef.current = event.clientX
+    scrollStartRef.current = container.scrollLeft
+    // 不用 setPointerCapture,避免按钮 click 事件被吞;冒泡已足够
+    container.style.cursor = 'grabbing'
+    container.style.userSelect = 'none'
+  }
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (!scrollable || !isDraggingRef.current) return
+    const container = scrollRef.current
+    if (!container) return
+    const deltaX = event.clientX - startXRef.current
+    if (Math.abs(deltaX) > 6) {
+      hasDraggedRef.current = true
+    }
+    // 只有超过阈值才滚动,避免轻点微抖动导致位移
+    if (hasDraggedRef.current) {
+      container.scrollLeft = scrollStartRef.current - deltaX
+    }
+  }
+
+  const handlePointerUp = (): void => {
+    if (!scrollable) return
+    const container = scrollRef.current
+    isDraggingRef.current = false
+    if (container) {
+      container.style.cursor = ''
+      container.style.userSelect = ''
+    }
+    // 拖动结束后短暂保留标记,拦截紧接着的 click 事件
+    if (hasDraggedRef.current) {
+      window.setTimeout(() => {
+        hasDraggedRef.current = false
+      }, 80)
+    }
+  }
+
+  const handleOptionClick = (optionValue: string) => (event: React.MouseEvent<HTMLButtonElement>): void => {
+    if (hasDraggedRef.current) {
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
+    onChange(optionValue)
+  }
+
   return (
-    <div className={`segmented ${disabled ? 'is-disabled' : ''}`}>
+    <div
+      ref={scrollRef}
+      className={`segmented ${disabled ? 'is-disabled' : ''} ${scrollable ? 'segmented--scrollable' : ''}`}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+    >
       {options.map((option) => (
         <button
           className={option.value === value ? 'is-active' : ''}
           disabled={disabled}
           key={option.value}
-          onClick={() => onChange(option.value)}
+          onClick={handleOptionClick(option.value)}
           type="button"
         >
           {option.label}
