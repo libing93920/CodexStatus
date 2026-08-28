@@ -11,7 +11,7 @@ export type DockEdge = 'left' | 'right'
 export type RendererCommandType = 'show-panel-view'
 export type PanelFocusTarget = 'announcement' | 'messages'
 
-/** 外观主题:9 套,midnight=默认深色青蓝(现状),其余对应 design-previews */
+/** 外观主题:10 套,midnight=默认深色青蓝(现状),其余对应 design-previews */
 export type ThemeId =
   | 'midnight'
   | 'aurora'
@@ -22,6 +22,7 @@ export type ThemeId =
   | 'cockpit'
   | 'inksong'
   | 'greenhouse'
+  | 'swiss'
 export const THEME_IDS: readonly ThemeId[] = [
   'midnight',
   'aurora',
@@ -31,7 +32,8 @@ export const THEME_IDS: readonly ThemeId[] = [
   'memphis',
   'cockpit',
   'inksong',
-  'greenhouse'
+  'greenhouse',
+  'swiss'
 ] as const
 
 export interface RateLimitWindowSnapshot {
@@ -547,6 +549,7 @@ function isThemeId(value: unknown): value is ThemeId {
     value === 'memphis' ||
     value === 'cockpit' ||
     value === 'inksong' ||
-    value === 'greenhouse'
+    value === 'greenhouse' ||
+    value === 'swiss'
   )
 }

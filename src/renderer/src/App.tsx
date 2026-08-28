@@ -77,7 +77,8 @@ const THEME_OPTIONS: ReadonlyArray<{ label: string; value: ThemeId }> = [
   { label: '孟菲斯', value: 'memphis' },
   { label: '座舱', value: 'cockpit' },
   { label: '宋韵', value: 'inksong' },
-  { label: '温室', value: 'greenhouse' }
+  { label: '温室', value: 'greenhouse' },
+  { label: '社论', value: 'swiss' }
 ]
 
 interface CapsulePointerState {

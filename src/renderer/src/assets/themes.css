@@ -2314,7 +2314,8 @@
   --panel-icon-amber: #dfa32b;
   --panel-icon-pink: #c0442c;
   --panel-icon-green: #2f6f62;
-  --panel-font: Impact, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  /* panel 正文用清晰正文字体;大标题/数值显式用 Impact,小字在 Impact 下发虚 */
+  --panel-font: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
 
   /* 胶囊元素参数(横版/竖版共用;orb 专属覆盖见下文规则) */
   --capsule-h-pad-y: 5px;
@@ -2656,8 +2657,10 @@
   color: #c0442c;
 }
 
-/* 柱状图:海报平涂柱 + 深色帽檐 + 斜纹分隔 */
+/* 柱状图:海报平涂柱 + 深色帽檐 + 斜纹分隔
+   position:relative 建立 ::before 定位上下文,避免帽檐相对 .usage-chart 横跨全宽 */
 [data-theme='poster'] .usage-chart__bar {
+  position: relative;
   border-radius: 0;
   background: #d95d18;
   border: 2.5px solid #22333b;
@@ -2942,6 +2945,14 @@
 [data-theme='poster'] .panel__footer {
   border-top: 3px double #22333b;
   background: #f3ecd8;
+  margin-left: calc(-1 * var(--panel-space-page));
+  margin-right: calc(-1 * var(--panel-space-page));
+  padding-left: var(--panel-space-page);
+  padding-right: var(--panel-space-page);
+}
+/* 背景铺满到弹窗左右边:负 margin 拉出 panel 24px padding,内容用 padding 补回不贴边 */
+[data-theme='poster'] .panel__body {
+  overflow: visible;
 }
 
 [data-theme='poster'] .panel__footer-meta {
@@ -3737,8 +3748,20 @@
   color: #ff6b35;
 }
 
-/* 柱状图:歪斜彩色柱 + 墨边 + 泡泡帽 */
+/* 柱状图:彩色歪柱 + 墨边 + 底部泡泡帽(对齐参考稿 memphis-party chart)
+   chart 容器底部 4px 墨线;柱身 3.5px 墨边 + 歪斜旋转;逐列指定颜色;
+   底部泡泡帽 = 白圆点纹理盖在柱底 30%(参考稿 chart__bar em) */
+[data-theme='memphis'] .usage-chart {
+  border-bottom: 4px solid #1c1a17;
+  padding-bottom: 18px;
+}
+
+[data-theme='memphis'] .usage-chart__col {
+  position: relative;
+}
+
 [data-theme='memphis'] .usage-chart__bar {
+  position: relative;
   border-radius: 0;
   background: var(--bc, #3a6cff);
   border: 3.5px solid #1c1a17;
@@ -3747,6 +3770,9 @@
   transform-origin: bottom;
 }
 
+/* 逐列指定颜色 + 歪斜角度(参考稿 nth-child 2-7);
+   注:tooltip 作为 chart 首子元素插入会令 nth-child 偏移 1,hover 时颜色串位,
+   需 DOM 层把 tooltip 移出 chart 才能根治,此处保留参考稿原样 */
 [data-theme='memphis'] .usage-chart__col:nth-child(2) .usage-chart__bar {
   --bc: #ff5c8a;
   transform: rotate(1.2deg);
@@ -3775,38 +3801,39 @@
   --bc: #3a6cff;
 }
 
+/* 底部泡泡帽:白圆点纹理盖在柱底 30%(参考稿 chart__bar em);
+   堆叠柱 overflow 改 visible 让泡泡帽浮在第一段上方不被裁切 */
+[data-theme='memphis'] .usage-chart__bar--stack {
+  overflow: visible;
+  background: var(--bc, #3a6cff);
+}
+
 [data-theme='memphis'] .usage-chart__bar::before {
   content: '';
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  height: var(--seg, 30%);
+  height: 30%;
   background:
     radial-gradient(circle at 6px 5px, rgba(255, 255, 255, 0.85) 2.4px, transparent 3px) 0 0 / 12px
       10px,
     rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  z-index: 1;
 }
 
-[data-theme='memphis'] .usage-chart__bar--stack {
-  background: #f3e8d4;
-  border: 3.5px solid #1c1a17;
-}
-
+/* 堆叠分段:沿用柱身实色,分段用主题色实色块(参考稿无堆叠,此处保留构成可读) */
 [data-theme='memphis'] .usage-chart__bar-seg.is-cached {
-  background: repeating-linear-gradient(
-    -45deg,
-    rgba(255, 107, 53, 0.85) 0 5px,
-    transparent 5px 9px
-  );
+  background: rgba(255, 255, 255, 0.18);
 }
 
 [data-theme='memphis'] .usage-chart__bar-seg.is-input {
-  background: #ff5c8a;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 [data-theme='memphis'] .usage-chart__bar-seg.is-output {
-  background: #b388ff;
+  background: rgba(0, 0, 0, 0.12);
 }
 
 [data-theme='memphis'] .usage-chart__date {
@@ -4204,6 +4231,13 @@
   border-top: 5px solid #1c1a17;
   background: radial-gradient(circle at 14px 50%, rgba(255, 92, 138, 0.5) 4px, transparent 4.6px) 0
     0 / 34px 100%;
+  margin-left: calc(-1 * var(--panel-space-page));
+  margin-right: calc(-1 * var(--panel-space-page));
+  padding-left: var(--panel-space-page);
+  padding-right: var(--panel-space-page);
+}
+[data-theme='memphis'] .panel__body {
+  overflow: visible;
 }
 
 [data-theme='memphis'] .panel__footer-meta {
@@ -5683,6 +5717,13 @@
   border-bottom: 1.5px solid #0c100a;
   background: linear-gradient(180deg, #3d4934, #2b3524 70%, #232c1d);
   padding-bottom: 14px;
+  margin-left: calc(-1 * var(--panel-space-page));
+  margin-right: calc(-1 * var(--panel-space-page));
+  padding-left: var(--panel-space-page);
+  padding-right: var(--panel-space-page);
+}
+[data-theme='cockpit'] .panel__body {
+  overflow: visible;
 }
 
 [data-theme='cockpit'] .panel__footer-meta {
@@ -7303,6 +7344,13 @@
 [data-theme='inksong'] .panel__footer {
   border-top: 1px solid rgba(90, 75, 45, 0.35);
   background: rgba(240, 230, 208, 0.5);
+  margin-left: calc(-1 * var(--panel-space-page));
+  margin-right: calc(-1 * var(--panel-space-page));
+  padding-left: var(--panel-space-page);
+  padding-right: var(--panel-space-page);
+}
+[data-theme='inksong'] .panel__body {
+  overflow: visible;
 }
 
 [data-theme='inksong'] .panel__footer-meta {
@@ -8927,6 +8975,13 @@
   border-top: 1px solid rgba(122, 92, 64, 0.32);
   background: linear-gradient(180deg, #ded3b4, #d3c5a2);
   box-shadow: inset 0 2px 5px rgba(90, 60, 30, 0.22);
+  margin-left: calc(-1 * var(--panel-space-page));
+  margin-right: calc(-1 * var(--panel-space-page));
+  padding-left: var(--panel-space-page);
+  padding-right: var(--panel-space-page);
+}
+[data-theme='greenhouse'] .panel__body {
+  overflow: visible;
 }
 
 [data-theme='greenhouse'] .panel__footer-meta {
@@ -9185,4 +9240,1415 @@
 
 [data-theme='greenhouse'] .panel {
   animation: greenhouse-in 0.65s cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+}
+
+/* =====================================================================
+   11. SWISS · 瑞士社论朋克 Swiss Editorial Punk
+   形态语言:混凝土纸灰底 + 硬黑边框 + 瑞士红块 + 巨型无衬线数字
+           + 非对称网格 + 报眼横幅 + 套准线十字 + 斜切红条进度
+   胶囊=铅版排版块(粗黑描边+硬偏移阴影)/ Orb=垂直分栏报眉
+   策略 A:纯视觉映射,不改 DOM;参考稿倾斜铅版改为外框硬黑边+硬偏移阴影
+   沿用 poster/memphis 的 box-shadow inset 描边范式,不占布局
+   ===================================================================== */
+[data-theme='swiss'] {
+  /* 胶囊:圆角不切角,让粗黑描边 + 硬偏移阴影完整外溢显示 */
+  --capsule-radius: 6px;
+  --capsule-orb-radius: 6px;
+  --capsule-clip: none;
+  --capsule-text: #101012;
+  --capsule-bg: #f4f4f2;
+  --capsule-orb-bg: #f4f4f2;
+  --capsule-edge: rgba(16, 16, 18, 0.92);
+  --capsule-edge-soft: rgba(16, 16, 18, 0.4);
+  /* 关掉毛玻璃,铅版是不透明纸灰底 */
+  --capsule-filter: none;
+  --capsule-accent: #d02a24;
+  --capsule-font: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  /* 瑞士红/深红/青墨(参考稿 --red/--red-deep/--teal) */
+  --swiss-red: #d02a24;
+  --swiss-red-deep: #a81f1a;
+  --swiss-teal: #1f4d5c;
+  --swiss-void: #101012;
+  --swiss-paper: #e2e2e0;
+  --swiss-paper-hi: #f4f4f2;
+  --swiss-hairline: rgba(16, 16, 18, 0.28);
+  /* panel:日报画报刊面,粗黑外框 + 硬偏移落影 + 不透明纸灰底 */
+  --panel-radius: 4px;
+  --panel-clip: inset(0 round 4px);
+  --panel-border: 3px solid #101012;
+  --panel-tint: none;
+  --panel-bg: linear-gradient(#f4f4f2, #f4f4f2);
+  --panel-shadow: 12px 12px 0 rgba(16, 16, 18, 0.85), 0 0 0 1.5px rgba(16, 16, 18, 0.92);
+  /* 色板:纸灰/墨黑/瑞士红/青墨 */
+  --panel-card: #ffffff;
+  --panel-card-2: #f4f4f2;
+  --panel-card-3: #ececea;
+  --panel-inset: #e2e2e0;
+  --panel-text: #101012;
+  --panel-text-2: #3a3a3e;
+  --panel-muted: #6b6b70;
+  --panel-accent: #d02a24;
+  --panel-accent-2: #1f4d5c;
+  --panel-accent-soft: rgba(208, 42, 36, 0.12);
+  --panel-success: #1f4d5c;
+  --panel-danger: #d02a24;
+  --panel-line: rgba(16, 16, 18, 0.28);
+  --panel-line-strong: rgba(16, 16, 18, 0.55);
+  --panel-icon-blue: #1f4d5c;
+  --panel-icon-violet: #6b3fa0;
+  --panel-icon-amber: #dfa32b;
+  --panel-icon-pink: #d02a24;
+  --panel-icon-green: #1f4d5c;
+  --panel-font: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+
+  /* 胶囊元素参数(横版/竖版共用;orb 专属覆盖见下文) */
+  --capsule-h-pad-y: 5px;
+  --capsule-h-pad-x: 6px;
+  --capsule-h-gap: 9px;
+  --capsule-v-pad-y: 6px;
+  --capsule-v-pad-x: 4px;
+  --capsule-v-gap: 4px;
+  --capsule-weekly-font: 17px;
+  --capsule-weekly-pad-y: 0px;
+  --capsule-weekly-pad-x: 0px;
+  --capsule-weekly-gap: 1px;
+  --capsule-percent-font: 18px;
+  --capsule-progress-h: 8px;
+  --capsule-progress-w: 100%;
+  --capsule-credit-font: 9px;
+  --capsule-credit-pad-y: 1px;
+  --capsule-credit-pad-x: 4px;
+  --capsule-pick-font: 9.5px;
+  --capsule-pick-pad-y: 2px;
+  --capsule-pick-pad-x: 5px;
+  --capsule-stat-label-font: 8.5px;
+  --capsule-stat-value-font: 14px;
+  --capsule-stat-pad-y: 0px;
+  --capsule-stat-pad-x: 0px;
+}
+
+/* main.css 的 .panel{} 自身重声明了一批 token,元素自身声明优先于父级继承;
+   用 [data-theme='swiss'] .panel (特异性 0,2,0) 在 .panel 元素上重新赋主题值 */
+[data-theme='swiss'] .panel {
+  --panel-bg: linear-gradient(#f4f4f2, #f4f4f2);
+  --panel-card: #ffffff;
+  --panel-card-2: #f4f4f2;
+  --panel-card-3: #ececea;
+  --panel-surface: #ffffff;
+  --panel-surface-2: #f4f4f2;
+  --panel-inset: #e2e2e0;
+  --panel-text: #101012;
+  --panel-text-2: #3a3a3e;
+  --panel-muted: #6b6b70;
+  --panel-accent: #d02a24;
+  --panel-accent-2: #1f4d5c;
+  --panel-accent-soft: rgba(208, 42, 36, 0.12);
+  --panel-success: #1f4d5c;
+  --panel-danger: #d02a24;
+  --panel-line: rgba(16, 16, 18, 0.28);
+  --panel-line-strong: rgba(16, 16, 18, 0.55);
+  --panel-icon-blue: #1f4d5c;
+  --panel-icon-violet: #6b3fa0;
+  --panel-icon-amber: #dfa32b;
+  --panel-icon-pink: #d02a24;
+  --panel-icon-green: #1f4d5c;
+}
+
+/* ---------- 胶囊:铅版排版块 ---------- */
+
+/* 胶囊粗黑描边 + 硬偏移阴影:用 box-shadow inset 替代 border,印刷套版感;
+   铅版灵魂在硬黑边+硬偏移阴影,内容保持正不倾斜(1A 方案) */
+[data-theme='swiss'] .capsule {
+  box-shadow:
+    inset 0 0 0 3px #101012,
+    6px 6px 0 rgba(16, 16, 18, 0.8);
+}
+
+[data-theme='swiss'] .capsule--orb {
+  box-shadow:
+    inset 0 0 0 3px #101012,
+    5px 5px 0 rgba(16, 16, 18, 0.8);
+}
+
+/* 装饰层:四角套准线十字(panel deco 用报眼横幅);
+   胶囊 deco 不启用,铅版靠硬黑边撑视觉 */
+[data-theme='swiss'] .capsule__deco {
+  display: none;
+}
+
+[data-theme='swiss'] .panel__deco {
+  display: block;
+  z-index: 0;
+}
+
+/* 周重置倒计时:墨黑 heavy 字(参考稿 slab-weekly mono 字) */
+[data-theme='swiss'] .capsule__weekly {
+  color: #101012;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-weight: 700;
+  letter-spacing: 0px;
+}
+
+[data-theme='swiss'] .capsule__weekly svg {
+  color: #d02a24;
+}
+
+/* 百分比:瑞士红 heavy 大字(参考稿 slab-pct 27px Helvetica 800) */
+[data-theme='swiss'] .capsule__percent {
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  color: #d02a24;
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1;
+}
+
+/* 进度条:纸灰槽 + 粗黑边 + 斜切红条填充(参考稿 punk-track/punk-fill) */
+[data-theme='swiss'] .capsule__progress {
+  height: var(--capsule-progress-h);
+  border-radius: 0;
+  background: #e2e2e0;
+  box-shadow: inset 0 0 0 2.5px #101012;
+  overflow: hidden;
+  position: relative;
+}
+
+[data-theme='swiss'] .capsule__progress span {
+  border-radius: 0;
+  background: var(--metric-accent, #d02a24);
+  border-right: 3px solid #101012;
+  position: relative;
+  transition: width 1s cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+
+/* 前端斜切角:红色填充末端黑色 skewX 角(参考稿 punk-fill::after) */
+[data-theme='swiss'] .capsule__progress span::after {
+  content: '';
+  position: absolute;
+  right: -3px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  background: #101012;
+  transform: skewX(-18deg);
+}
+
+/* API 模式统计单元:纸底浅,文字改墨色避免白底白字;命中数值沿用瑞士红 */
+[data-theme='swiss'] .capsule__stat-label {
+  color: rgba(16, 16, 18, 0.55);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  letter-spacing: 1px;
+}
+
+[data-theme='swiss'] .capsule__stat-value {
+  color: #101012;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+}
+
+[data-theme='swiss'] .capsule__stat--metric .capsule__stat-value {
+  color: var(--metric-accent, #d02a24);
+}
+
+/* 横版缓存命中进度条:默认贴底,上提贴紧数值 */
+[data-theme='swiss'] .capsule__layout--h .capsule__stat--metric .capsule__progress {
+  margin-top: -2px;
+}
+
+/* 重置卡:瑞士红票根 + 顶墨线(参考稿 slab-chip) */
+[data-theme='swiss'] .capsule__credit {
+  border-radius: 0;
+  background: #d02a24;
+  color: #fff;
+  box-shadow: inset 0 2px 0 #101012;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: var(--capsule-credit-font);
+  padding: var(--capsule-credit-pad-y) var(--capsule-credit-pad-x);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+[data-theme='swiss'] .capsule__credit svg {
+  color: #fff;
+}
+
+/* 推荐模型:纸底 + 墨边小印章(参考稿 slab-chip) */
+[data-theme='swiss'] .capsule__pick {
+  border-radius: 0;
+  background: #f4f4f2;
+  color: #101012;
+  box-shadow: inset 0 0 0 1.5px #101012;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-size: var(--capsule-pick-font);
+  padding: var(--capsule-pick-pad-y) var(--capsule-pick-pad-x);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+/* 竖版 orb:各项更小、居中、整体变瘦(继承默认) */
+[data-theme='swiss'] .capsule--orb .capsule__credit {
+  font-size: 8px;
+  padding: 1px 3px;
+}
+
+[data-theme='swiss'] .capsule--orb .capsule__pick {
+  font-size: 8.5px;
+  padding: 1.6px 3px;
+}
+
+/* 广播跑马灯文字:纸底上改墨色(默认冷白在纸灰上不可读) */
+[data-theme='swiss'] .capsule__message-copy {
+  color: #101012;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+/* 告急态:瑞士红变深 + 呼吸(继承默认 is-critical,色板已含红) */
+[data-theme='swiss'] .capsule__percent.is-critical {
+  color: #a81f1a;
+}
+
+/* ---------- panel:日报画报刊面 ---------- */
+
+/* panel 装饰层:四角套准线十字(::before 左上+右上 两角,::after 左下角);
+   套准线是印刷套版标记,画报灵魂装饰 */
+[data-theme='swiss'] .panel__deco::before,
+[data-theme='swiss'] .panel__deco::after {
+  content: '';
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* 套准线十字:用两条伪元素拼十字,红色 1.5px */
+[data-theme='swiss'] .panel__deco::before {
+  top: 14px;
+  left: 14px;
+  background:
+    linear-gradient(#d02a24, #d02a24) center / 1.5px 100% no-repeat,
+    linear-gradient(#d02a24, #d02a24) center / 100% 1.5px no-repeat;
+}
+
+[data-theme='swiss'] .panel__deco::after {
+  top: 14px;
+  right: 14px;
+  background:
+    linear-gradient(#d02a24, #d02a24) center / 1.5px 100% no-repeat,
+    linear-gradient(#d02a24, #d02a24) center / 100% 1.5px no-repeat;
+}
+
+/* panel 眉标:瑞士红 heavy 小字(参考稿 masthead mono 字) */
+[data-theme='swiss'] .panel__eyebrow {
+  color: #d02a24;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+
+[data-theme='swiss'] .panel__eyebrow--danger {
+  color: #a81f1a;
+}
+
+/* panel 标题:巨型无衬线大字 + 红色下划线块(参考稿 panel__title 30px 800 + ::after 红块) */
+[data-theme='swiss'] .panel__title {
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+  font-size: 28px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #101012;
+  position: relative;
+  padding-bottom: 8px;
+}
+
+/* 标题下红色实心块:画报标题的红色下划装饰 */
+[data-theme='swiss'] .panel__title::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 64px;
+  height: 5px;
+  background: #d02a24;
+}
+
+/* panel tabs:编号章节牌,粗黑边框 + 瑞士红 active(参考稿 tabs) */
+[data-theme='swiss'] .panel__tabs {
+  border-radius: 0;
+  background: #f4f4f2;
+  border: 2.5px solid #101012;
+  box-shadow: none;
+  gap: 0;
+  padding: 0;
+}
+
+[data-theme='swiss'] .panel__tab {
+  border-radius: 0;
+  color: #101012;
+  background: #f4f4f2;
+  border: none;
+  border-right: 2.5px solid #101012;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+[data-theme='swiss'] .panel__tab:last-child {
+  border-right: none;
+}
+
+[data-theme='swiss'] .panel__tab:hover:not(.is-active) {
+  background: #ececea;
+  color: #101012;
+}
+
+[data-theme='swiss'] .panel__tab.is-active {
+  background: #101012;
+  color: #fff;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* quota-card:双栏对开文章卡,粗墨边 + 硬偏移阴影(参考稿 qcard) */
+[data-theme='swiss'] .quota-card,
+[data-theme='swiss'] .usage-card {
+  border-radius: 0;
+  border: 2.5px solid #101012;
+  background: #ffffff;
+  box-shadow: 4px 4px 0 rgba(16, 16, 18, 0.28);
+}
+
+[data-theme='swiss'] .quota-card.is-accent {
+  background: #ececea;
+}
+
+[data-theme='swiss'] .quota-card.is-accent::before {
+  display: none;
+}
+
+[data-theme='swiss'] .quota-card:hover,
+[data-theme='swiss'] .usage-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 rgba(16, 16, 18, 0.32);
+  border-color: #101012;
+}
+
+/* 额度卡标签:黑底白字编号块(参考稿 qcard__label) */
+[data-theme='swiss'] .quota-card__label {
+  background: #101012;
+  color: #f4f4f2;
+  padding: 2px 8px;
+  border-radius: 0;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+[data-theme='swiss'] .quota-card.is-accent .quota-card__label {
+  background: #d02a24;
+}
+
+[data-theme='swiss'] .quota-card__mode {
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  color: rgba(16, 16, 18, 0.5);
+  letter-spacing: 1px;
+}
+
+/* 额度数值:巨型无衬线数字(参考稿 qcard__value 52px 800) */
+[data-theme='swiss'] .quota-card__value {
+  color: var(--metric-accent, #d02a24);
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: -2px;
+}
+
+/* 额度进度条:刻度块槽 + 红色填充 + 末端红角(参考稿 tick-track/tick-fill) */
+[data-theme='swiss'] .quota-card__progress {
+  height: 10px;
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      #e2e2e0 0 calc(5% - 1.5px),
+      rgba(16, 16, 18, 0.28) calc(5% - 1.5px) 5%
+    );
+  box-shadow: inset 0 0 0 2.5px #101012;
+  overflow: hidden;
+  position: relative;
+}
+
+[data-theme='swiss'] .quota-card.is-accent .quota-card__progress {
+  height: 10px;
+}
+
+[data-theme='swiss'] .quota-card__progress span {
+  border-radius: 0;
+  background: var(--metric-accent, #d02a24);
+  position: relative;
+  transition: width 1.1s cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+
+/* 填充末端红色实心角(参考稿 tick-fill::after) */
+[data-theme='swiss'] .quota-card__progress span::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #d02a24;
+}
+
+[data-theme='swiss'] .quota-card.is-accent .quota-card__progress span {
+  background: var(--metric-accent, #d02a24);
+}
+
+[data-theme='swiss'] .quota-card.is-accent .quota-card__progress span::after {
+  background: #101012;
+}
+
+[data-theme='swiss'] .quota-card__reset {
+  color: #3a3a3e;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-weight: 600;
+}
+
+[data-theme='swiss'] .quota-card__reset::before {
+  content: '→ ';
+  color: #d02a24;
+}
+
+[data-theme='swiss'] .quota-card__expiry {
+  color: rgba(16, 16, 18, 0.5);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  letter-spacing: 1px;
+}
+
+/* 用量统计卡:数据版面标题(参考稿 ucard__title) */
+[data-theme='swiss'] .usage-card__title {
+  color: #101012;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 7px 0;
+  border-top: 2.5px solid #101012;
+  border-bottom: 1px solid #101012;
+}
+
+[data-theme='swiss'] .usage-card__title::before {
+  content: '■ ';
+  color: #d02a24;
+  font-size: 10px;
+}
+
+/* 用量汇总:五列数据版面(参考稿 usage-summary) */
+[data-theme='swiss'] .usage-summary {
+  border: 2px solid #101012;
+  gap: 0;
+  margin: 12px 0 4px;
+}
+
+[data-theme='swiss'] .usage-summary__item {
+  border-radius: 0;
+  background: transparent;
+  border-right: 1px solid rgba(16, 16, 18, 0.28);
+  padding: 8px 6px;
+}
+
+[data-theme='swiss'] .usage-summary__item:last-child {
+  border-right: none;
+}
+
+[data-theme='swiss'] .usage-summary__item:nth-child(odd) {
+  background: rgba(16, 16, 18, 0.03);
+}
+
+[data-theme='swiss'] .usage-summary__value {
+  color: #101012;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+[data-theme='swiss'] .usage-summary__label {
+  color: rgba(16, 16, 18, 0.55);
+  font-size: 7px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+[data-theme='swiss'] .usage-summary__value--input {
+  color: #1f4d5c;
+}
+
+[data-theme='swiss'] .usage-summary__value--output {
+  color: #6b3fa0;
+}
+
+[data-theme='swiss'] .usage-summary__value--cached {
+  color: #1f4d5c;
+}
+
+[data-theme='swiss'] .usage-summary__value--cost {
+  color: #d02a24;
+}
+
+/* 柱状图:黑柱红帽图表(参考稿 chart__bar 黑柱 + ::before 红帽)
+   position:relative 建立 ::before 定位上下文,避免红帽相对 .usage-chart 横跨全宽 */
+[data-theme='swiss'] .usage-chart__bar {
+  position: relative;
+  border-radius: 0;
+  background: #101012;
+  border: 2px solid #101012;
+  border-bottom: none;
+  box-shadow: none;
+}
+
+/* 红色顶盖:柱顶红色横条(参考稿 chart__bar::before) */
+[data-theme='swiss'] .usage-chart__bar::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  top: -2px;
+  height: 8px;
+  background: #d02a24;
+}
+
+[data-theme='swiss'] .usage-chart__bar--stack {
+  position: relative;
+  background: #ffffff;
+  border: 2px solid #101012;
+}
+
+/* 堆叠柱顶盖:统一红帽(参考稿偶列青帽,但 tooltip 作为 chart 首子元素插入会令
+   nth-child 偏移 1 导致 hover 时红/青反转;纯 CSS 无法排除 tooltip div 兄弟,
+   故统一红帽,换取 hover 稳定) */
+[data-theme='swiss'] .usage-chart__bar--stack::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  top: -2px;
+  height: 8px;
+  background: #d02a24;
+}
+
+/* 堆叠分段:黑白红实色块(参考稿无堆叠概念,用实色三阶贴近画报语言) */
+[data-theme='swiss'] .usage-chart__bar-seg.is-cached {
+  background: #ececea;
+}
+
+[data-theme='swiss'] .usage-chart__bar-seg.is-input {
+  background: #101012;
+}
+
+[data-theme='swiss'] .usage-chart__bar-seg.is-output {
+  background: #6b6b70;
+}
+
+[data-theme='swiss'] .usage-chart__date {
+  color: rgba(16, 16, 18, 0.6);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+/* 明细行:分类广告栏,粗墨边 + 硬偏移阴影 + hover 平移(参考稿 row) */
+[data-theme='swiss'] .detail-row {
+  border-radius: 0;
+  border: 2px solid #101012;
+  background: #ffffff;
+  box-shadow: 3px 3px 0 rgba(16, 16, 18, 0.25);
+}
+
+[data-theme='swiss'] .detail-row:hover {
+  transform: translateX(4px);
+  box-shadow: 3px 3px 0 rgba(16, 16, 18, 0.3);
+  border-color: #101012;
+}
+
+[data-theme='swiss'] .detail-row__icon {
+  border-radius: 0;
+  background: var(--icon-tone, #101012);
+  color: #fff;
+  border: 2px solid #101012;
+  box-shadow: none;
+}
+
+[data-theme='swiss'] .detail-row__icon svg {
+  stroke: #fff;
+}
+
+[data-theme='swiss'] .detail-row__label {
+  color: #101012;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+[data-theme='swiss'] .detail-row__link {
+  color: #d02a24;
+  font-weight: 700;
+}
+
+[data-theme='swiss'] .detail-row__link:hover {
+  color: #a81f1a;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
+
+[data-theme='swiss'] .detail-row__value {
+  color: #101012;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+}
+
+[data-theme='swiss'] .detail-row__hint {
+  color: rgba(16, 16, 18, 0.5);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='swiss'] .detail-row__badge {
+  border-radius: 0;
+  border: 1.5px solid #d02a24;
+  background: rgba(208, 42, 36, 0.12);
+  color: #d02a24;
+  font-weight: 700;
+}
+
+/* 来源信息卡:纸底墨边(参考稿 panel__footer) */
+[data-theme='swiss'] .panel__meta {
+  border-radius: 0;
+  border: 2px solid #101012;
+  background: #ffffff;
+  box-shadow: 3px 3px 0 rgba(16, 16, 18, 0.2);
+}
+
+[data-theme='swiss'] .panel__meta-row svg {
+  border-radius: 0;
+  background: #ececea;
+  border: 2px solid #101012;
+  box-shadow: none;
+}
+
+[data-theme='swiss'] .panel__meta-main {
+  color: #101012;
+  font-weight: 700;
+}
+
+[data-theme='swiss'] .panel__meta-badge {
+  border-radius: 0;
+  border: 1.5px solid #101012;
+  background: #f4f4f2;
+  color: #101012;
+}
+
+[data-theme='swiss'] .panel__meta-hint {
+  color: rgba(16, 16, 18, 0.5);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* 团队排行榜行:编辑部数据行,粗墨边 + 硬偏移阴影(参考稿 trow) */
+[data-theme='swiss'] .team-row {
+  border-radius: 0;
+  border: 2.5px solid #101012;
+  background: #ffffff;
+  box-shadow: 3px 3px 0 rgba(16, 16, 18, 0.22);
+}
+
+[data-theme='swiss'] .team-row:hover {
+  transform: translateX(4px);
+  box-shadow: 3px 3px 0 rgba(16, 16, 18, 0.3);
+  border-color: #101012;
+}
+
+[data-theme='swiss'] .team-row.is-self {
+  border-color: #d02a24;
+  background: #ececea;
+}
+
+/* 排名:前 3 用强调色(参考稿 rank) */
+[data-theme='swiss'] .team-row__rank {
+  border-radius: 0;
+  background: #101012;
+  color: #fff;
+  border: 2px solid #101012;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+}
+
+[data-theme='swiss'] .team-row.is-top-1 .team-row__rank {
+  background: #d02a24;
+  color: #fff;
+}
+
+[data-theme='swiss'] .team-row.is-top-2 .team-row__rank {
+  background: #101012;
+  color: #fff;
+}
+
+[data-theme='swiss'] .team-row.is-top-3 .team-row__rank {
+  background: #1f4d5c;
+  color: #fff;
+}
+
+[data-theme='swiss'] .team-row__name {
+  color: #101012;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+[data-theme='swiss'] .team-row__value {
+  color: var(--metric-accent, #101012);
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+}
+
+/* 团队行进度条:刻度槽 + 实色填充(参考稿 twin__bar) */
+[data-theme='swiss'] .team-row__bar,
+[data-theme='swiss'] .team-row__window-bar {
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      #e2e2e0 0 calc(5% - 1px),
+      rgba(16, 16, 18, 0.28) calc(5% - 1px) 5%
+    );
+  box-shadow: inset 0 0 0 2px #101012;
+}
+
+[data-theme='swiss'] .team-row__bar-fill,
+[data-theme='swiss'] .team-row__window-bar-fill {
+  border-radius: 0;
+  background: var(--metric-accent, #101012);
+}
+
+/* 重置卡:红字小印章 */
+[data-theme='swiss'] .team-row__credit {
+  color: #d02a24;
+  font-weight: 800;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* 团队行 tooltip:纸底墨边浮层 */
+[data-theme='swiss'] .team-row__tooltip {
+  border-radius: 0;
+  border: 2px solid #101012;
+  background: #ffffff;
+  box-shadow: 4px 4px 0 rgba(16, 16, 18, 0.3);
+}
+
+[data-theme='swiss'] .team-row__tooltip-label {
+  color: #101012;
+  font-weight: 700;
+}
+
+[data-theme='swiss'] .team-row__tooltip-value {
+  color: rgba(16, 16, 18, 0.6);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='swiss'] .team-row__like {
+  border-radius: 0;
+  border: 1.5px solid #d02a24;
+  background: transparent;
+  color: #d02a24;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='swiss'] .team-row__like:hover {
+  background: rgba(208, 42, 36, 0.12);
+}
+
+[data-theme='swiss'] .team-row__like.is-liked {
+  background: #d02a24;
+  color: #fff;
+}
+
+[data-theme='swiss'] .team-row__like-count {
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* segmented:编号章节选择牌,粗墨边 + 红色 active(参考稿 seg) */
+[data-theme='swiss'] .segmented {
+  border-radius: 0;
+  background: #f4f4f2;
+  border: 2px solid #101012;
+  box-shadow: none;
+  gap: 0;
+  padding: 0;
+}
+
+[data-theme='swiss'] .segmented button {
+  border-radius: 0;
+  color: #101012;
+  background: transparent;
+  border: none;
+  border-left: 2px solid #101012;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+[data-theme='swiss'] .segmented button:first-child {
+  border-left: none;
+}
+
+[data-theme='swiss'] .segmented button.is-active {
+  background: #d02a24;
+  color: #fff;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+[data-theme='swiss'] .segmented button:hover:not(.is-active):not(:disabled) {
+  background: #ececea;
+  color: #101012;
+}
+
+/* toggle-switch:方形机械闸,粗墨边 + 红色开态(参考稿 toggle) */
+[data-theme='swiss'] .toggle-switch__track {
+  border-radius: 0;
+  background: #e2e2e0;
+  box-shadow: inset 0 0 0 2.5px #101012;
+}
+
+[data-theme='swiss'] .toggle-switch.is-checked .toggle-switch__track {
+  background: #d02a24;
+  box-shadow: inset 0 0 0 2.5px #101012;
+}
+
+[data-theme='swiss'] .toggle-switch__thumb {
+  border-radius: 0;
+  background: #101012;
+  box-shadow: none;
+}
+
+[data-theme='swiss'] .toggle-switch.is-checked .toggle-switch__thumb {
+  background: #f4f4f2;
+  transform: translateX(20px);
+}
+
+/* ghost-button:粗墨边 + 硬偏移阴影 + 按压回弹(参考稿 wp-toolbar button) */
+[data-theme='swiss'] .ghost-button {
+  border-radius: 0;
+  border: 2px solid #101012;
+  background: #f4f4f2;
+  color: #101012;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: 1px;
+  box-shadow: 4px 4px 0 #101012;
+}
+
+[data-theme='swiss'] .ghost-button:hover {
+  transform: translate(-1px, -1px);
+  background: #f4f4f2;
+  color: #101012;
+  border-color: #101012;
+  box-shadow: 5px 5px 0 #101012;
+}
+
+[data-theme='swiss'] .ghost-button:active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 #101012;
+}
+
+[data-theme='swiss'] .ghost-button--accent {
+  background: #d02a24;
+  color: #fff;
+  border-color: #101012;
+}
+
+[data-theme='swiss'] .ghost-button--accent:hover {
+  background: #d02a24;
+  color: #fff;
+  filter: brightness(1.08);
+}
+
+[data-theme='swiss'] .ghost-button svg {
+  color: currentColor;
+}
+
+[data-theme='swiss'] .about-row__btn {
+  background: #101012;
+  color: #f4f4f2;
+  border-color: #101012;
+  box-shadow: 3px 3px 0 rgba(16, 16, 18, 0.4);
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+[data-theme='swiss'] .about-row__btn:hover {
+  box-shadow: 4px 4px 0 rgba(16, 16, 18, 0.4);
+}
+
+[data-theme='swiss'] .about-row__btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 rgba(16, 16, 18, 0.4);
+}
+
+[data-theme='swiss'] .about-row__btn:disabled {
+  opacity: 0.6;
+}
+
+[data-theme='swiss'] .about-row__label {
+  color: rgba(16, 16, 18, 0.6);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  letter-spacing: 1px;
+}
+
+[data-theme='swiss'] .about-row__version {
+  color: #101012;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+}
+
+[data-theme='swiss'] .about-row__badge {
+  border-radius: 0;
+  border: 1.5px solid #101012;
+  background: #f4f4f2;
+  color: #101012;
+  font-weight: 700;
+}
+
+[data-theme='swiss'] .about-row__hint {
+  color: rgba(16, 16, 18, 0.5);
+}
+
+[data-theme='swiss'] .update-progress__bar {
+  border-radius: 0;
+  background: #e2e2e0;
+  box-shadow: inset 0 0 0 2px #101012;
+}
+
+[data-theme='swiss'] .update-progress__fill {
+  border-radius: 0;
+  background: #d02a24;
+}
+
+[data-theme='swiss'] .update-progress__text {
+  color: rgba(16, 16, 18, 0.6);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* panel 底栏:双线墨边(参考稿 panel__footer border-top double) */
+[data-theme='swiss'] .panel__footer {
+  border-top: 3px double #101012;
+  background: #f4f4f2;
+  margin-left: calc(-1 * var(--panel-space-page));
+  margin-right: calc(-1 * var(--panel-space-page));
+  padding-left: var(--panel-space-page);
+  padding-right: var(--panel-space-page);
+}
+
+/* 背景铺满到弹窗左右边:负 margin 拉出 panel 24px padding,内容用 padding 补回不贴边 */
+[data-theme='swiss'] .panel__body {
+  overflow: visible;
+}
+
+[data-theme='swiss'] .panel__footer-meta {
+  color: rgba(16, 16, 18, 0.55);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+/* 设置区:编辑部登记表,粗墨边 + 硬偏移阴影(参考稿 settings-section) */
+[data-theme='swiss'] .settings-section {
+  border-radius: 0;
+  border: 2.5px solid #101012;
+  background: #ffffff;
+  box-shadow: 4px 4px 0 rgba(16, 16, 18, 0.2);
+}
+
+[data-theme='swiss'] .settings-section__title {
+  color: #101012;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  padding-bottom: 4px;
+  border-bottom: 2.5px solid var(--sc, #d02a24);
+  margin-bottom: 10px;
+}
+
+/* 奇偶 section 标题下划线轮换红/青/黑(参考稿 settings-section:nth-of-type) */
+[data-theme='swiss'] .settings-section:nth-of-type(2n) .settings-section__title {
+  --sc: #1f4d5c;
+}
+
+[data-theme='swiss'] .settings-section:nth-of-type(3n) .settings-section__title {
+  --sc: #101012;
+}
+
+[data-theme='swiss'] .settings-section__title::before,
+[data-theme='swiss'] .settings-section__title::after {
+  content: none;
+}
+
+[data-theme='swiss'] .setting-row {
+  border-radius: 0;
+  border: 2px solid #101012;
+  background: #ffffff;
+  box-shadow: 3px 3px 0 rgba(16, 16, 18, 0.2);
+}
+
+[data-theme='swiss'] .setting-row:hover {
+  transform: translateX(3px);
+  background: #ffffff;
+  border-color: #101012;
+}
+
+[data-theme='swiss'] .setting-row > span:first-child,
+[data-theme='swiss'] .setting-field__label {
+  color: #101012;
+  font-weight: 700;
+}
+
+[data-theme='swiss'] .setting-field__hint {
+  color: rgba(16, 16, 18, 0.5);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='swiss'] .inline-input {
+  border-radius: 0;
+  border: 2px solid #101012;
+  background: #ffffff;
+  box-shadow: inset 2px 2px 0 rgba(16, 16, 18, 0.15);
+}
+
+[data-theme='swiss'] .inline-input input {
+  color: #101012;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-weight: 700;
+}
+
+[data-theme='swiss'] .inline-input input[type='number'] {
+  color: #101012;
+}
+
+[data-theme='swiss'] .inline-input em {
+  color: rgba(16, 16, 18, 0.55);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='swiss'] .inline-input span {
+  color: rgba(16, 16, 18, 0.55);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='swiss'] .inline-input:focus-within {
+  border-color: #d02a24;
+  box-shadow:
+    inset 2px 2px 0 rgba(16, 16, 18, 0.15),
+    3px 3px 0 rgba(208, 42, 36, 0.4);
+}
+
+/* 团队公告:编辑部通知,纸底墨边 + 红色左边条(参考稿 team-announcement) */
+[data-theme='swiss'] .team-announcement {
+  border-radius: 0;
+  border: 2.5px solid #101012;
+  background: #ffffff;
+  box-shadow: 4px 4px 0 rgba(16, 16, 18, 0.25);
+  background-image: none;
+}
+
+[data-theme='swiss'] .team-announcement::before {
+  top: 16%;
+  bottom: 16%;
+  width: 3px;
+  background: #d02a24;
+  box-shadow: none;
+}
+
+[data-theme='swiss'] .team-announcement.is-unread {
+  border-color: #d02a24;
+  box-shadow: 4px 4px 0 rgba(208, 42, 36, 0.3);
+}
+
+[data-theme='swiss'] .team-announcement__label {
+  background: #d02a24;
+  color: #fff;
+  border-radius: 0;
+  border: none;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+[data-theme='swiss'] .team-announcement__meta {
+  color: rgba(16, 16, 18, 0.5);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='swiss'] .team-announcement__text {
+  color: #101012;
+  font-weight: 500;
+}
+
+[data-theme='swiss'] .team-announcement__acknowledge {
+  border-radius: 0;
+  border: 2px solid #101012;
+  background: #f4f4f2;
+  color: #101012;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: 1px;
+  box-shadow: 2px 2px 0 rgba(16, 16, 18, 0.4);
+}
+
+[data-theme='swiss'] .team-announcement__acknowledge:hover {
+  background: #ececea;
+  border-color: #101012;
+  color: #101012;
+}
+
+[data-theme='swiss'] .team-announcement__acknowledge:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 rgba(16, 16, 18, 0.4);
+}
+
+/* 团队广播消息:读者来信,纸底墨边 + 轻微旋转(参考稿 msg) */
+[data-theme='swiss'] .team-broadcast__item {
+  border-radius: 0;
+  border: 2px solid #101012;
+  background: #ffffff;
+  box-shadow: 3px 3px 0 rgba(16, 16, 18, 0.22);
+  transform: rotate(-0.4deg);
+}
+
+[data-theme='swiss'] .team-broadcast__item:nth-child(even) {
+  transform: rotate(0.4deg);
+}
+
+[data-theme='swiss'] .team-broadcast__name {
+  color: #d02a24;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  font-weight: 700;
+}
+
+[data-theme='swiss'] .team-broadcast__time {
+  color: rgba(16, 16, 18, 0.5);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='swiss'] .team-broadcast__text {
+  color: #101012;
+}
+
+[data-theme='swiss'] .team-broadcast__input {
+  border-radius: 0;
+  border: 2px solid #101012;
+  background: #ffffff;
+  box-shadow: inset 2px 2px 0 rgba(16, 16, 18, 0.15);
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+}
+
+[data-theme='swiss'] .team-broadcast__input::placeholder {
+  color: rgba(16, 16, 18, 0.4);
+}
+
+[data-theme='swiss'] .team-broadcast__input:focus {
+  border-color: #d02a24;
+  box-shadow:
+    inset 2px 2px 0 rgba(16, 16, 18, 0.15),
+    3px 3px 0 rgba(208, 42, 36, 0.4);
+}
+
+[data-theme='swiss'] .team-broadcast__send {
+  border-radius: 0;
+  border: 2px solid #101012;
+  background: #101012;
+  color: #f4f4f2;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: 1px;
+  box-shadow: 3px 3px 0 rgba(16, 16, 18, 0.4);
+}
+
+[data-theme='swiss'] .team-broadcast__send:hover {
+  background: #101012;
+  filter: brightness(1.1);
+}
+
+[data-theme='swiss'] .team-broadcast__send:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 rgba(16, 16, 18, 0.4);
+}
+
+[data-theme='swiss'] .team-broadcast__error {
+  color: #d02a24;
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* 自定义时间面板:纸底墨边凹陷(参考稿 usage-range-panel) */
+[data-theme='swiss'] .usage-range-panel {
+  border-radius: 0;
+  border: 2px solid #101012;
+  background: #ececea;
+  box-shadow: inset 2px 2px 0 rgba(16, 16, 18, 0.12);
+}
+
+[data-theme='swiss'] .usage-range-field__label {
+  color: rgba(16, 16, 18, 0.55);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='swiss'] .usage-range-field input {
+  border-radius: 0;
+  border: 2px solid #101012;
+  background: #ffffff;
+  color: #101012;
+  color-scheme: light;
+}
+
+[data-theme='swiss'] .usage-range-field input:focus-visible {
+  border-color: #d02a24;
+}
+
+[data-theme='swiss'] .usage-range-apply {
+  border-radius: 0;
+  background: #d02a24;
+  color: #fff;
+  border: 2px solid #101012;
+  box-shadow: 3px 3px 0 rgba(16, 16, 18, 0.4);
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+[data-theme='swiss'] .usage-range-apply:disabled {
+  opacity: 0.6;
+}
+
+/* 模型用量榜:纸底墨边轨道 + 实色填充 */
+[data-theme='swiss'] .model-board__title {
+  color: #101012;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+[data-theme='swiss'] .model-board__title::before {
+  content: '■ ';
+  color: #d02a24;
+  font-size: 9px;
+}
+
+[data-theme='swiss'] .model-board__track {
+  border-radius: 0;
+  background: #ececea;
+  box-shadow: inset 0 0 0 2px #101012;
+}
+
+[data-theme='swiss'] .model-board__fill {
+  border-radius: 0;
+  background: var(--panel-accent, #d02a24);
+}
+
+[data-theme='swiss'] .model-board__name {
+  color: rgba(16, 16, 18, 0.55);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='swiss'] .model-board__meta {
+  color: #101012;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+}
+
+/* 浮层:纸底墨边(参考稿 tooltip) */
+[data-theme='swiss'] .model-board__tooltip,
+[data-theme='swiss'] .usage-tooltip {
+  border-radius: 0;
+  border: 2px solid #101012;
+  background: #ffffff;
+  box-shadow: 4px 4px 0 rgba(16, 16, 18, 0.3);
+}
+
+[data-theme='swiss'] .usage-tooltip__date {
+  color: #101012;
+  font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+[data-theme='swiss'] .usage-tooltip__row {
+  color: rgba(16, 16, 18, 0.55);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+[data-theme='swiss'] .usage-tooltip__row span:last-child {
+  color: #101012;
+  font-weight: 700;
+}
+
+[data-theme='swiss'] .usage-tooltip__cost {
+  border-top: 1px solid rgba(16, 16, 18, 0.28);
+}
+
+/* 空状态:虚线墨框 */
+[data-theme='swiss'] .team-empty,
+[data-theme='swiss'] .team-broadcast__empty {
+  border-radius: 0;
+  border: 2px dashed rgba(16, 16, 18, 0.45);
+  color: rgba(16, 16, 18, 0.5);
+  font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+}
+
+/* 滚动条:墨色粗条(参考稿 scrollbar) */
+[data-theme='swiss'] .panel__content,
+[data-theme='swiss'] .team-broadcast__feed {
+  scrollbar-color: #101012 transparent;
+}
+
+[data-theme='swiss'] .panel__content::-webkit-scrollbar,
+[data-theme='swiss'] .team-broadcast__feed::-webkit-scrollbar {
+  width: 8px;
+}
+
+[data-theme='swiss'] .panel__content::-webkit-scrollbar-track,
+[data-theme='swiss'] .team-broadcast__feed::-webkit-scrollbar-track {
+  background: #e2e2e0;
+}
+
+[data-theme='swiss'] .panel__content::-webkit-scrollbar-thumb,
+[data-theme='swiss'] .team-broadcast__feed::-webkit-scrollbar-thumb {
+  border-radius: 0;
+  background: #101012;
+}
+
+[data-theme='swiss'] .panel__content::-webkit-scrollbar-thumb:hover,
+[data-theme='swiss'] .team-broadcast__feed::-webkit-scrollbar-thumb:hover {
+  background: #d02a24;
+}
+
+/* 入场:油墨滚压显影(参考稿 press-roll) */
+@keyframes swiss-press-roll {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+    clip-path: inset(0 0 100% 0);
+  }
+  60% {
+    clip-path: inset(0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    clip-path: inset(0);
+  }
+}
+
+[data-theme='swiss'] .panel {
+  animation: swiss-press-roll 0.55s cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
 }
