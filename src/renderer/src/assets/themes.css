@@ -9683,12 +9683,11 @@
 [data-theme='swiss'] .quota-card__progress {
   height: 10px;
   border-radius: 0;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      #e2e2e0 0 calc(5% - 1.5px),
-      rgba(16, 16, 18, 0.28) calc(5% - 1.5px) 5%
-    );
+  background: repeating-linear-gradient(
+    90deg,
+    #e2e2e0 0 calc(5% - 1.5px),
+    rgba(16, 16, 18, 0.28) calc(5% - 1.5px) 5%
+  );
   box-shadow: inset 0 0 0 2.5px #101012;
   overflow: hidden;
   position: relative;
@@ -10028,12 +10027,11 @@
 [data-theme='swiss'] .team-row__bar,
 [data-theme='swiss'] .team-row__window-bar {
   border-radius: 0;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      #e2e2e0 0 calc(5% - 1px),
-      rgba(16, 16, 18, 0.28) calc(5% - 1px) 5%
-    );
+  background: repeating-linear-gradient(
+    90deg,
+    #e2e2e0 0 calc(5% - 1px),
+    rgba(16, 16, 18, 0.28) calc(5% - 1px) 5%
+  );
   box-shadow: inset 0 0 0 2px #101012;
 }
 
@@ -10665,4 +10663,80 @@
 
 [data-theme='swiss'] .panel {
   animation: swiss-press-roll 0.55s cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+}
+[data-theme='midnight'] {
+  --capsule-minimal-size: 40px;
+  --capsule-minimal-radius: 50%;
+  --capsule-minimal-bg: linear-gradient(168deg, rgba(38, 48, 62, 0.78), rgba(16, 22, 32, 0.86));
+  --capsule-minimal-edge: rgba(109, 180, 255, 0.48);
+}
+[data-theme='aurora'] {
+  --capsule-minimal-size: 40px;
+  --capsule-minimal-radius: 50%;
+  --capsule-minimal-bg: linear-gradient(145deg, rgba(38, 58, 72, 0.82), rgba(12, 24, 34, 0.9));
+  --capsule-minimal-edge: rgba(88, 232, 177, 0.58);
+}
+[data-theme='cyber'] {
+  --capsule-minimal-size: 40px;
+  --capsule-minimal-radius: 50%;
+  --capsule-minimal-clip: circle(50% at 50% 50%);
+  --capsule-minimal-bg: linear-gradient(145deg, #172538, #07121e);
+  --capsule-minimal-edge: #22d3ee;
+}
+[data-theme='titan'] {
+  --capsule-minimal-size: 40px;
+  --capsule-minimal-radius: 50%;
+  --capsule-minimal-bg: linear-gradient(145deg, #4a4b4d, #17191d);
+  --capsule-minimal-edge: rgba(230, 190, 88, 0.7);
+}
+[data-theme='poster'] {
+  --capsule-minimal-size: 40px;
+  --capsule-minimal-radius: 50%;
+  --capsule-minimal-bg: #f2e7cf;
+  --capsule-minimal-edge: #d74b43;
+}
+[data-theme='memphis'] {
+  --capsule-minimal-size: 40px;
+  --capsule-minimal-radius: 50%;
+  --capsule-minimal-bg: linear-gradient(145deg, #f6c85f, #ef8f55);
+  --capsule-minimal-edge: #26243a;
+}
+[data-theme='cockpit'] {
+  --capsule-minimal-size: 40px;
+  --capsule-minimal-radius: 50%;
+  --capsule-minimal-bg: radial-gradient(circle, #1c3540, #071317);
+  --capsule-minimal-edge: rgba(120, 255, 214, 0.7);
+}
+[data-theme='inksong'] {
+  --capsule-minimal-size: 40px;
+  --capsule-minimal-radius: 50%;
+  --capsule-minimal-bg: linear-gradient(145deg, #28231f, #11100e);
+  --capsule-minimal-edge: rgba(190, 79, 61, 0.78);
+}
+[data-theme='greenhouse'] {
+  --capsule-minimal-size: 40px;
+  --capsule-minimal-radius: 50%;
+  --capsule-minimal-bg: linear-gradient(145deg, #285c4a, #102d27);
+  --capsule-minimal-edge: rgba(142, 224, 151, 0.62);
+}
+[data-theme='swiss'] {
+  --capsule-minimal-size: 40px;
+  --capsule-minimal-radius: 50%;
+  --capsule-minimal-bg: #f2f0e9;
+  --capsule-minimal-edge: #202326;
+}
+
+/* 海报完整胶囊使用硬偏移落影和 Impact;极简球需要清晰的小字号,不继承这两项。 */
+[data-theme='poster'] .capsule--minimal {
+  box-shadow: inset 0 0 0 2px #22333b;
+  filter: none;
+  mix-blend-mode: normal;
+}
+
+[data-theme='poster'] .capsule--minimal .capsule__minimal-value {
+  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 700;
+  text-shadow: none;
+  filter: none;
+  mix-blend-mode: normal;
 }

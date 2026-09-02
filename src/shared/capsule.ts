@@ -242,6 +242,8 @@ export interface AppSettings {
   teamGroup?: string
   /** 外观主题;midnight=默认深色青蓝 */
   theme: ThemeId
+  /** 胶囊极简模式:无交互 3s 收缩为悬浮球,交互即还原;默认开启 */
+  capsuleMinimalMode: boolean
 }
 
 export interface WindowPreferences {
@@ -294,6 +296,11 @@ export interface CapsuleDragMovePayload {
   offsetY: number
 }
 
+export interface CapsuleMinimalPayload {
+  enabled: boolean
+  size?: { width: number; height: number }
+}
+
 export interface RendererCommandPayload {
   type: RendererCommandType
   panelView: PanelView
@@ -334,6 +341,7 @@ export interface CodexStatusApi {
   getSpendUsage: (window: UsageWindow) => Promise<SpendUsage>
   /** 胶囊窗口按内容自适应尺寸(渲染层量内容后调用;主进程 setSize) */
   setCapsuleSize: (size: { width: number; height: number }) => Promise<void>
+  setCapsuleMinimal: (payload: CapsuleMinimalPayload) => Promise<void>
   /** 下载已检测到的新版本安装包 */
   downloadUpdate: () => Promise<void>
   /** 退出并运行安装程序,覆盖升级 */
@@ -382,6 +390,13 @@ export const CAPSULE_WINDOW_SIZE = {
   height: 50
 } as const
 
+export const CAPSULE_MINIMAL_WINDOW_SIZE = {
+  width: 40,
+  height: 40
+} as const
+
+export const CAPSULE_MINIMAL_TRIGGER_MS = 3000
+
 export const ORB_WINDOW_SIZE = {
   width: 50,
   height: 165
@@ -405,7 +420,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   agentId: 'codex',
   launchAtLogin: false,
   iqThreshold: DEFAULT_IQ_THRESHOLD,
-  theme: 'midnight'
+  theme: 'midnight',
+  capsuleMinimalMode: true
 }
 
 export const DEFAULT_WINDOW_PREFERENCES: WindowPreferences = {
@@ -462,7 +478,11 @@ export function normalizeSettings(input: Partial<AppSettings> | undefined): AppS
     iqThreshold: normalizeIqThreshold(input?.iqThreshold),
     teamNickname: normalizeOptionalString(input?.teamNickname),
     teamGroup: normalizeOptionalString(input?.teamGroup),
-    theme: isThemeId(input?.theme) ? input.theme : DEFAULT_SETTINGS.theme
+    theme: isThemeId(input?.theme) ? input.theme : DEFAULT_SETTINGS.theme,
+    capsuleMinimalMode:
+      typeof input?.capsuleMinimalMode === 'boolean'
+        ? input.capsuleMinimalMode
+        : DEFAULT_SETTINGS.capsuleMinimalMode
   }
 }
 

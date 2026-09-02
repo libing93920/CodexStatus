@@ -23,6 +23,7 @@ import {
   CAPSULE_DOCK_EDGE_GAP,
   CAPSULE_EDGE_GAP,
   CAPSULE_WINDOW_SIZE,
+  CAPSULE_MINIMAL_WINDOW_SIZE,
   CAPSULE_UNDOCK_THRESHOLD,
   DEFAULT_SETTINGS,
   DEFAULT_WINDOW_PREFERENCES,
@@ -34,6 +35,7 @@ import {
   type AnnouncementState,
   type BroadcastMessage,
   type CapsuleDragMovePayload,
+  type CapsuleMinimalPayload,
   type DockEdge,
   type PanelFocusTarget,
   type PanelView,
@@ -100,6 +102,7 @@ const CHANNELS = {
   spendUsage: 'codex-status:spend-usage',
   tokenUsageRange: 'codex-status:token-usage-range',
   setCapsuleSize: 'codex-status:set-capsule-size',
+  setCapsuleMinimal: 'codex-status:set-capsule-minimal',
   updateProgress: 'codex-status:update-progress',
   sendBroadcast: 'codex-status:send-broadcast',
   broadcastMessage: 'codex-status:broadcast-message',
@@ -128,6 +131,7 @@ let currentPanelView: PanelView = 'details'
 let panelFocusUpdate = false
 let panelFocusTarget: PanelFocusTarget | undefined
 let currentAnnouncement: AnnouncementState | null = null
+let capsuleMinimalRuntime: { width: number; height: number } | null = null
 const lanService = new LanService()
 let persistedState: PersistedState = {
   settings: { ...DEFAULT_SETTINGS },
@@ -606,14 +610,37 @@ function registerIpcHandlers(): void {
   })
 
   // 胶囊窗口按内容自适应尺寸:渲染层量内容后调用,主进程 setSize 贴合(限幅防越界)
-  ipcMain.handle(CHANNELS.setCapsuleSize, async (_event, size: { width: number; height: number }) => {
-    if (!mainWindow || !Number.isFinite(size?.width) || !Number.isFinite(size?.height)) {
+  ipcMain.handle(
+    CHANNELS.setCapsuleSize,
+    async (_event, size: { width: number; height: number }) => {
+      if (!mainWindow || !Number.isFinite(size?.width) || !Number.isFinite(size?.height)) {
+        return
+      }
+      mainWindow.setSize(
+        Math.round(clamp(size.width, 40, 480)),
+        Math.round(clamp(size.height, 28, 320))
+      )
+    }
+  )
+
+  ipcMain.handle(CHANNELS.setCapsuleMinimal, async (_event, payload: CapsuleMinimalPayload) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (payload?.enabled === true) {
+      capsuleMinimalRuntime = {
+        width: Math.round(
+          clamp(getFiniteNumber(payload.size?.width, CAPSULE_MINIMAL_WINDOW_SIZE.width), 24, 64)
+        ),
+        height: Math.round(
+          clamp(getFiniteNumber(payload.size?.height, CAPSULE_MINIMAL_WINDOW_SIZE.height), 24, 64)
+        )
+      }
+      const size = capsuleMinimalRuntime
+      mainWindow.setBounds(centerResizeBounds(mainWindow.getBounds(), size.width, size.height))
       return
     }
-    mainWindow.setSize(
-      Math.round(clamp(size.width, 40, 480)),
-      Math.round(clamp(size.height, 28, 320))
-    )
+    capsuleMinimalRuntime = null
+    const target = resolveCapsuleBounds(persistedState.window)
+    mainWindow.setBounds(centerResizeBounds(mainWindow.getBounds(), target.width, target.height))
   })
 
   // 发送局域网广播消息:校验失败返回原因(渲染层据此区分提示);成功后回显给自己
@@ -621,10 +648,7 @@ function registerIpcHandlers(): void {
     if (typeof text !== 'string') {
       return { ok: false, reason: 'too-long' }
     }
-    if (
-      text.startsWith(ANNOUNCEMENT_PREFIX) &&
-      parseAnnouncementText(text) === undefined
-    ) {
+    if (text.startsWith(ANNOUNCEMENT_PREFIX) && parseAnnouncementText(text) === undefined) {
       return { ok: false, reason: 'too-long' }
     }
     const result = lanService.broadcastMessage(text)
@@ -703,7 +727,10 @@ function refreshTrayMenu(): void {
   tray.setToolTip(buildTrayTooltip())
 }
 
-function getTrayLabels(): Record<'refresh' | 'toggle' | 'details' | 'team' | 'settings' | 'checkUpdate' | 'quit', string> {
+function getTrayLabels(): Record<
+  'refresh' | 'toggle' | 'details' | 'team' | 'settings' | 'checkUpdate' | 'quit',
+  string
+> {
   if (persistedState.settings.locale === 'en-US') {
     return {
       refresh: 'Refresh',
@@ -825,7 +852,7 @@ function toggleWindowVisibility(): void {
   } else {
     userHidCapsule = false
     // 用户主动点击托盘:即使无数据也显示(守卫仅拦自动 show 路径,不拦用户主动操作)
-    const bounds = resolveCapsuleBounds(persistedState.window)
+    const bounds = resolveCapsuleRuntimeBounds()
     mainWindow.setBounds(bounds)
     mainWindow.show()
     mainWindow.focus()
@@ -842,7 +869,7 @@ function showWindow(): void {
     return
   }
 
-  const bounds = resolveCapsuleBounds(persistedState.window)
+  const bounds = resolveCapsuleRuntimeBounds()
   mainWindow.setBounds(bounds)
   mainWindow.show()
   mainWindow.focus()
@@ -935,9 +962,7 @@ function buildTeamPeers(selfRemaining: number | undefined): TeamPeer[] {
     shortWindow: short
       ? { label: short.label, remainingPercent: short.remainingPercent }
       : undefined,
-    longWindow: long
-      ? { label: long.label, remainingPercent: long.remainingPercent }
-      : undefined,
+    longWindow: long ? { label: long.label, remainingPercent: long.remainingPercent } : undefined,
     resetCreditCount: currentSnapshot.resetCredit?.availableCount,
     tokenUsage: getCachedTokenTotals(),
     tokenUsageByAgent: getCachedAgentTokenTotals(),
@@ -988,9 +1013,7 @@ function getLanSnapshot(): PeerSnapshot {
     shortWindow: short
       ? { label: short.label, remainingPercent: short.remainingPercent }
       : undefined,
-    longWindow: long
-      ? { label: long.label, remainingPercent: long.remainingPercent }
-      : undefined,
+    longWindow: long ? { label: long.label, remainingPercent: long.remainingPercent } : undefined,
     tokenUsage: getCachedTokenTotals(),
     tokenUsageByAgent: getCachedAgentTokenTotals(),
     appVersion: app.getVersion()
@@ -1108,7 +1131,9 @@ async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): 
         ...collected,
         // 非 Codex 不保留雷达推荐(切换工具时避免旧 Codex 推荐残留)
         bestModelPick:
-          agentId === 'codex' ? currentSnapshot.bestModelPick ?? collected.bestModelPick : undefined,
+          agentId === 'codex'
+            ? (currentSnapshot.bestModelPick ?? collected.bestModelPick)
+            : undefined,
         teamPeers: buildTeamPeers(getSelfRemaining())
       }
       // 本机数据变化,广播给已连 peer
@@ -1141,9 +1166,36 @@ function canRefreshStatus(): boolean {
 }
 
 function syncCapsuleWindowBounds(): void {
-  if (mainWindow && !mainWindow.isDestroyed()) {
+  if (mainWindow && !mainWindow.isDestroyed() && !capsuleMinimalRuntime) {
     mainWindow.setBounds(resolveCapsuleBounds(persistedState.window))
   }
+}
+
+function centerResizeBounds(current: Rectangle, width: number, height: number): Rectangle {
+  const workArea = getTargetWorkArea(current.x, current.y)
+  const minX = workArea.x + CAPSULE_EDGE_GAP
+  const minY = workArea.y + CAPSULE_EDGE_GAP
+  return {
+    x: clamp(
+      current.x + Math.round((current.width - width) / 2),
+      minX,
+      Math.max(minX, workArea.x + workArea.width - width - CAPSULE_EDGE_GAP)
+    ),
+    y: clamp(
+      current.y + Math.round((current.height - height) / 2),
+      minY,
+      Math.max(minY, workArea.y + workArea.height - height - CAPSULE_EDGE_GAP)
+    ),
+    width,
+    height
+  }
+}
+
+function resolveCapsuleRuntimeBounds(): Rectangle {
+  const bounds = resolveCapsuleBounds(persistedState.window)
+  if (!capsuleMinimalRuntime || !mainWindow || mainWindow.isDestroyed()) return bounds
+  const current = mainWindow.getBounds()
+  return { ...current, width: capsuleMinimalRuntime.width, height: capsuleMinimalRuntime.height }
 }
 
 function broadcastSnapshot(): void {
@@ -1523,8 +1575,8 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
-function getFiniteNumber(value: number, fallback: number): number {
-  return Number.isFinite(value) ? value : fallback
+function getFiniteNumber(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
 function queuePersistState(): void {

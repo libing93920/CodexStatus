@@ -3,6 +3,8 @@ import {
   DEFAULT_IQ_THRESHOLD,
   DEFAULT_SETTINGS,
   DEFAULT_WINDOW_PREFERENCES,
+  CAPSULE_MINIMAL_TRIGGER_MS,
+  CAPSULE_MINIMAL_WINDOW_SIZE,
   MAX_IQ_THRESHOLD,
   MIN_IQ_THRESHOLD,
   REFRESH_INTERVAL_OPTIONS,
@@ -64,6 +66,10 @@ const HEART_EFFECT_KINDS = [
   'balloon',
   'superlike'
 ] as const
+const CAPSULE_MINIMAL_COLLAPSE_MS = 200
+const CAPSULE_MINIMAL_LEAVE_MS = 120
+const CAPSULE_MINIMAL_REVEAL_MS = 240
+type CapsuleMinimalStage = 'full' | 'collapsing' | 'minimal' | 'expanding'
 type HeartEffectKind = (typeof HEART_EFFECT_KINDS)[number]
 // 点赞过期按本地自然日(与 token 榜 1d 窗口同为自然日),跨天即清零,避免滚动24h与榜单错位
 
@@ -201,7 +207,8 @@ const COPY = {
     agentIdHint: '选择要统计用量与花费的 Agent 工具',
     groupAppearance: '外观',
     theme: '主题',
-    themeHint: '切换胶囊与面板的整体风格'
+    themeHint: '切换胶囊与面板的整体风格',
+    minimalMode: '极简模式'
   },
   'en-US': {
     noData: 'No data',
@@ -313,7 +320,8 @@ const COPY = {
     agentIdHint: 'Choose which agent tool to monitor',
     groupAppearance: 'Appearance',
     theme: 'Theme',
-    themeHint: 'Switch the overall capsule and panel style'
+    themeHint: 'Switch the overall capsule and panel style',
+    minimalMode: 'Minimal mode'
   }
 } as const
 
@@ -342,6 +350,10 @@ function App(): React.JSX.Element {
   const [teamTokenWindow, setTeamTokenWindow] = useState<UsageWindow>('1d')
   const [teamBoardMotionActive, setTeamBoardMotionActive] = useState(false)
   const [capsulePointerActive, setCapsulePointerActive] = useState(false)
+  const [minimalStage, setMinimalStage] = useState<CapsuleMinimalStage>('full')
+  const [pointerInsideCapsule, setPointerInsideCapsule] = useState(false)
+  const [minimalReveal, setMinimalReveal] = useState(false)
+  const [minimalBallSize, setMinimalBallSize] = useState<number>(CAPSULE_MINIMAL_WINDOW_SIZE.width)
   const [manualRefreshActive, setManualRefreshActive] = useState(false)
   const [appVersion, setAppVersion] = useState('')
   // 在线更新状态机:idle/checking/upToDate/available/downloading/downloaded/error
@@ -362,6 +374,9 @@ function App(): React.JSX.Element {
   // 详情面板里长窗口(周重置)倒计时需要秒级刷新;只在面板可见且有长窗口时 tick
   const [nowTick, setNowTick] = useState(() => Date.now())
   const capsulePointerRef = useRef<CapsulePointerState | null>(null)
+  const minimalStageRef = useRef<CapsuleMinimalStage>('full')
+  const minimalStageTimerRef = useRef<number | undefined>(undefined)
+  const minimalRevealTimerRef = useRef<number | undefined>(undefined)
   const capsuleRef = useRef<HTMLElement | null>(null)
   const manualRefreshTimerRef = useRef<number | undefined>(undefined)
   const justRefreshedTimerRef = useRef<number | undefined>(undefined)
@@ -530,6 +545,12 @@ function App(): React.JSX.Element {
       if (capsuleMessageTimerRef.current !== undefined) {
         window.clearTimeout(capsuleMessageTimerRef.current)
       }
+      if (minimalStageTimerRef.current !== undefined) {
+        window.clearTimeout(minimalStageTimerRef.current)
+      }
+      if (minimalRevealTimerRef.current !== undefined) {
+        window.clearTimeout(minimalRevealTimerRef.current)
+      }
       capsuleMessageTimerRef.current = window.setTimeout(() => {
         setCapsuleMessage(null)
         capsuleMessageTimerRef.current = undefined
@@ -549,7 +570,7 @@ function App(): React.JSX.Element {
       })
       // 别人给我点赞:胶囊整体播放爱心特效数秒,提供被赞的情绪价值
       if (reaction.action === 'add' && reaction.targetPeerId === selfPeerIdRef.current) {
-        spawnHeartEffect()
+        if (minimalStageRef.current === 'full') spawnHeartEffect()
       }
     })
 
@@ -585,6 +606,21 @@ function App(): React.JSX.Element {
       disposeReaction()
     }
   }, [])
+
+  useEffect(() => {
+    minimalStageRef.current = minimalStage
+  }, [minimalStage])
+
+  useLayoutEffect(() => {
+    if (windowRole !== 'capsule' || !capsuleRef.current) return
+    const raw = window
+      .getComputedStyle(capsuleRef.current)
+      .getPropertyValue('--capsule-minimal-size')
+    const size = Number.parseFloat(raw)
+    if (Number.isFinite(size) && size >= 24 && size <= 64) {
+      setMinimalBallSize(Math.round(size))
+    }
+  }, [windowRole, settings.theme])
 
   // API Key 模式胶囊:随快照刷新(每 30s)拉取今日 token,驱动缓存命中率进度条与今日用量
   useEffect(() => {
@@ -719,7 +755,7 @@ function App(): React.JSX.Element {
   // API Key 模式胶囊:按内容实际尺寸自适应窗口大小(信息多则大,少则小)。
   // 临时把胶囊设为 max-content 量出自然尺寸,再让主进程 setSize 贴合。
   useLayoutEffect(() => {
-    if (!isApiMode || windowRole !== 'capsule') {
+    if (!isApiMode || windowRole !== 'capsule' || minimalStage !== 'full') {
       return
     }
     const section = capsuleRef.current
@@ -737,7 +773,15 @@ function App(): React.JSX.Element {
     if (width > 0 && height > 0) {
       void window.codexStatus.setCapsuleSize({ width, height })
     }
-  }, [isApiMode, windowRole, apiTokenText, apiHitText, capsulePickText, capsuleViewMode])
+  }, [
+    isApiMode,
+    windowRole,
+    apiTokenText,
+    apiHitText,
+    capsulePickText,
+    capsuleViewMode,
+    minimalStage
+  ])
   // 团队额度排行榜:按剩余额度降序(undefined 视为 0,排末尾);API Key 登录无订阅额度(恒 0),不参与额度排行
   const teamPeers = [...(snapshot.teamPeers ?? [])]
     .filter((peer) => peer.authMode !== 'api')
@@ -901,6 +945,27 @@ function App(): React.JSX.Element {
     showOutdatedBadge,
     capsuleMessage !== null
   )
+  const showMinimalBall = minimalStage === 'minimal' || minimalStage === 'expanding'
+  const canEnterMinimal =
+    settings.capsuleMinimalMode &&
+    windowRole === 'capsule' &&
+    snapshot.generatedAt !== undefined &&
+    capsuleMessage === null &&
+    minimalStage === 'full' &&
+    !pointerInsideCapsule
+  const minimalValueText = isApiMode ? apiTokenText : capsulePercentText
+  const minimalValueColor = isApiMode
+    ? undefined
+    : capsuleDisplayPercent === undefined
+      ? undefined
+      : resolveMetricColor(capsuleDisplayPercent, settings.percentageMode)
+  const minimalValueFont = fitFontSize(
+    minimalValueText,
+    Math.max(10, Math.round(minimalBallSize * 0.36)),
+    Math.max(16, minimalBallSize - 8)
+  )
+  const adjustedMinimalValueFont =
+    settings.theme === 'memphis' && !isApiMode ? Math.min(minimalValueFont, 12) : minimalValueFont
   const capsuleClassName = [
     'capsule',
     `capsule--${capsuleViewMode}`,
@@ -910,7 +975,11 @@ function App(): React.JSX.Element {
     snapshot.isRefreshing ? 'is-refreshing' : '',
     manualRefreshActive ? 'is-manual-refreshing' : '',
     canRefresh ? '' : 'is-static',
-    capsulePointerActive ? 'is-dragging' : ''
+    capsulePointerActive ? 'is-dragging' : '',
+    showMinimalBall ? 'capsule--minimal' : '',
+    minimalStage === 'expanding' ? 'is-minimal-leaving' : '',
+    minimalStage === 'collapsing' ? 'is-collapsing' : '',
+    minimalReveal ? 'is-revealing' : ''
   ]
     .filter(Boolean)
     .join(' ')
@@ -1030,6 +1099,79 @@ function App(): React.JSX.Element {
     }
   }, [ready, windowRole, snapshot.generatedAt])
 
+  useEffect(() => {
+    if (!canEnterMinimal) return
+    const timer = window.setTimeout(() => {
+      setMinimalStage('collapsing')
+      minimalStageTimerRef.current = window.setTimeout(() => {
+        minimalStageTimerRef.current = undefined
+        void enterCapsuleMinimal()
+      }, CAPSULE_MINIMAL_COLLAPSE_MS)
+    }, CAPSULE_MINIMAL_TRIGGER_MS)
+    return () => window.clearTimeout(timer)
+  }, [canEnterMinimal])
+
+  useEffect(() => {
+    if (capsuleMessage === null) return
+    if (minimalStageRef.current === 'collapsing') cancelCapsuleCollapse()
+    else if (minimalStageRef.current !== 'full') startCapsuleExpand()
+  }, [capsuleMessage?.id])
+
+  useEffect(() => {
+    if (settings.capsuleMinimalMode) return
+    if (minimalStageRef.current === 'collapsing') cancelCapsuleCollapse()
+    else if (minimalStageRef.current !== 'full') startCapsuleExpand()
+  }, [settings.capsuleMinimalMode])
+
+  async function enterCapsuleMinimal(): Promise<void> {
+    try {
+      await window.codexStatus.setCapsuleMinimal({
+        enabled: true,
+        size: { width: minimalBallSize, height: minimalBallSize }
+      })
+      setMinimalStage('minimal')
+    } catch {
+      setMinimalStage('full')
+    }
+  }
+
+  function cancelCapsuleCollapse(): void {
+    if (minimalStageTimerRef.current !== undefined) {
+      window.clearTimeout(minimalStageTimerRef.current)
+      minimalStageTimerRef.current = undefined
+    }
+    setMinimalStage('full')
+  }
+
+  function startCapsuleExpand(): void {
+    if (minimalStageRef.current === 'full') return
+    if (minimalStageTimerRef.current !== undefined) {
+      window.clearTimeout(minimalStageTimerRef.current)
+    }
+    setMinimalStage('expanding')
+    minimalStageTimerRef.current = window.setTimeout(() => {
+      minimalStageTimerRef.current = undefined
+      void exitCapsuleMinimal()
+    }, CAPSULE_MINIMAL_LEAVE_MS)
+  }
+
+  async function exitCapsuleMinimal(): Promise<void> {
+    try {
+      await window.codexStatus.setCapsuleMinimal({ enabled: false })
+    } catch {
+      // IPC 失败时仍恢复渲染态,避免胶囊卡在过渡状态
+    }
+    setMinimalStage('full')
+    setMinimalReveal(true)
+    if (minimalRevealTimerRef.current !== undefined) {
+      window.clearTimeout(minimalRevealTimerRef.current)
+    }
+    minimalRevealTimerRef.current = window.setTimeout(() => {
+      minimalRevealTimerRef.current = undefined
+      setMinimalReveal(false)
+    }, CAPSULE_MINIMAL_REVEAL_MS)
+  }
+
   function closePanel(): void {
     setPanelView('details')
     void window.codexStatus.closePanel()
@@ -1120,6 +1262,12 @@ function App(): React.JSX.Element {
       return
     }
 
+    if (minimalStageRef.current !== 'full') {
+      if (minimalStageRef.current === 'collapsing') cancelCapsuleCollapse()
+      else startCapsuleExpand()
+      return
+    }
+
     const bounds = event.currentTarget.getBoundingClientRect()
     capsulePointerRef.current = {
       pointerId: event.pointerId,
@@ -1169,6 +1317,16 @@ function App(): React.JSX.Element {
 
   function handleCapsulePointerCancel(event: React.PointerEvent<HTMLElement>): void {
     void finishCapsulePointer(event, false)
+  }
+
+  function handleCapsulePointerEnter(): void {
+    setPointerInsideCapsule(true)
+    if (minimalStageRef.current === 'collapsing') cancelCapsuleCollapse()
+    else if (minimalStageRef.current !== 'full') startCapsuleExpand()
+  }
+
+  function handleCapsulePointerLeave(): void {
+    setPointerInsideCapsule(false)
   }
 
   // 排除上一次形态,避免随机连续重复让特效库显得单调
@@ -1255,6 +1413,11 @@ function App(): React.JSX.Element {
     }
 
     event.preventDefault()
+    if (minimalStageRef.current !== 'full') {
+      if (minimalStageRef.current === 'collapsing') cancelCapsuleCollapse()
+      else startCapsuleExpand()
+      return
+    }
     openCapsuleTarget()
   }
 
@@ -1481,142 +1644,163 @@ function App(): React.JSX.Element {
             onKeyDown={handleCapsuleKeyDown}
             onPointerCancel={handleCapsulePointerCancel}
             onPointerDown={handleCapsulePointerDown}
+            onPointerEnter={handleCapsulePointerEnter}
+            onPointerLeave={handleCapsulePointerLeave}
             onPointerMove={handleCapsulePointerMove}
             onPointerUp={handleCapsulePointerUp}
             role="button"
             tabIndex={0}
           >
             <span className="capsule__deco" aria-hidden="true" />
-            {heartEffect ? <HeartEffect key={heartEffect.id} kind={heartEffect.kind} /> : null}
-            {capsuleMessage ? (
-              <div
-                key={capsuleMessage.id}
-                className={`capsule__message capsule__message--${capsuleViewMode}${
-                  capsuleMessageOverflow ? ' is-marquee' : ''
-                }`}
-              >
-                <div
-                  className={`capsule__message-track${capsuleMessageOverflow ? ' is-marquee' : ''}`}
-                  style={
-                    { '--capsule-marquee-duration': `${capsuleMarqueeDuration}ms` } as CSSProperties
-                  }
+            {showMinimalBall ? (
+              <div className="capsule__minimal" aria-hidden="true">
+                <span className="capsule__minimal-deco" />
+                <span
+                  className="capsule__minimal-value"
+                  style={{
+                    color: minimalValueColor,
+                    fontSize: `${adjustedMinimalValueFont}px`
+                  }}
                 >
-                  <span className="capsule__message-copy">
-                    <span ref={capsuleMessageTextRef} className="capsule__message-text">
-                      {capsuleMessageLabel}: {capsuleMessage.text}
-                    </span>
-                  </span>
-                  {capsuleMessageOverflow ? (
-                    <span aria-hidden="true" className="capsule__message-copy">
-                      <span className="capsule__message-text">
-                        {capsuleMessageLabel}: {capsuleMessage.text}
-                      </span>
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            ) : capsuleViewMode === 'orb' ? (
-              <div
-                className={`capsule__layout capsule__layout--v${isApiMode ? ' capsule__layout--v-api' : ''}`}
-                aria-hidden="true"
-              >
-                {capsulePickText ? (
-                  <div
-                    className="capsule__pick"
-                    style={{ color: capsulePickColor }}
-                    title={capsulePickTitle}
-                  >
-                    <span>{capsulePickText}</span>
-                  </div>
-                ) : null}
-                {isApiMode ? (
-                  <>
-                    {/* API 模式竖版:缓存命中率(含进度) → 今日 token */}
-                    <ApiCapsuleStat
-                      label={copy.usageCacheHit}
-                      value={apiHitText}
-                      fontPx={apiHitFont}
-                      withProgress
-                    />
-                    <ApiCapsuleStat
-                      label={copy.usageToday}
-                      value={apiTokenText}
-                      fontPx={apiTokenFont}
-                    />
-                  </>
-                ) : (
-                  <>
-                    {capsuleCreditText ? (
-                      <div className="capsule__credit">
-                        <TicketIcon />
-                        <span>{capsuleCreditText}</span>
-                      </div>
-                    ) : null}
-                    {capsuleWeeklyOrb}
-                    {capsuleMetricBox}
-                  </>
-                )}
+                  {minimalValueText}
+                </span>
               </div>
             ) : (
-              <div
-                className={`capsule__layout capsule__layout--h${isApiMode ? ' capsule__layout--h-api' : ''}`}
-                aria-hidden="true"
-              >
-                {isApiMode ? (
-                  <>
-                    {/* API 模式横版:今日 token → 缓存命中率(含进度) → 推荐模型 */}
-                    <ApiCapsuleStat
-                      label={copy.usageToday}
-                      value={apiTokenText}
-                      fontPx={apiTokenFont}
-                    />
-                    <ApiCapsuleStat
-                      label={copy.usageCacheHit}
-                      value={apiHitText}
-                      fontPx={apiHitFont}
-                      withProgress
-                    />
-                    <div className="capsule__col capsule__col--right">
-                      {capsulePickText ? (
-                        <div
-                          className="capsule__pick"
-                          style={{ color: capsulePickColor }}
-                          title={capsulePickTitle}
-                        >
-                          <span>{capsulePickText}</span>
-                        </div>
-                      ) : null}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="capsule__col capsule__col--weekly">
-                      <span className="capsule__weekly">
-                        <HourglassIcon />
-                        {capsuleResetText}
+              <>
+                {heartEffect ? <HeartEffect key={heartEffect.id} kind={heartEffect.kind} /> : null}
+                {capsuleMessage ? (
+                  <div
+                    key={capsuleMessage.id}
+                    className={`capsule__message capsule__message--${capsuleViewMode}${
+                      capsuleMessageOverflow ? ' is-marquee' : ''
+                    }`}
+                  >
+                    <div
+                      className={`capsule__message-track${capsuleMessageOverflow ? ' is-marquee' : ''}`}
+                      style={
+                        {
+                          '--capsule-marquee-duration': `${capsuleMarqueeDuration}ms`
+                        } as CSSProperties
+                      }
+                    >
+                      <span className="capsule__message-copy">
+                        <span ref={capsuleMessageTextRef} className="capsule__message-text">
+                          {capsuleMessageLabel}: {capsuleMessage.text}
+                        </span>
                       </span>
-                    </div>
-                    <div className="capsule__col capsule__col--metric">{capsuleMetricBox}</div>
-                    <div className="capsule__col capsule__col--right">
-                      {capsuleCreditText ? (
-                        <div className="capsule__credit">
-                          <TicketIcon />
-                          <span>{capsuleCreditText}</span>
-                        </div>
-                      ) : null}
-                      {capsulePickText ? (
-                        <div
-                          className="capsule__pick"
-                          style={{ color: capsulePickColor }}
-                          title={capsulePickTitle}
-                        >
-                          <span>{capsulePickText}</span>
-                        </div>
+                      {capsuleMessageOverflow ? (
+                        <span aria-hidden="true" className="capsule__message-copy">
+                          <span className="capsule__message-text">
+                            {capsuleMessageLabel}: {capsuleMessage.text}
+                          </span>
+                        </span>
                       ) : null}
                     </div>
-                  </>
+                  </div>
+                ) : capsuleViewMode === 'orb' ? (
+                  <div
+                    className={`capsule__layout capsule__layout--v${isApiMode ? ' capsule__layout--v-api' : ''}`}
+                    aria-hidden="true"
+                  >
+                    {capsulePickText ? (
+                      <div
+                        className="capsule__pick"
+                        style={{ color: capsulePickColor }}
+                        title={capsulePickTitle}
+                      >
+                        <span>{capsulePickText}</span>
+                      </div>
+                    ) : null}
+                    {isApiMode ? (
+                      <>
+                        {/* API 模式竖版:缓存命中率(含进度) → 今日 token */}
+                        <ApiCapsuleStat
+                          label={copy.usageCacheHit}
+                          value={apiHitText}
+                          fontPx={apiHitFont}
+                          withProgress
+                        />
+                        <ApiCapsuleStat
+                          label={copy.usageToday}
+                          value={apiTokenText}
+                          fontPx={apiTokenFont}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        {capsuleCreditText ? (
+                          <div className="capsule__credit">
+                            <TicketIcon />
+                            <span>{capsuleCreditText}</span>
+                          </div>
+                        ) : null}
+                        {capsuleWeeklyOrb}
+                        {capsuleMetricBox}
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    className={`capsule__layout capsule__layout--h${isApiMode ? ' capsule__layout--h-api' : ''}`}
+                    aria-hidden="true"
+                  >
+                    {isApiMode ? (
+                      <>
+                        {/* API 模式横版:今日 token → 缓存命中率(含进度) → 推荐模型 */}
+                        <ApiCapsuleStat
+                          label={copy.usageToday}
+                          value={apiTokenText}
+                          fontPx={apiTokenFont}
+                        />
+                        <ApiCapsuleStat
+                          label={copy.usageCacheHit}
+                          value={apiHitText}
+                          fontPx={apiHitFont}
+                          withProgress
+                        />
+                        <div className="capsule__col capsule__col--right">
+                          {capsulePickText ? (
+                            <div
+                              className="capsule__pick"
+                              style={{ color: capsulePickColor }}
+                              title={capsulePickTitle}
+                            >
+                              <span>{capsulePickText}</span>
+                            </div>
+                          ) : null}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="capsule__col capsule__col--weekly">
+                          <span className="capsule__weekly">
+                            <HourglassIcon />
+                            {capsuleResetText}
+                          </span>
+                        </div>
+                        <div className="capsule__col capsule__col--metric">{capsuleMetricBox}</div>
+                        <div className="capsule__col capsule__col--right">
+                          {capsuleCreditText ? (
+                            <div className="capsule__credit">
+                              <TicketIcon />
+                              <span>{capsuleCreditText}</span>
+                            </div>
+                          ) : null}
+                          {capsulePickText ? (
+                            <div
+                              className="capsule__pick"
+                              style={{ color: capsulePickColor }}
+                              title={capsulePickTitle}
+                            >
+                              <span>{capsulePickText}</span>
+                            </div>
+                          ) : null}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 )}
-              </div>
+              </>
             )}
           </section>
         </main>
@@ -2073,6 +2257,17 @@ function App(): React.JSX.Element {
                       offLabel={copy.disabled}
                       onChange={(checked) => {
                         void handleSettingsPatch({ launchAtLogin: checked })
+                      }}
+                      onLabel={copy.enabled}
+                    />
+                  </div>
+                  <div className="setting-row">
+                    <span>{copy.minimalMode}</span>
+                    <ToggleSwitch
+                      checked={settings.capsuleMinimalMode}
+                      offLabel={copy.disabled}
+                      onChange={(checked) => {
+                        void handleSettingsPatch({ capsuleMinimalMode: checked })
                       }}
                       onLabel={copy.enabled}
                     />

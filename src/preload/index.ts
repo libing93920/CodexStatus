@@ -6,6 +6,7 @@ import type {
   BootstrapPayload,
   BroadcastSendResult,
   CapsuleDragMovePayload,
+  CapsuleMinimalPayload,
   CodexStatusApi,
   PanelView,
   PreferencesPayload,
@@ -40,6 +41,7 @@ const CHANNELS = {
   spendUsage: 'codex-status:spend-usage',
   tokenUsageRange: 'codex-status:token-usage-range',
   setCapsuleSize: 'codex-status:set-capsule-size',
+  setCapsuleMinimal: 'codex-status:set-capsule-minimal',
   updateProgress: 'codex-status:update-progress',
   sendBroadcast: 'codex-status:send-broadcast',
   broadcastMessage: 'codex-status:broadcast-message',
@@ -74,6 +76,8 @@ const api: CodexStatusApi = {
     ipcRenderer.invoke(CHANNELS.spendUsage, window) as Promise<SpendUsage>,
   setCapsuleSize: (size: { width: number; height: number }) =>
     ipcRenderer.invoke(CHANNELS.setCapsuleSize, size) as Promise<void>,
+  setCapsuleMinimal: (payload: CapsuleMinimalPayload) =>
+    ipcRenderer.invoke(CHANNELS.setCapsuleMinimal, payload) as Promise<void>,
   sendBroadcast: (text: string) =>
     ipcRenderer.invoke(CHANNELS.sendBroadcast, text) as Promise<BroadcastSendResult>,
   markAnnouncementRead: (id: string) =>
@@ -84,14 +88,14 @@ const api: CodexStatusApi = {
     ipcRenderer.invoke(CHANNELS.sendReaction, targetPeerId, action) as Promise<ReactionSendResult>,
   downloadUpdate: () => ipcRenderer.invoke(CHANNELS.downloadUpdate) as Promise<void>,
   installUpdate: () => ipcRenderer.invoke(CHANNELS.installUpdate) as Promise<void>,
-  onSnapshotUpdated: listener => subscribe(CHANNELS.snapshotUpdated, listener),
-  onPreferencesUpdated: listener => subscribe(CHANNELS.preferencesUpdated, listener),
-  onCommand: listener => subscribe(CHANNELS.command, listener),
-  onUpdateProgress: listener => subscribe(CHANNELS.updateProgress, listener),
-  onBroadcastMessage: listener => subscribe(CHANNELS.broadcastMessage, listener),
+  onSnapshotUpdated: (listener) => subscribe(CHANNELS.snapshotUpdated, listener),
+  onPreferencesUpdated: (listener) => subscribe(CHANNELS.preferencesUpdated, listener),
+  onCommand: (listener) => subscribe(CHANNELS.command, listener),
+  onUpdateProgress: (listener) => subscribe(CHANNELS.updateProgress, listener),
+  onBroadcastMessage: (listener) => subscribe(CHANNELS.broadcastMessage, listener),
   onAnnouncementUpdated: (listener: (state: AnnouncementState | null) => void) =>
     subscribe(CHANNELS.announcementUpdated, listener),
-  onReaction: listener => subscribe(CHANNELS.reaction, listener)
+  onReaction: (listener) => subscribe(CHANNELS.reaction, listener)
 }
 
 if (process.contextIsolated) {

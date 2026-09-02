@@ -1198,29 +1198,27 @@ body {
   content: '';
   pointer-events: none;
   opacity: 0;
-  background:
-    linear-gradient(
-      105deg,
-      transparent 28%,
-      color-mix(in srgb, var(--capsule-accent) 40%, transparent) 44%,
-      rgba(255, 255, 255, 0.32) 50%,
-      color-mix(in srgb, var(--capsule-accent) 32%, transparent) 56%,
-      transparent 72%
-    );
+  background: linear-gradient(
+    105deg,
+    transparent 28%,
+    color-mix(in srgb, var(--capsule-accent) 40%, transparent) 44%,
+    rgba(255, 255, 255, 0.32) 50%,
+    color-mix(in srgb, var(--capsule-accent) 32%, transparent) 56%,
+    transparent 72%
+  );
   transform: translateX(-72%) skewX(-14deg);
   animation: capsule-refresh-sheen 680ms cubic-bezier(0.18, 0.86, 0.32, 1);
 }
 
 .capsule--orb.is-manual-refreshing::before {
-  background:
-    linear-gradient(
-      180deg,
-      transparent 26%,
-      color-mix(in srgb, var(--capsule-accent) 34%, transparent) 45%,
-      rgba(255, 255, 255, 0.24) 50%,
-      color-mix(in srgb, var(--capsule-accent) 26%, transparent) 56%,
-      transparent 74%
-    );
+  background: linear-gradient(
+    180deg,
+    transparent 26%,
+    color-mix(in srgb, var(--capsule-accent) 34%, transparent) 45%,
+    rgba(255, 255, 255, 0.24) 50%,
+    color-mix(in srgb, var(--capsule-accent) 26%, transparent) 56%,
+    transparent 74%
+  );
   transform: translateY(-72%);
   animation-name: capsule-refresh-sheen-y;
 }
@@ -1276,6 +1274,118 @@ body {
   justify-content: center;
   gap: 6px;
   padding: 8px 4px;
+}
+
+.capsule--minimal {
+  border-radius: 50%;
+  clip-path: circle(50% at 50% 50%);
+  background: var(--capsule-minimal-bg, var(--capsule-bg));
+  box-shadow:
+    inset 0 0 0 0.5px var(--capsule-minimal-edge, var(--capsule-edge)),
+    inset 0 0 0 1px var(--capsule-minimal-edge-soft, var(--capsule-edge-soft));
+}
+
+.capsule--minimal .capsule__deco {
+  display: none !important;
+}
+
+.capsule--minimal::before {
+  clip-path: circle(50% at 50% 50%);
+}
+
+.capsule__minimal {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  animation: capsule-minimal-in 220ms cubic-bezier(0.34, 1.4, 0.44, 1) backwards;
+}
+
+.capsule__minimal-deco {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.capsule__minimal-value {
+  position: relative;
+  z-index: 1;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.capsule--minimal.is-minimal-leaving .capsule__minimal {
+  animation: capsule-minimal-out 120ms ease-in forwards;
+}
+
+.capsule.is-collapsing .capsule__layout,
+.capsule.is-collapsing .capsule__message {
+  animation: capsule-collapse-out 200ms ease-in forwards;
+  transform-origin: center;
+}
+
+.capsule.is-revealing .capsule__layout {
+  animation: capsule-reveal-in 220ms cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+  transform-origin: center;
+}
+
+.capsule--minimal.has-update::after,
+.capsule--minimal.has-announcement::after,
+.capsule--minimal.is-outdated::after {
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+}
+
+@keyframes capsule-minimal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes capsule-minimal-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+
+@keyframes capsule-collapse-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+
+@keyframes capsule-reveal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* 广播消息态:整窗跑马灯覆盖额度布局;横版从右往左,竖版从下往上。
@@ -1513,8 +1623,11 @@ body {
   height: 100%;
   display: block;
   border-radius: inherit;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--metric-accent, rgba(151, 163, 176, 0.74)) 72%, transparent) 0%, var(--metric-accent, rgba(151, 163, 176, 0.74)) 100%);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--metric-accent, rgba(151, 163, 176, 0.74)) 72%, transparent) 0%,
+    var(--metric-accent, rgba(151, 163, 176, 0.74)) 100%
+  );
   transition: width 400ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -1647,11 +1760,11 @@ body {
   --panel-space-inner: 14px;
   --panel-space-page: 24px;
   /* icon 色板:同明度同饱和度的柔和色相,克制不彩虹;明度略提让其在深背景上"浮"出质感 */
-  --panel-icon-blue: #8ec9ff;   /* 默认:接口/来源 */
+  --panel-icon-blue: #8ec9ff; /* 默认:接口/来源 */
   --panel-icon-violet: #b585ff; /* 推荐/雷达 */
-  --panel-icon-amber: #ecc05a;  /* 时间/重置/倒计时 */
-  --panel-icon-pink: #fc92c8;   /* 重置卡/凭证 */
-  --panel-icon-green: #6fe085;  /* 成功/在线 */
+  --panel-icon-amber: #ecc05a; /* 时间/重置/倒计时 */
+  --panel-icon-pink: #fc92c8; /* 重置卡/凭证 */
+  --panel-icon-green: #6fe085; /* 成功/在线 */
   color: var(--panel-text);
 }
 
@@ -1661,7 +1774,10 @@ body {
   clip-path: var(--panel-clip, inset(0 round 26px));
   border: var(--panel-border, 1px solid rgba(255, 255, 255, 0.07));
   background:
-    var(--panel-tint, radial-gradient(circle at 22% 0%, rgba(255, 255, 255, 0.04) 0%, transparent 52%)),
+    var(
+      --panel-tint,
+      radial-gradient(circle at 22% 0%, rgba(255, 255, 255, 0.04) 0%, transparent 52%)
+    ),
     var(--panel-bg, linear-gradient(168deg, #0e1116 0%, #161b22 100%));
   box-shadow: var(
     --panel-shadow,
@@ -1825,7 +1941,15 @@ body {
 
 /* 用量统计时间 tab 切换:内容块复用页面 tab 的 Quick Snap,逐块错峰 */
 .usage-card.is-window-switching
-  :is(.usage-summary, .usage-range-panel, .usage-chart, .usage-bar, .model-board, .usage-card__spend-hint, .usage-card__empty) {
+  :is(
+    .usage-summary,
+    .usage-range-panel,
+    .usage-chart,
+    .usage-bar,
+    .model-board,
+    .usage-card__spend-hint,
+    .usage-card__empty
+  ) {
   animation: panel-tab-content-snap 380ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
 }
 
@@ -1898,8 +2022,7 @@ body {
   height: 88%;
   content: '';
   pointer-events: none;
-  background:
-    radial-gradient(58% 62% at 50% 0%, rgba(255, 255, 255, 0.06) 0%, transparent 72%);
+  background: radial-gradient(58% 62% at 50% 0%, rgba(255, 255, 255, 0.06) 0%, transparent 72%);
 }
 
 /* hover:卡片轻微上浮,边缘高光增强 */
@@ -1971,8 +2094,11 @@ body {
   height: 100%;
   display: block;
   border-radius: inherit;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--metric-accent) 72%, transparent) 0%, var(--metric-accent) 100%);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--metric-accent) 72%, transparent) 0%,
+    var(--metric-accent) 100%
+  );
   transition: width 400ms cubic-bezier(0.22, 0.9, 0.3, 1);
 }
 
@@ -3740,8 +3866,20 @@ body {
   touch-action: pan-x;
   cursor: grab;
   /* 左右 10px 渐隐,提示可横滑,不遮挡点击 */
-  mask-image: linear-gradient(to right, transparent 0, black 10px, black calc(100% - 10px), transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0, black 10px, black calc(100% - 10px), transparent 100%);
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black 10px,
+    black calc(100% - 10px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black 10px,
+    black calc(100% - 10px),
+    transparent 100%
+  );
 }
 
 .segmented--scrollable:active {
@@ -3857,7 +3995,8 @@ body {
   outline: 0;
   background: transparent;
   color: var(--panel-text);
-  font-size: 15px;  font-weight: 620;
+  font-size: 15px;
+  font-weight: 620;
   text-align: left;
   font-variant-numeric: tabular-nums;
 }
@@ -3987,7 +4126,8 @@ body {
 }
 
 @keyframes capsule-critical-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.6;
   }
   50% {
