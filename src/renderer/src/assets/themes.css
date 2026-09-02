@@ -10710,14 +10710,14 @@
 [data-theme='inksong'] {
   --capsule-minimal-size: 40px;
   --capsule-minimal-radius: 50%;
-  --capsule-minimal-bg: linear-gradient(145deg, #28231f, #11100e);
-  --capsule-minimal-edge: rgba(190, 79, 61, 0.78);
+  --capsule-minimal-bg: linear-gradient(145deg, #f1e8d2, #dcd0b5);
+  --capsule-minimal-edge: rgba(157, 61, 48, 0.82);
 }
 [data-theme='greenhouse'] {
   --capsule-minimal-size: 40px;
   --capsule-minimal-radius: 50%;
-  --capsule-minimal-bg: linear-gradient(145deg, #285c4a, #102d27);
-  --capsule-minimal-edge: rgba(142, 224, 151, 0.62);
+  --capsule-minimal-bg: linear-gradient(145deg, #f2e7cf, #dcc9a2);
+  --capsule-minimal-edge: rgba(77, 139, 90, 0.72);
 }
 [data-theme='swiss'] {
   --capsule-minimal-size: 40px;
