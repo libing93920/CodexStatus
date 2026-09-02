@@ -1339,6 +1339,7 @@ function resolveSettledCapsuleWindow(preferences: WindowPreferences): WindowPref
   })
   const workArea = getTargetWorkArea(capsuleBounds.x, capsuleBounds.y)
   const workAreaRight = workArea.x + workArea.width
+  const workAreaBottom = workArea.y + workArea.height
   const capsuleSize = resolveCapsuleWindowSize('capsule')
   const orbSize = resolveCapsuleWindowSize('orb')
   const capsuleRight = capsuleBounds.x + capsuleSize.width
@@ -1351,9 +1352,17 @@ function resolveSettledCapsuleWindow(preferences: WindowPreferences): WindowPref
   }
 
   if (!dockEdge) {
+    // 横版胶囊吸附上下边缘:松手时贴近上下边则贴齐该边
+    const nearTop = capsuleBounds.y <= workArea.y + CAPSULE_DOCK_THRESHOLD
+    const nearBottom =
+      capsuleBounds.y + capsuleSize.height >= workAreaBottom - CAPSULE_DOCK_THRESHOLD
     return {
       x: capsuleBounds.x,
-      y: capsuleBounds.y,
+      y: nearTop
+        ? workArea.y + CAPSULE_EDGE_GAP
+        : nearBottom
+          ? workAreaBottom - capsuleSize.height - CAPSULE_EDGE_GAP
+          : capsuleBounds.y,
       viewMode: 'capsule'
     }
   }
@@ -1361,7 +1370,7 @@ function resolveSettledCapsuleWindow(preferences: WindowPreferences): WindowPref
   const y = clamp(
     capsuleBounds.y + Math.round((capsuleSize.height - orbSize.height) / 2),
     workArea.y + CAPSULE_EDGE_GAP,
-    workArea.y + workArea.height - orbSize.height - CAPSULE_EDGE_GAP
+    workAreaBottom - orbSize.height - CAPSULE_EDGE_GAP
   )
 
   return {
@@ -1379,9 +1388,11 @@ function resolveSettledOrbWindow(preferences: WindowPreferences): WindowPreferen
   const orbBounds = resolveCapsuleBounds(preferences, true)
   const workArea = getTargetWorkArea(orbBounds.x, orbBounds.y)
   const workAreaRight = workArea.x + workArea.width
+  const workAreaBottom = workArea.y + workArea.height
   const capsuleSize = resolveCapsuleWindowSize('capsule')
   const orbSize = resolveCapsuleWindowSize('orb')
   const orbRight = orbBounds.x + orbSize.width
+  const orbBottom = orbBounds.y + orbSize.height
   const keepsLeftDock =
     preferences.dockEdge === 'left' && orbBounds.x <= workArea.x + CAPSULE_UNDOCK_THRESHOLD
   const keepsRightDock =
@@ -1399,17 +1410,24 @@ function resolveSettledOrbWindow(preferences: WindowPreferences): WindowPreferen
     }
   }
 
+  // 未停靠:转横版胶囊。竖版贴近上下边缘时,横版吸附贴齐该边,否则按竖版中心对齐
+  const nearTop = orbBounds.y <= workArea.y + CAPSULE_UNDOCK_THRESHOLD
+  const nearBottom = orbBottom >= workAreaBottom - CAPSULE_UNDOCK_THRESHOLD
   return {
     x: clamp(
       orbBounds.x + Math.round((orbSize.width - capsuleSize.width) / 2),
       workArea.x + CAPSULE_EDGE_GAP,
       workAreaRight - capsuleSize.width - CAPSULE_EDGE_GAP
     ),
-    y: clamp(
-      orbBounds.y + Math.round((orbSize.height - capsuleSize.height) / 2),
-      workArea.y + CAPSULE_EDGE_GAP,
-      workArea.y + workArea.height - capsuleSize.height - CAPSULE_EDGE_GAP
-    ),
+    y: nearTop
+      ? workArea.y + CAPSULE_EDGE_GAP
+      : nearBottom
+        ? workAreaBottom - capsuleSize.height - CAPSULE_EDGE_GAP
+        : clamp(
+            orbBounds.y + Math.round((orbSize.height - capsuleSize.height) / 2),
+            workArea.y + CAPSULE_EDGE_GAP,
+            workAreaBottom - capsuleSize.height - CAPSULE_EDGE_GAP
+          ),
     viewMode: 'capsule'
   }
 }
