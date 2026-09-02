@@ -21,5 +21,9 @@ out
 __pycache__/
 *.pyc
 
+# 设计预览与开发计划
+/design-previews/
+docs/superpowers/
+
 # TypeScript 增量编译缓存
 *.tsbuildinfo
