@@ -5843,6 +5843,7 @@
 
 /* 团队公告:NOTICE 铭牌 + 警示边 */
 [data-theme='cockpit'] .team-announcement {
+  overflow: visible;
   border-radius: 5px;
   border: 1.5px solid #8a5c00;
   background:
@@ -8670,23 +8671,14 @@
   position: absolute;
   left: 13px;
   top: 11px;
+  z-index: 2;
   width: auto;
   height: auto;
   background: none;
   box-shadow: none;
   border-radius: 0;
   font-size: 19px;
-  animation: gh-pinned-wiggle 5.5s ease-in-out infinite;
-}
-
-@keyframes gh-pinned-wiggle {
-  0%,
-  100% {
-    transform: rotate(-7deg);
-  }
-  50% {
-    transform: rotate(6deg);
-  }
+  transform: rotate(-7deg);
 }
 
 [data-theme='greenhouse'] .team-announcement__label {
