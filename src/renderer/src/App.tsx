@@ -679,8 +679,23 @@ function App(): React.JSX.Element {
   // 所有窗口都用 QuotaCard 展示(5h+7d);胶囊百分比+进度条优先取短窗口,无短窗口则取长窗口兜底
   const cardWindows = rateLimitWindows
   const cardWindowCount = cardWindows.length
-  // 胶囊:百分比+进度条取首窗口(5h优先,无则7d);左侧倒计时也取同一个窗口的resetsAt
-  const displayedRateLimit = rateLimitWindows[0]
+  // 胶囊:主指标取"剩余最少的窗口"(瓶颈),两窗口任一耗尽即代表不能用;无有效数据回退短窗口
+  // 下游百分比/进度条/告急色/倒计时都走这个引用,单点改动即全量跟随
+  const windowsWithRemaining = rateLimitWindows.filter((w) => Number.isFinite(w.remainingPercent))
+  const displayedRateLimit =
+    windowsWithRemaining.length > 0
+      ? windowsWithRemaining.reduce((best, w) =>
+          (w.remainingPercent ?? Infinity) < (best.remainingPercent ?? Infinity) ? w : best
+        )
+      : rateLimitWindows[0]
+  // 窗口标签:标识主指标所属额度窗口;>=1440 分钟按长窗口口径显示"1周"/"7d",否则"5h"
+  const capsuleWindowBadge = !isApiMode && displayedRateLimit
+    ? (displayedRateLimit.windowMinutes ?? 0) >= 1440
+      ? settings.locale === 'zh-CN'
+        ? '1周'
+        : '7d'
+      : '5h'
+    : ''
   // API Key 模式:无订阅额度窗口,主指标改为今日缓存命中率,左槽改为今日 token
   const apiTodayTotal = capsuleToday?.available === true ? capsuleToday.totals.total : undefined
   const apiTodayInput = capsuleToday?.available === true ? capsuleToday.totals.input : 0
@@ -714,13 +729,6 @@ function App(): React.JSX.Element {
   const apiHitFont = fitFontSize(apiHitText, apiIsOrb ? 12 : 14, apiIsOrb ? 44 : 64)
   const capsuleCreditText = snapshot.resetCredit?.expiresAt
     ? formatCountdownShort(snapshot.resetCredit.expiresAt, settings.locale)
-    : ''
-  const capsulePickText = snapshot.bestModelPick
-    ? formatModelPick(snapshot.bestModelPick.shortLabel)
-    : ''
-  const capsulePickColor = resolveModelColor(snapshot.bestModelPick?.label)
-  const capsulePickTitle = snapshot.bestModelPick
-    ? `${snapshot.bestModelPick.label} · IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/题`
     : ''
   const capsuleViewMode = windowPreferences.viewMode
   // 告急:remaining 模式剩余<20%,used 模式已用>80%,触发进度条呼吸提醒
@@ -778,7 +786,6 @@ function App(): React.JSX.Element {
     windowRole,
     apiTokenText,
     apiHitText,
-    capsulePickText,
     capsuleViewMode,
     minimalStage
   ])
@@ -1702,13 +1709,9 @@ function App(): React.JSX.Element {
                     className={`capsule__layout capsule__layout--v${isApiMode ? ' capsule__layout--v-api' : ''}`}
                     aria-hidden="true"
                   >
-                    {capsulePickText ? (
-                      <div
-                        className="capsule__pick"
-                        style={{ color: capsulePickColor }}
-                        title={capsulePickTitle}
-                      >
-                        <span>{capsulePickText}</span>
+                    {capsuleWindowBadge ? (
+                      <div className="capsule__pick">
+                        <span>{capsuleWindowBadge}</span>
                       </div>
                     ) : null}
                     {isApiMode ? (
@@ -1758,17 +1761,6 @@ function App(): React.JSX.Element {
                           fontPx={apiHitFont}
                           withProgress
                         />
-                        <div className="capsule__col capsule__col--right">
-                          {capsulePickText ? (
-                            <div
-                              className="capsule__pick"
-                              style={{ color: capsulePickColor }}
-                              title={capsulePickTitle}
-                            >
-                              <span>{capsulePickText}</span>
-                            </div>
-                          ) : null}
-                        </div>
                       </>
                     ) : (
                       <>
@@ -1786,13 +1778,9 @@ function App(): React.JSX.Element {
                               <span>{capsuleCreditText}</span>
                             </div>
                           ) : null}
-                          {capsulePickText ? (
-                            <div
-                              className="capsule__pick"
-                              style={{ color: capsulePickColor }}
-                              title={capsulePickTitle}
-                            >
-                              <span>{capsulePickText}</span>
+                          {capsuleWindowBadge ? (
+                            <div className="capsule__pick">
+                              <span>{capsuleWindowBadge}</span>
                             </div>
                           ) : null}
                         </div>

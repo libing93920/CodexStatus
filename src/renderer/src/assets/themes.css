@@ -4952,6 +4952,7 @@
 [data-theme='cockpit'] .capsule__pick {
   border-radius: 2px;
   background: #141a10;
+  color: #dfe3d2;
   font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
   font-size: var(--capsule-pick-font);
   padding: var(--capsule-pick-pad-y) var(--capsule-pick-pad-x);
@@ -6412,6 +6413,7 @@
 [data-theme='inksong'] .capsule__pick {
   border-radius: 2px;
   background: rgba(255, 252, 244, 0.65);
+  color: #211c12;
   box-shadow: inset 0 0 0 1px rgba(179, 64, 47, 0.4);
   font-size: var(--capsule-pick-font);
   padding: var(--capsule-pick-pad-y) var(--capsule-pick-pad-x);
@@ -7914,6 +7916,7 @@
 [data-theme='greenhouse'] .capsule__pick {
   border-radius: 999px;
   background: rgba(255, 252, 242, 0.85);
+  color: #43301d;
   box-shadow: inset 0 0 0 1px rgba(122, 92, 64, 0.4);
   font-size: var(--capsule-pick-font);
   padding: var(--capsule-pick-pad-y) var(--capsule-pick-pad-x);

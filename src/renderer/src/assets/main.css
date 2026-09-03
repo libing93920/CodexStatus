@@ -1663,7 +1663,7 @@ body {
   height: 11px;
 }
 
-/* 推荐模型:静态放进列内,背景半透黑,颜色按模型品牌色 inline 设 */
+/* 窗口标签(5h/1周):复用 pick 类名以继承各主题的专属覆盖样式;默认主题下亮白前景靠 .capsule 继承 */
 .capsule__pick {
   display: inline-flex;
   align-items: center;
