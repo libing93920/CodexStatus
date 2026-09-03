@@ -789,13 +789,16 @@ function App(): React.JSX.Element {
     capsuleViewMode,
     minimalStage
   ])
-  // 团队额度排行榜:按剩余额度降序(undefined 视为 0,排末尾);API Key 登录无订阅额度(恒 0),不参与额度排行
+  // 团队额度排行榜:主键 7d(长窗口)剩余降序,7d 相同则次键 5h(短窗口)剩余降序;缺窗口视为最低排末尾。API Key 无订阅额度(恒 0),不参与额度排行
   const teamPeers = [...(snapshot.teamPeers ?? [])]
     .filter((peer) => peer.authMode !== 'api')
     .sort((a, b) => {
-      const ar = a.remainingPercent ?? -1
-      const br = b.remainingPercent ?? -1
-      return br - ar
+      const aLong = a.longWindow?.remainingPercent ?? -1
+      const bLong = b.longWindow?.remainingPercent ?? -1
+      if (bLong !== aLong) return bLong - aLong
+      const aShort = a.shortWindow?.remainingPercent ?? -1
+      const bShort = b.shortWindow?.remainingPercent ?? -1
+      return bShort - aShort
     })
   // Token 消耗排行榜:按选中窗口 token 总量降序(undefined 排末尾);横条按窗口内最大值归一化
   const teamTokenPeers = [...(snapshot.teamPeers ?? [])].sort((a, b) => {
