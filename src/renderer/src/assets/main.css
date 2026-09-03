@@ -1939,6 +1939,11 @@ body {
   --panel-tab-content-delay: 120ms;
 }
 
+/* 已知按钮靠 translateY(-50%) 绝对居中，参与 snap 会与定位 transform 冲突导致切换时跳动 */
+.panel__body.is-tab-switching .team-announcement__acknowledge {
+  animation: none;
+}
+
 /* 用量统计时间 tab 切换:内容块复用页面 tab 的 Quick Snap,逐块错峰 */
 .usage-card.is-window-switching
   :is(

@@ -142,6 +142,10 @@ test('tab 卡片和内部信息使用两层错峰的 Quick Snap', () => {
   assert.match(cssSource, /--panel-tab-content-delay:\s*80ms/)
   assert.match(cssSource, /--panel-tab-content-delay:\s*120ms/)
   assert.match(cssSource, /transform:\s*translateY\(10px\) scale\(0\.98\)/)
+  assert.match(
+    cssSource,
+    /\.panel__body\.is-tab-switching \.team-announcement__acknowledge\s*{\s*animation:\s*none/s
+  )
   assert.match(appSource, /const PANEL_TAB_MOTION_CLEAR_MS = 800/)
 })
 
