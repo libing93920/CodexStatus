@@ -15,6 +15,7 @@ export const WINDOW_KEEPER_MAX_RETRY_DURATION_MS = 10 * 60 * 1000
 export const RETRY_DELAYS_MS = [30_000, 60_000, 120_000, 240_000, 480_000] as const
 
 const FIVE_HOUR_WINDOW_MINUTES = 5 * 60
+const FIVE_HOUR_WINDOW_MS = 5 * 60 * 60 * 1000
 const CLI_TIMEOUT_MS = 60_000
 const CODEX_CLI_REQUEST: CodexCliRequest = {
   model: 'gpt-5.6-luna',
@@ -40,6 +41,13 @@ export type WindowKeeperPlan =
       kind: 'wait-data'
     }
   | {
+      kind: 'wait-start'
+      windowId: string
+      cycleKey: string
+      triggerAtMs: number
+      delayMs: number
+    }
+  | {
       kind: 'wait-reset'
       windowId: string
       resetAt: string
@@ -62,7 +70,7 @@ interface TimerApi {
 interface ActiveEvent {
   key: string
   windowId: string
-  resetAt: string
+  resetAt?: string
   triggerAtMs: number
   deadlineAtMs: number
   retryIndex: number
@@ -98,6 +106,14 @@ export function calculateWindowKeeperPlan(
     }
   }
 
+  if (windowState.usedPercent === undefined || !Number.isFinite(windowState.usedPercent)) {
+    return { kind: 'wait-data' }
+  }
+
+  if (windowState.usedPercent <= 0) {
+    return calculateUnanchoredPlan(windowState.id, nowMs, persisted)
+  }
+
   const resetAt = windowState.resetsAt
   const resetAtMs = resetAt ? Date.parse(resetAt) : NaN
   if (!resetAt || !Number.isFinite(resetAtMs)) {
@@ -119,16 +135,11 @@ export function calculateWindowKeeperPlan(
       : nowMs + WINDOW_KEEPER_TRIGGER_BUFFER_MS
 
   if (resetAtMs <= nowMs) {
-    if (windowState.usedPercent === undefined || !Number.isFinite(windowState.usedPercent)) {
-      return { kind: 'wait-data' }
-    }
-    if (windowState.usedPercent > 0) {
-      return {
-        kind: 'skip',
-        reason: 'already-started',
-        windowId: windowState.id,
-        resetAt
-      }
+    return {
+      kind: 'skip',
+      reason: 'already-started',
+      windowId: windowState.id,
+      resetAt
     }
   }
 
@@ -136,6 +147,27 @@ export function calculateWindowKeeperPlan(
     kind: 'wait-reset',
     windowId: windowState.id,
     resetAt,
+    triggerAtMs,
+    delayMs: Math.max(0, triggerAtMs - nowMs)
+  }
+}
+
+function calculateUnanchoredPlan(
+  windowId: string,
+  nowMs: number,
+  persisted: WindowKeeperPersistedState | undefined
+): Extract<WindowKeeperPlan, { kind: 'wait-start' }> {
+  const lastTriggeredAtMs =
+    persisted?.windowId === windowId ? parseTimestamp(persisted.lastTriggeredAt) : undefined
+  const nextWindowAtMs =
+    lastTriggeredAtMs === undefined ? nowMs : lastTriggeredAtMs + FIVE_HOUR_WINDOW_MS
+  const triggerAtMs = Math.max(nowMs, nextWindowAtMs) + WINDOW_KEEPER_TRIGGER_BUFFER_MS
+  const cycleKey = `${windowId}:unanchored:${lastTriggeredAtMs ?? 'initial'}`
+
+  return {
+    kind: 'wait-start',
+    windowId,
+    cycleKey,
     triggerAtMs,
     delayMs: Math.max(0, triggerAtMs - nowMs)
   }
@@ -251,7 +283,8 @@ export class WindowKeeper {
       return
     }
 
-    const eventKey = createEventKey(plan.windowId, plan.resetAt)
+    const eventKey =
+      plan.kind === 'wait-start' ? plan.cycleKey : createEventKey(plan.windowId, plan.resetAt)
     if (this.finishedEventKey === eventKey) {
       if (this.status.state === 'error') {
         return
@@ -272,11 +305,14 @@ export class WindowKeeper {
     this.startEvent(plan, eventKey)
   }
 
-  private startEvent(plan: Extract<WindowKeeperPlan, { kind: 'wait-reset' }>, key: string): void {
+  private startEvent(
+    plan: Extract<WindowKeeperPlan, { kind: 'wait-start' | 'wait-reset' }>,
+    key: string
+  ): void {
     const event: ActiveEvent = {
       key,
       windowId: plan.windowId,
-      resetAt: plan.resetAt,
+      resetAt: plan.kind === 'wait-reset' ? plan.resetAt : undefined,
       triggerAtMs: plan.triggerAtMs,
       deadlineAtMs: plan.triggerAtMs + WINDOW_KEEPER_MAX_RETRY_DURATION_MS,
       retryIndex: 0,
@@ -311,12 +347,7 @@ export class WindowKeeper {
   }
 
   private async triggerEvent(event: ActiveEvent): Promise<void> {
-    if (
-      this.activeEvent !== event ||
-      !this.enabled ||
-      this.stopped ||
-      event.running
-    ) {
+    if (this.activeEvent !== event || !this.enabled || this.stopped || event.running) {
       return
     }
     if (this.timer.now() >= event.deadlineAtMs) {
@@ -434,11 +465,14 @@ export class WindowKeeper {
 
   private finishSuccess(event: ActiveEvent): void {
     const triggeredAt = new Date(this.timer.now()).toISOString()
-    this.persisted = {
+    const nextPersisted: WindowKeeperPersistedState = {
       windowId: event.windowId,
-      resetAt: event.resetAt,
       lastTriggeredAt: triggeredAt
     }
+    if (event.resetAt) {
+      nextPersisted.resetAt = event.resetAt
+    }
+    this.persisted = nextPersisted
     this.onPersistenceChange?.({ ...this.persisted })
     this.cancelActiveEvent()
     this.finishedEventKey = event.key
@@ -509,6 +543,14 @@ function isSamePersistedEvent(
   persisted: WindowKeeperPersistedState | undefined
 ): boolean {
   return persisted?.windowId === windowId && persisted.resetAt === resetAt
+}
+
+function parseTimestamp(value: string | undefined): number | undefined {
+  if (!value) {
+    return undefined
+  }
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? timestamp : undefined
 }
 
 function normalizeError(error: unknown): string {
