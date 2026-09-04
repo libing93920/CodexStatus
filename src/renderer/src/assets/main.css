@@ -2752,6 +2752,130 @@ body {
   white-space: nowrap;
 }
 
+.window-keeper-expandable {
+  min-width: 0;
+  margin-top: 8px;
+}
+
+.window-keeper-row {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+}
+
+.window-keeper-row.is-expanded {
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.window-keeper-row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--panel-accent) 32%, transparent);
+}
+
+.window-keeper-row__state {
+  transition: color 180ms ease;
+}
+
+.window-keeper-row__state--disabled,
+.window-keeper-row__state--waiting-data {
+  color: var(--panel-muted);
+}
+
+.window-keeper-row__state--waiting-reset {
+  color: var(--panel-text);
+}
+
+.window-keeper-row__state--triggering {
+  color: var(--panel-accent);
+}
+
+.window-keeper-row__state--retrying {
+  color: var(--panel-warn, #e06c3b);
+}
+
+.window-keeper-row__state--error {
+  color: var(--panel-danger, #e05d65);
+}
+
+.window-keeper-row__chevron {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--panel-muted);
+  transition:
+    transform 180ms ease,
+    color 180ms ease;
+}
+
+.window-keeper-row__chevron svg {
+  width: 100%;
+  height: 100%;
+}
+
+.window-keeper-row:hover .window-keeper-row__chevron {
+  color: var(--panel-text);
+}
+
+.window-keeper-row.is-expanded .window-keeper-row__chevron {
+  transform: rotate(180deg);
+}
+
+.window-keeper-details {
+  margin-top: -1px;
+  padding: 12px 16px 14px;
+  border: 1px solid var(--panel-line);
+  border-top: 0;
+  border-radius: 0 0 var(--panel-radius-md) var(--panel-radius-md);
+  background: var(--panel-card-2);
+}
+
+.window-keeper-details__rows {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.window-keeper-details__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.window-keeper-details__row dt {
+  color: var(--panel-muted);
+  font-size: 12px;
+}
+
+.window-keeper-details__row dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--panel-text-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.window-keeper-details__row--error dd {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .window-keeper-row__chevron {
+    transition: none;
+  }
+}
+
 /* 顶部三栏切换:详情 | 团队 | 设置 — 胶囊形 segmented control */
 .panel__tabs {
   display: flex;
@@ -3972,6 +4096,10 @@ body {
   background: var(--panel-card-2);
   font-size: 14px;
   font-weight: 520;
+}
+
+.settings-section--general .setting-row + .setting-row {
+  margin-top: 10px;
 }
 
 .inline-input {

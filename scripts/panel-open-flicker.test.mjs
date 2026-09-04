@@ -79,8 +79,8 @@ test('关闭预热中的 Panel 会取消迟到的 ready', () => {
 test('隐藏 Panel 完成一帧绘制后再发送 ready', () => {
   const start = appSource.indexOf('// panel 窗口显示时机:')
   assert.notEqual(start, -1, 'missing panel ready effect')
-  const closePanel = appSource.indexOf('\n  function closePanel', start)
-  const panelReadyEffect = appSource.slice(start, closePanel)
+  const capsuleEffect = appSource.indexOf('// 胶囊显示时机:', start)
+  const panelReadyEffect = appSource.slice(start, capsuleEffect)
 
   assert.equal(panelReadyEffect.match(/requestAnimationFrame/g)?.length, 2)
   assert.match(panelReadyEffect, /void window\.codexStatus\.notifyPanelReady\(\)/)
@@ -248,8 +248,71 @@ test('横向和竖向胶囊共用不改变布局的双层描边', () => {
 
   assert.notEqual(capsuleStart, -1)
   assert.match(capsuleRule, /border:\s*0/)
-  assert.match(
-    capsuleRule,
-    /box-shadow:\s*inset 0 0 0 0\.5px rgba\(109, 180, 255, 0\.34\),\s*inset 0 0 0 1px rgba\(255, 255, 255, 0\.035\)/s
+  assert.match(capsuleRule, /box-shadow:/)
+  assert.match(capsuleRule, /--capsule-edge,\s*rgba\(109, 180, 255, 0\.34\)/)
+  assert.match(capsuleRule, /--capsule-edge-soft,\s*rgba\(255, 255, 255, 0\.035\)/)
+})
+
+test('Window Keeper 状态卡复用详情行样式并支持展开明细', () => {
+  const componentStart = appSource.indexOf('function WindowKeeperStatusCard(')
+  const componentEnd = appSource.indexOf('\nfunction resolveWindowKeeperStateLabel', componentStart)
+  const component = appSource.slice(componentStart, componentEnd)
+
+  assert.notEqual(componentStart, -1, 'missing WindowKeeperStatusCard')
+  assert.match(component, /useState\(false\)/)
+  assert.match(component, /WindowKeeperIcon/)
+  assert.match(component, /ChevronDownIcon/)
+  assert.match(component, /className=\{`detail-row window-keeper-row/)
+  assert.match(component, /aria-controls="window-keeper-details"/)
+  assert.match(component, /aria-expanded=\{expanded\}/)
+  assert.match(component, /role="region"/)
+  assert.match(component, /copy\.windowKeeperState/)
+  assert.match(component, /copy\.windowKeeperRecentError/)
+})
+
+test('Window Keeper 展开样式不再使用独立的旧信息卡布局', () => {
+  assert.match(cssSource, /\.window-keeper-expandable\s*{/)
+  assert.match(cssSource, /\.window-keeper-row\s*{/)
+  assert.match(cssSource, /\.window-keeper-row__chevron\s*{/)
+  assert.match(cssSource, /\.window-keeper-details\s*{/)
+  assert.match(cssSource, /\.window-keeper-row\.is-expanded\s*{/)
+  assert.doesNotMatch(cssSource, /\.window-keeper-card__header\s*{/)
+})
+
+test('Window Keeper 与详情行保持间距、图标和文字层级一致', () => {
+  const componentStart = appSource.indexOf('function WindowKeeperStatusCard(')
+  const componentEnd = appSource.indexOf('\nfunction resolveWindowKeeperStateLabel', componentStart)
+  const component = appSource.slice(componentStart, componentEnd)
+  const expandableRuleStart = cssSource.indexOf('.window-keeper-expandable {')
+  const expandableRuleEnd = cssSource.indexOf('\n}', expandableRuleStart)
+  const expandableRule = cssSource.slice(expandableRuleStart, expandableRuleEnd)
+  const waitingResetRuleStart = cssSource.indexOf('.window-keeper-row__state--waiting-reset {')
+  const waitingResetRuleEnd = cssSource.indexOf('\n}', waitingResetRuleStart)
+  const waitingResetRule = cssSource.slice(waitingResetRuleStart, waitingResetRuleEnd)
+
+  assert.match(expandableRule, /margin-top:\s*8px/)
+  assert.match(component, /'--icon-tone': 'var\(--panel-accent\)'/)
+  assert.match(component, /className=\{`detail-row__value window-keeper-row__state/)
+  assert.match(component, /className="detail-row__hint"/)
+  assert.match(waitingResetRule, /color:\s*var\(--panel-text\)/)
+})
+
+test('通用设置按开机自启动、极简模式、自动保持 5h 窗口排序', () => {
+  const sectionStart = appSource.indexOf(
+    '<div className="settings-section settings-section--general">'
   )
+  const sectionEnd = appSource.indexOf('\n                </div>', sectionStart)
+  const section = appSource.slice(sectionStart, sectionEnd)
+
+  assert.ok(section.indexOf('copy.launchAtLogin') < section.indexOf('copy.minimalMode'))
+  assert.ok(section.indexOf('copy.minimalMode') < section.indexOf('copy.autoKeep5hWindow'))
+})
+
+test('Window Keeper 只在 Codex ChatGPT 模式显示', () => {
+  assert.match(
+    appSource,
+    /const isWindowKeeperAvailable = isCodex && snapshot\.authMode === 'chatgpt'/
+  )
+  assert.match(appSource, /\{isWindowKeeperAvailable \? \(\s*<WindowKeeperStatusCard/s)
+  assert.match(appSource, /\{isWindowKeeperAvailable \? \(\s*<div className="setting-row">/s)
 })

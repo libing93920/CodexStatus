@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/explicit-function-return-type */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
@@ -81,4 +82,22 @@ test('按官方返回的全部窗口解析计时状态', () => {
     ]
   )
   assert.equal(parseOfficialRateLimits({ rate_limit: {} }, new Date()), undefined)
+})
+
+test('官方窗口已过期时保留 used_percent 供重置监测判断本轮是否已启动', () => {
+  const parsed = parseOfficialRateLimits(
+    {
+      rate_limit: {
+        primary_window: {
+          limit_window_seconds: 18000,
+          used_percent: 37,
+          reset_at: 1
+        }
+      }
+    },
+    new Date('2026-09-04T00:00:00.000Z')
+  )
+
+  assert.equal(parsed?.[0]?.windowMinutes, 300)
+  assert.equal(parsed?.[0]?.usedPercent, 37)
 })

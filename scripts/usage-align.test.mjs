@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/explicit-function-return-type */
 // 用量/费用算法对齐 cc-switch 的纯函数测试(node --experimental-strip-types --test)。
 // 覆盖:opencode 逐消息解析、claude message.id 去重 + cache_creation 拆分、
 //      computeCost 拆 cache_read/cache_creation 计价、codex delta 优先 last_token_usage。

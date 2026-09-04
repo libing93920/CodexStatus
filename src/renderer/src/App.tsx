@@ -30,6 +30,8 @@ import {
   type TokenUsageOverview,
   type UsageSnapshot,
   type UsageWindow,
+  type WindowKeeperState,
+  type WindowKeeperStatus,
   type WindowPreferences
 } from '../../shared/capsule'
 import { formatAnnouncementTime, resolveCapsuleAlert } from '../../shared/announcement'
@@ -208,7 +210,20 @@ const COPY = {
     groupAppearance: '外观',
     theme: '主题',
     themeHint: '切换胶囊与面板的整体风格',
-    minimalMode: '极简模式'
+    minimalMode: '极简模式',
+    autoKeep5hWindow: '自动保持 5h 窗口',
+    windowKeeper: '自动保持 5h 窗口',
+    windowKeeperState: '运行状态',
+    windowKeeperNextAction: '下次动作时间',
+    windowKeeperLastTriggered: '上次成功触发时间',
+    windowKeeperRecentError: '最近错误',
+    windowKeeperDisabled: '已关闭',
+    windowKeeperWaitingData: '等待额度数据',
+    windowKeeperWaitingReset: '等待 5h 重置',
+    windowKeeperWaitingWindow: '等待 5h 窗口',
+    windowKeeperTriggering: '正在触发',
+    windowKeeperRetrying: '重试中',
+    windowKeeperError: '异常'
   },
   'en-US': {
     noData: 'No data',
@@ -321,7 +336,20 @@ const COPY = {
     groupAppearance: 'Appearance',
     theme: 'Theme',
     themeHint: 'Switch the overall capsule and panel style',
-    minimalMode: 'Minimal mode'
+    minimalMode: 'Minimal mode',
+    autoKeep5hWindow: 'Keep 5h window active',
+    windowKeeper: 'Keep 5h Window Active',
+    windowKeeperState: 'State',
+    windowKeeperNextAction: 'Next action',
+    windowKeeperLastTriggered: 'Last successful trigger',
+    windowKeeperRecentError: 'Recent error',
+    windowKeeperDisabled: 'Disabled',
+    windowKeeperWaitingData: 'Waiting for quota data',
+    windowKeeperWaitingReset: 'Waiting for 5h reset',
+    windowKeeperWaitingWindow: 'Waiting for 5h window',
+    windowKeeperTriggering: 'Triggering',
+    windowKeeperRetrying: 'Retrying',
+    windowKeeperError: 'Error'
   }
 } as const
 
@@ -655,6 +683,7 @@ function App(): React.JSX.Element {
   const canEditCustomRefresh = settings.refreshMode === 'auto' && isCustomRefreshInterval
   const isApiMode = snapshot.authMode === 'api'
   const isCodex = settings.agentId === 'codex'
+  const isWindowKeeperAvailable = isCodex && snapshot.authMode === 'chatgpt'
   const sourceValue = isApiMode
     ? copy.apiModeSource
     : snapshot.rateLimitSource === 'none'
@@ -844,6 +873,8 @@ function App(): React.JSX.Element {
   useEffect(() => {
     if (panelView === 'settings' && focusUpdatePending) {
       aboutRowRef.current?.scrollIntoView({ block: 'nearest' })
+      // 这是一次性定位标志,滚动完成后必须清除;否则后续设置页打开会重复定位。
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFocusUpdatePending(false)
     }
   }, [panelView, focusUpdatePending])
@@ -854,6 +885,8 @@ function App(): React.JSX.Element {
   // 下载中(downloading)不打断。依赖数组只放 reveal 计数,避免 updateState 变化误触发
   useEffect(() => {
     if (!focusUpdatePending && updateState !== 'downloading') {
+      // 面板重新打开时重置更新态,保留现有生命周期时序。
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUpdateState('idle')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1854,6 +1887,17 @@ function App(): React.JSX.Element {
                   />
                 ))}
               </div>
+              {isWindowKeeperAvailable ? (
+                <WindowKeeperStatusCard
+                  copy={copy}
+                  isEligible={
+                    snapshot.authMode === 'chatgpt' &&
+                    rateLimitWindows.some((windowState) => windowState.windowMinutes === 300)
+                  }
+                  locale={settings.locale}
+                  status={snapshot.windowKeeper}
+                />
+              ) : null}
             </div>
 
             <div className="panel__footer">
@@ -2239,7 +2283,7 @@ function App(): React.JSX.Element {
                   </div>
                 ) : null}
 
-                <div className="settings-section">
+                <div className="settings-section settings-section--general">
                   <p className="settings-section__title">{copy.groupGeneral}</p>
                   <div className="setting-row">
                     <span>{copy.launchAtLogin}</span>
@@ -2263,6 +2307,19 @@ function App(): React.JSX.Element {
                       onLabel={copy.enabled}
                     />
                   </div>
+                  {isWindowKeeperAvailable ? (
+                    <div className="setting-row">
+                      <span>{copy.autoKeep5hWindow}</span>
+                      <ToggleSwitch
+                        checked={settings.autoKeep5hWindow}
+                        offLabel={copy.disabled}
+                        onChange={(checked) => {
+                          void handleSettingsPatch({ autoKeep5hWindow: checked })
+                        }}
+                        onLabel={copy.enabled}
+                      />
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="settings-section">
@@ -2466,6 +2523,105 @@ function QuotaCard({
       ) : null}
     </div>
   )
+}
+
+function WindowKeeperStatusCard({
+  copy,
+  isEligible,
+  locale,
+  status
+}: {
+  copy: (typeof COPY)[LocaleCode]
+  isEligible: boolean
+  locale: LocaleCode
+  status?: WindowKeeperStatus
+}): React.JSX.Element {
+  const [expanded, setExpanded] = useState(false)
+  const resolvedStatus: WindowKeeperStatus = status ?? { state: 'waiting-data' }
+  const stateLabel = resolveWindowKeeperStateLabel(resolvedStatus.state, isEligible, copy)
+  const nextActionText = resolvedStatus.nextActionAt
+    ? formatAbsoluteDate(resolvedStatus.nextActionAt, locale)
+    : undefined
+
+  return (
+    <div className="window-keeper-expandable">
+      <button
+        aria-controls="window-keeper-details"
+        aria-expanded={expanded}
+        className={`detail-row window-keeper-row${expanded ? ' is-expanded' : ''}`}
+        onClick={() => setExpanded((value) => !value)}
+        type="button"
+      >
+        <span className="detail-row__label-group">
+          <span
+            className="detail-row__icon"
+            style={{ '--icon-tone': 'var(--panel-accent)' } as CSSProperties}
+          >
+            <WindowKeeperIcon />
+          </span>
+          <span className="detail-row__label">{copy.windowKeeper}</span>
+        </span>
+        <span className="detail-row__value-group">
+          <span
+            className={`detail-row__value window-keeper-row__state window-keeper-row__state--${resolvedStatus.state}`}
+          >
+            {stateLabel}
+          </span>
+          {nextActionText ? <span className="detail-row__hint">{nextActionText}</span> : null}
+          <span className="window-keeper-row__chevron" aria-hidden="true">
+            <ChevronDownIcon />
+          </span>
+        </span>
+      </button>
+      <div
+        aria-label={copy.windowKeeper}
+        className="window-keeper-details"
+        hidden={!expanded}
+        id="window-keeper-details"
+        role="region"
+      >
+        <dl className="window-keeper-details__rows">
+          <div className="window-keeper-details__row">
+            <dt>{copy.windowKeeperState}</dt>
+            <dd>{stateLabel}</dd>
+          </div>
+          <div className="window-keeper-details__row">
+            <dt>{copy.windowKeeperNextAction}</dt>
+            <dd>{formatAbsoluteDate(resolvedStatus.nextActionAt, locale)}</dd>
+          </div>
+          <div className="window-keeper-details__row">
+            <dt>{copy.windowKeeperLastTriggered}</dt>
+            <dd>{formatAbsoluteDate(resolvedStatus.lastTriggeredAt, locale)}</dd>
+          </div>
+          <div className="window-keeper-details__row window-keeper-details__row--error">
+            <dt>{copy.windowKeeperRecentError}</dt>
+            <dd>{resolvedStatus.recentError ?? '--'}</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+  )
+}
+
+function resolveWindowKeeperStateLabel(
+  state: WindowKeeperState,
+  isEligible: boolean,
+  copy: (typeof COPY)[LocaleCode]
+): string {
+  switch (state) {
+    case 'disabled':
+      return copy.windowKeeperDisabled
+    case 'waiting-data':
+      return copy.windowKeeperWaitingData
+    case 'waiting-reset':
+      return isEligible ? copy.windowKeeperWaitingReset : copy.windowKeeperWaitingWindow
+    case 'triggering':
+      return copy.windowKeeperTriggering
+    case 'retrying':
+      return copy.windowKeeperRetrying
+    case 'error':
+      return copy.windowKeeperError
+  }
 }
 
 function formatQuotaResetHint(seconds: number | undefined, locale: LocaleCode): string {
@@ -4333,6 +4489,41 @@ function ResetIcon(): React.JSX.Element {
       />
       <path
         d="M5 4v4h4"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.75"
+      />
+    </svg>
+  )
+}
+
+function WindowKeeperIcon(): React.JSX.Element {
+  return (
+    <svg fill="none" viewBox="0 0 24 24">
+      <path
+        d="M6.2 8.2A7 7 0 1 1 5.5 15"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+      <path
+        d="M5.7 5.4v3.7h3.7M12 8.7v3.6l2.4 1.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+    </svg>
+  )
+}
+
+function ChevronDownIcon(): React.JSX.Element {
+  return (
+    <svg fill="none" viewBox="0 0 24 24">
+      <path
+        d="m7 9 5 5 5-5"
         stroke="currentColor"
         strokeLinecap="round"
         strokeLinejoin="round"

@@ -10,6 +10,13 @@ export type CapsuleViewMode = 'capsule' | 'orb'
 export type DockEdge = 'left' | 'right'
 export type RendererCommandType = 'show-panel-view'
 export type PanelFocusTarget = 'announcement' | 'messages'
+export type WindowKeeperState =
+  | 'disabled'
+  | 'waiting-data'
+  | 'waiting-reset'
+  | 'triggering'
+  | 'retrying'
+  | 'error'
 
 /** 外观主题:10 套,midnight=默认深色青蓝(现状),其余对应 design-previews */
 export type ThemeId =
@@ -85,6 +92,21 @@ export interface UsageSnapshot {
   }
   /** 团队看板:同组成员的额度剩余状态;本期为主进程返回的 mock 数据,后续接 LAN service */
   teamPeers?: TeamPeer[]
+  /** 5h 窗口自动保持状态;由主进程 WindowKeeper 注入 */
+  windowKeeper?: WindowKeeperStatus
+}
+
+export interface WindowKeeperStatus {
+  state: WindowKeeperState
+  nextActionAt?: string
+  lastTriggeredAt?: string
+  recentError?: string
+}
+
+export interface WindowKeeperPersistedState {
+  windowId?: string
+  resetAt?: string
+  lastTriggeredAt?: string
 }
 
 /** 团队成员一行:排行榜展示 5h/7d 双窗口剩余额度% + 重置卡数量,按短窗口剩余降序排名 */
@@ -244,6 +266,8 @@ export interface AppSettings {
   theme: ThemeId
   /** 胶囊极简模式:无交互 3s 收缩为悬浮球,交互即还原;默认开启 */
   capsuleMinimalMode: boolean
+  /** 5h 额度窗口重置后自动发送一次低成本 Codex 请求 */
+  autoKeep5hWindow: boolean
 }
 
 export interface WindowPreferences {
@@ -262,6 +286,7 @@ export interface PersistedState {
   settings: AppSettings
   window: WindowPreferences
   panel: PanelPreferences
+  windowKeeper?: WindowKeeperPersistedState
   /** 本机 LAN 标识,跨重启稳定;首次启动生成 UUID */
   peerId?: string
 }
@@ -421,7 +446,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   launchAtLogin: false,
   iqThreshold: DEFAULT_IQ_THRESHOLD,
   theme: 'midnight',
-  capsuleMinimalMode: true
+  capsuleMinimalMode: true,
+  autoKeep5hWindow: true
 }
 
 export const DEFAULT_WINDOW_PREFERENCES: WindowPreferences = {
@@ -482,7 +508,11 @@ export function normalizeSettings(input: Partial<AppSettings> | undefined): AppS
     capsuleMinimalMode:
       typeof input?.capsuleMinimalMode === 'boolean'
         ? input.capsuleMinimalMode
-        : DEFAULT_SETTINGS.capsuleMinimalMode
+        : DEFAULT_SETTINGS.capsuleMinimalMode,
+    autoKeep5hWindow:
+      typeof input?.autoKeep5hWindow === 'boolean'
+        ? input.autoKeep5hWindow
+        : DEFAULT_SETTINGS.autoKeep5hWindow
   }
 }
 

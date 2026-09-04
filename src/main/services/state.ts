@@ -10,6 +10,7 @@ import {
   normalizeWindowPreferences,
   type PanelPreferences,
   type PersistedState,
+  type WindowKeeperPersistedState,
   type WindowPreferences
 } from '../../shared/capsule'
 
@@ -25,7 +26,8 @@ export async function loadPersistedState(): Promise<PersistedState> {
     return {
       settings: normalizeSettings(getRecord(parsed?.settings) as Partial<typeof DEFAULT_SETTINGS> | undefined),
       window: normalizeWindowPreferences(getRecord(parsed?.window) as Partial<WindowPreferences> | undefined),
-      panel: normalizePanelPreferences(getRecord(parsed?.panel) as Partial<PanelPreferences> | undefined)
+      panel: normalizePanelPreferences(getRecord(parsed?.panel) as Partial<PanelPreferences> | undefined),
+      windowKeeper: normalizeWindowKeeperState(getRecord(parsed?.windowKeeper))
     }
   } catch {
     return createDefaultState()
@@ -54,4 +56,23 @@ function getRecord(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined
+}
+
+function normalizeWindowKeeperState(
+  input: Record<string, unknown> | undefined
+): WindowKeeperPersistedState | undefined {
+  if (!input) {
+    return undefined
+  }
+  const windowId = getString(input.windowId)
+  const resetAt = getString(input.resetAt)
+  const lastTriggeredAt = getString(input.lastTriggeredAt)
+  if (!windowId && !resetAt && !lastTriggeredAt) {
+    return undefined
+  }
+  return { windowId, resetAt, lastTriggeredAt }
+}
+
+function getString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
 }

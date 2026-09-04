@@ -6,6 +6,7 @@ import {
   Menu,
   Tray,
   nativeImage,
+  Notification,
   screen,
   powerMonitor,
   type MenuItemConstructorOptions,
@@ -80,6 +81,7 @@ import {
   installUpdate,
   setUpdaterProgressListener
 } from './services/updater'
+import { WindowKeeper } from './services/window-keeper'
 
 const CHANNELS = {
   bootstrap: 'codex-status:bootstrap',
@@ -132,6 +134,7 @@ let panelFocusUpdate = false
 let panelFocusTarget: PanelFocusTarget | undefined
 let currentAnnouncement: AnnouncementState | null = null
 let capsuleMinimalRuntime: { width: number; height: number } | null = null
+let windowKeeper: WindowKeeper | undefined
 const lanService = new LanService()
 let persistedState: PersistedState = {
   settings: { ...DEFAULT_SETTINGS },
@@ -327,6 +330,18 @@ if (hasSingleInstanceLock) {
       queuePersistState()
     }
     currentSnapshot = createEmptySnapshot()
+    windowKeeper = new WindowKeeper({
+      enabled: persistedState.settings.autoKeep5hWindow,
+      persisted: persistedState.windowKeeper,
+      onRefresh: () => refreshStatus({ forceCredentialCheck: true }),
+      onStatusChange: applyWindowKeeperStatus,
+      onPersistenceChange: persistWindowKeeperState,
+      onExhausted: notifyWindowKeeperExhausted
+    })
+    currentSnapshot = {
+      ...currentSnapshot,
+      windowKeeper: windowKeeper.getStatus()
+    }
 
     if (persistedState.settings.launchAtLogin !== loadedState.settings.launchAtLogin) {
       queuePersistState()
@@ -419,6 +434,7 @@ app.on('before-quit', () => {
   clearRefreshTimer()
   clearCodexAuthWatcher()
   stopRadarTimer()
+  windowKeeper?.stop()
   lanService.stop()
 })
 
@@ -464,6 +480,7 @@ function registerIpcHandlers(): void {
     }
 
     queuePersistState()
+    windowKeeper?.setEnabled(nextSettings.autoKeep5hWindow)
     syncRefreshTimer()
     refreshTrayMenu()
     broadcastPreferences()
@@ -488,6 +505,7 @@ function registerIpcHandlers(): void {
 
     if (agentIdChanged) {
       // 切换工具:清用量缓存,radar 仅 Codex 启动,强制全量刷新
+      windowKeeper?.updateSnapshot(createApiModeSnapshot())
       invalidateUsageCache()
       invalidateQuotaCaches()
       syncRadarTimer()
@@ -898,6 +916,7 @@ function prepareToQuit(): void {
   clearRefreshTimer()
   clearCodexAuthWatcher()
   stopRadarTimer()
+  windowKeeper?.stop()
   tray?.destroy()
   panelWindow?.destroy()
 }
@@ -1034,10 +1053,10 @@ function syncLanService(): void {
     getSnapshot: getLanSnapshot,
     onPeersChange: () => {
       // peer 变化时把最新 peer 表合并进 snapshot 并推送前端
-      currentSnapshot = {
+      setCurrentSnapshot({
         ...currentSnapshot,
         teamPeers: buildTeamPeers(getSelfRemaining())
-      }
+      })
       broadcastSnapshot()
     },
     onMessage: (message) => {
@@ -1084,7 +1103,7 @@ function broadcastAnnouncement(): void {
 }
 
 function applyRadarPick(pick: UsageSnapshot['bestModelPick']): void {
-  currentSnapshot = { ...currentSnapshot, bestModelPick: pick }
+  setCurrentSnapshot({ ...currentSnapshot, bestModelPick: pick })
   broadcastSnapshot()
 }
 
@@ -1107,10 +1126,10 @@ async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): 
     return
   }
 
-  currentSnapshot = {
+  setCurrentSnapshot({
     ...currentSnapshot,
     isRefreshing: true
-  }
+  })
   broadcastSnapshot()
   refreshTrayMenu()
 
@@ -1127,7 +1146,7 @@ async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): 
       // 预热三窗口 token 汇总,供本机排行榜与 LAN 广播同步读取
       await warmAllAgentTokenTotals()
       // collect 期间 radar 回调可能已更新 bestModelPick;优先取最新值,旧值仅作兜底
-      currentSnapshot = {
+      setCurrentSnapshot({
         ...collected,
         // 非 Codex 不保留雷达推荐(切换工具时避免旧 Codex 推荐残留)
         bestModelPick:
@@ -1135,21 +1154,21 @@ async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): 
             ? (currentSnapshot.bestModelPick ?? collected.bestModelPick)
             : undefined,
         teamPeers: buildTeamPeers(getSelfRemaining())
-      }
+      })
       // 本机数据变化,广播给已连 peer
       lanService.broadcastSnapshot()
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      currentSnapshot = {
+      setCurrentSnapshot({
         ...currentSnapshot,
         isRefreshing: false,
         issues: Array.from(new Set([message, ...currentSnapshot.issues])).slice(0, 6)
-      }
+      })
     } finally {
-      currentSnapshot = {
+      setCurrentSnapshot({
         ...currentSnapshot,
         isRefreshing: false
-      }
+      })
       syncCapsuleWindowBounds()
       broadcastSnapshot()
       refreshTrayMenu()
@@ -1200,6 +1219,43 @@ function resolveCapsuleRuntimeBounds(): Rectangle {
 
 function broadcastSnapshot(): void {
   sendToRenderers(CHANNELS.snapshotUpdated, currentSnapshot)
+}
+
+function setCurrentSnapshot(nextSnapshot: UsageSnapshot): void {
+  currentSnapshot = {
+    ...nextSnapshot,
+    windowKeeper: windowKeeper?.getStatus() ?? nextSnapshot.windowKeeper
+  }
+  windowKeeper?.updateSnapshot(currentSnapshot)
+}
+
+function applyWindowKeeperStatus(status: NonNullable<UsageSnapshot['windowKeeper']>): void {
+  currentSnapshot = {
+    ...currentSnapshot,
+    windowKeeper: status
+  }
+  broadcastSnapshot()
+}
+
+function persistWindowKeeperState(state: NonNullable<PersistedState['windowKeeper']>): void {
+  persistedState = {
+    ...persistedState,
+    windowKeeper: state
+  }
+  queuePersistState()
+}
+
+function notifyWindowKeeperExhausted(error: string): void {
+  if (!Notification.isSupported()) {
+    return
+  }
+  const isChinese = persistedState.settings.locale === 'zh-CN'
+  new Notification({
+    title: 'CodexStatus',
+    body: isChinese
+      ? `5h 窗口自动保持异常：${error}`
+      : `5h window keeper stopped after retries: ${error}`
+  }).show()
 }
 
 function broadcastPreferences(): void {

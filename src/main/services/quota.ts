@@ -94,7 +94,7 @@ export async function collectUsageSnapshot(
   let rateLimitSource: RateLimitSource = hasRateLimits(localRateLimits) ? 'local' : 'none'
   let officialIssue: string | undefined
   let resetCredit: UsageSnapshot['resetCredit']
-  let bestModelPick: UsageSnapshot['bestModelPick']
+  const bestModelPick = options.bestModelPick
 
   const credentialLookup = await readOfficialCodexCredentials()
   let authMode: AuthMode = 'none'
@@ -118,8 +118,6 @@ export async function collectUsageSnapshot(
   } else {
     officialIssue = credentialLookup.issue ?? '未找到 Codex 凭据'
   }
-
-  bestModelPick = options.bestModelPick
 
   const issues: string[] = []
   if (rateLimitSource !== 'official' && officialIssue) {
@@ -296,7 +294,7 @@ async function getResetCreditWithCache(
     }
     resetCreditCache = { value: undefined, fetchedAtMs: Date.now(), state: 'empty' }
     return undefined
-  } catch (error) {
+  } catch {
     resetCreditCache = { value: undefined, fetchedAtMs: Date.now(), state: 'error' }
     // 请求失败时,如果之前有缓存值(比如卡还没到期),继续显示旧值比什么都不显示好
     return undefined
@@ -320,6 +318,56 @@ export function shouldRecheckOfficialRateLimits(
       )
     })
   )
+}
+
+export function parseOfficialDispatchResetAts(
+  response: unknown
+): Record<string, number> | null | undefined {
+  const body = getRecord(response)
+  const rateLimit = getRecord(body?.rate_limit ?? body?.rateLimit)
+  if (!rateLimit) {
+    return undefined
+  }
+
+  const result: Record<string, number> = {}
+  for (const [windowId, keys] of [
+    ['primary', ['primary_window', 'primaryWindow']],
+    ['secondary', ['secondary_window', 'secondaryWindow']]
+  ] as const) {
+    const windowState = getRecord(rateLimit[keys[0]] ?? rateLimit[keys[1]])
+    const resetAt = getNonNegativeNumber(
+      windowState?.reset_at ?? windowState?.resetAt ?? windowState?.resets_at ?? windowState?.resetsAt
+    )
+    if (resetAt !== undefined) {
+      result[windowId] = resetAt
+    }
+  }
+  return Object.keys(result).length > 0 ? result : null
+}
+
+export function areOfficialDispatchResetAtsStable(
+  first: Record<string, number>,
+  second: Record<string, number>,
+  toleranceSeconds: number
+): boolean {
+  const keys = Object.keys(first)
+  if (
+    keys.length === 0 ||
+    keys.length !== Object.keys(second).length ||
+    !Number.isFinite(toleranceSeconds) ||
+    toleranceSeconds < 0
+  ) {
+    return false
+  }
+  return keys.every((key) => {
+    const firstResetAt = first[key]
+    const secondResetAt = second[key]
+    return (
+      Number.isFinite(firstResetAt) &&
+      Number.isFinite(secondResetAt) &&
+      Math.abs(firstResetAt - secondResetAt) <= toleranceSeconds
+    )
+  })
 }
 
 function buildOfficialHeaders(credentials: {
@@ -418,7 +466,7 @@ async function requestJson(
 
 function resolveFetchImplementation(): typeof fetch {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const electron = require('electron') as typeof import('electron') | undefined
     const netFetch = electron?.net?.fetch
     if (electron && typeof netFetch === 'function') {
@@ -483,7 +531,8 @@ function createOfficialRateLimitWindow(
       resetsAtMs,
       resetsInSeconds
     },
-    observedAt
+    observedAt,
+    true
   )
 }
 
@@ -662,7 +711,8 @@ function toRateLimits(snapshot: RateLimitSnapshot | undefined): UsageSnapshot['r
 function createRateLimitWindow(
   id: string,
   raw: RawRateLimit,
-  snapshotTime: Date
+  snapshotTime: Date,
+  preserveExpiredUsage = false
 ): RateLimitWindowSnapshot {
   const now = Date.now()
   const resetsAt =
@@ -672,7 +722,9 @@ function createRateLimitWindow(
         ? new Date(snapshotTime.getTime() + raw.resetsInSeconds * 1000)
         : undefined
   const hasExpired = resetsAt !== undefined && resetsAt.getTime() <= now
-  const usedPercent = hasExpired ? 0 : clampPercent(raw.usedPercent)
+  // 官方快照的 used_percent 用于判断重置后是否已有其他请求;本地旧日志仍需归零避免展示陈旧额度。
+  const usedPercent =
+    hasExpired && !preserveExpiredUsage ? 0 : clampPercent(raw.usedPercent)
   const remainingPercent = usedPercent === undefined ? undefined : clampPercent(100 - usedPercent)
   const resetsInSeconds =
     resetsAt === undefined ? undefined : Math.max(0, Math.floor((resetsAt.getTime() - now) / 1000))

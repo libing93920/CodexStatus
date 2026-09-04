@@ -1,6 +1,6 @@
 {
   "name": "codex-status",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "description": "CodexStatus - Codex 额度悬浮监控",
   "main": "./out/main/index.js",
   "author": "codex-status",
@@ -8,8 +8,11 @@
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
+    "test": "npm run test:unit && npm run test:panel-open && npm run test:cockpit",
+    "test:unit": "node --experimental-strip-types --test scripts/announcement.test.mjs scripts/quota-recheck.test.mjs scripts/usage-align.test.mjs scripts/window-keeper.test.mjs",
     "test:quota": "node --experimental-strip-types --test scripts/quota-recheck.test.mjs",
     "test:panel-open": "node --test scripts/panel-open-flicker.test.mjs",
+    "test:cockpit": "electron scripts/cockpit-animation.test.mjs",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
@@ -27,6 +30,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "bonjour-service": "^1.4.3",
     "electron-updater": "^6.8.9",
+    "node-pty": "^1.1.0",
     "ws": "^8.21.1"
   },
   "devDependencies": {
