@@ -8,6 +8,7 @@ import {
   WindowKeeper,
   calculateWindowKeeperPlan
 } from '../src/main/services/window-keeper.ts'
+import { selectCodexExecutablePath } from '../src/main/services/window-keeper-runner.ts'
 
 const BASE_NOW = Date.parse('2026-09-04T00:00:00.000Z')
 
@@ -106,6 +107,32 @@ function createRunner(outcomes = []) {
     }
   }
 }
+
+test('Windows PATH 解析只选择真实 codex.exe', () => {
+  const executable = 'C:\\Users\\libing\\AppData\\Local\\OpenAI\\Codex\\bin\\codex.exe'
+
+  assert.equal(
+    selectCodexExecutablePath(
+      [
+        'C:\\Users\\libing\\AppData\\Roaming\\npm\\codex',
+        'C:\\Users\\libing\\AppData\\Roaming\\npm\\codex.cmd',
+        executable
+      ],
+      'win32'
+    ),
+    executable
+  )
+  assert.equal(
+    selectCodexExecutablePath(
+      [
+        'C:\\Users\\libing\\AppData\\Roaming\\npm\\codex',
+        'C:\\Users\\libing\\AppData\\Roaming\\npm\\codex.cmd'
+      ],
+      'win32'
+    ),
+    undefined
+  )
+})
 
 async function flush() {
   await Promise.resolve()

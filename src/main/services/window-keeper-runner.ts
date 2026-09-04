@@ -106,15 +106,30 @@ function resolveCodexExecutable(): string {
     if (result.status !== 0) {
       continue
     }
-    const executable = String(result.stdout)
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find((line) => line.length > 0)
+    const executable = selectCodexExecutablePath(
+      String(result.stdout)
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+    )
     if (executable) {
       return executable
     }
   }
-  throw new Error('Codex CLI not found on PATH')
+  throw new Error(
+    process.platform === 'win32'
+      ? 'Codex CLI executable (.exe) not found on PATH'
+      : 'Codex CLI not found on PATH'
+  )
+}
+
+export function selectCodexExecutablePath(
+  candidates: readonly string[],
+  platform = process.platform
+): string | undefined {
+  return candidates.find(
+    (candidate) => platform !== 'win32' || candidate.toLowerCase().endsWith('.exe')
+  )
 }
 
 async function loadNodePty(): Promise<NodePtyModule> {
