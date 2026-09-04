@@ -108,28 +108,26 @@ function createRunner(outcomes = []) {
   }
 }
 
-test('Windows PATH 解析只选择真实 codex.exe', () => {
+test('Windows PATH 解析优先 exe，无 exe 时使用 codex.cmd', () => {
   const executable = 'C:\\Users\\libing\\AppData\\Local\\OpenAI\\Codex\\bin\\codex.exe'
+  const commandShim = 'C:\\Users\\libing\\AppData\\Roaming\\npm\\codex.cmd'
 
   assert.equal(
     selectCodexExecutablePath(
-      [
-        'C:\\Users\\libing\\AppData\\Roaming\\npm\\codex',
-        'C:\\Users\\libing\\AppData\\Roaming\\npm\\codex.cmd',
-        executable
-      ],
+      ['C:\\Users\\libing\\AppData\\Roaming\\npm\\codex', commandShim, executable],
       'win32'
     ),
     executable
   )
   assert.equal(
     selectCodexExecutablePath(
-      [
-        'C:\\Users\\libing\\AppData\\Roaming\\npm\\codex',
-        'C:\\Users\\libing\\AppData\\Roaming\\npm\\codex.cmd'
-      ],
+      ['C:\\Users\\libing\\AppData\\Roaming\\npm\\codex', commandShim],
       'win32'
     ),
+    commandShim
+  )
+  assert.equal(
+    selectCodexExecutablePath(['C:\\Users\\libing\\AppData\\Roaming\\npm\\codex'], 'win32'),
     undefined
   )
 })

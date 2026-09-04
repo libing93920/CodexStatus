@@ -118,7 +118,7 @@ function resolveCodexExecutable(): string {
   }
   throw new Error(
     process.platform === 'win32'
-      ? 'Codex CLI executable (.exe) not found on PATH'
+      ? 'Codex CLI executable or Windows shim not found on PATH'
       : 'Codex CLI not found on PATH'
   )
 }
@@ -127,8 +127,13 @@ export function selectCodexExecutablePath(
   candidates: readonly string[],
   platform = process.platform
 ): string | undefined {
-  return candidates.find(
-    (candidate) => platform !== 'win32' || candidate.toLowerCase().endsWith('.exe')
+  if (platform !== 'win32') {
+    return candidates[0]
+  }
+
+  return (
+    candidates.find((candidate) => /(^|[\\/])codex\.exe$/i.test(candidate)) ??
+    candidates.find((candidate) => /(^|[\\/])codex\.cmd$/i.test(candidate))
   )
 }
 
