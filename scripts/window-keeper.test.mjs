@@ -68,18 +68,26 @@ function fiveHourWindow({ resetAt, usedPercent = 0 } = {}) {
 }
 
 function weeklyWindow() {
+  return weeklyWindowWith({ usedPercent: 20, remainingPercent: 80 })
+}
+
+function weeklyWindowWith({ usedPercent, remainingPercent, resetsAt } = {}) {
   return {
     id: 'secondary',
     label: '7d',
     windowMinutes: 10080,
-    usedPercent: 20,
-    remainingPercent: 80,
-    resetsAt: new Date(BASE_NOW + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    usedPercent,
+    remainingPercent,
+    resetsAt,
     observedAt: new Date(BASE_NOW).toISOString()
   }
 }
 
-function usageSnapshot({ authMode = 'chatgpt', rateLimits = [] } = {}) {
+function usageSnapshot({
+  authMode = 'chatgpt',
+  rateLimits = [],
+  rateLimitSource = 'official'
+} = {}) {
   return {
     available: rateLimits.length > 0,
     isRefreshing: false,
@@ -87,7 +95,7 @@ function usageSnapshot({ authMode = 'chatgpt', rateLimits = [] } = {}) {
     authMode,
     generatedAt: new Date(BASE_NOW).toISOString(),
     rateLimits,
-    rateLimitSource: 'official',
+    rateLimitSource,
     sourceHost: 'chatgpt.com',
     issues: [],
     filesScanned: 0
@@ -658,4 +666,308 @@ test('runner 超时后进入重试而不是被当作取消', async () => {
   assert.equal(aborted, true)
   assert.equal(statuses.at(-1).state, 'retrying')
   assert.equal(statuses.at(-1).recentError, 'Codex CLI timed out')
+})
+
+test('weekly remaining 0% returns waiting-weekly-reset', () => {
+  const plan = calculateWindowKeeperPlan(
+    usageSnapshot({
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+        weeklyWindowWith({
+          usedPercent: 100,
+          remainingPercent: 0,
+          resetsAt: new Date(BASE_NOW + 7 * 24 * 60 * 60 * 1000).toISOString()
+        })
+      ]
+    }),
+    BASE_NOW,
+    undefined
+  )
+
+  assert.equal(plan.kind, 'waiting-weekly-reset')
+})
+
+test('weekly action time is weekly reset_at plus ten seconds', () => {
+  const resetsAtMs = BASE_NOW + 7 * 24 * 60 * 60 * 1000
+  const plan = calculateWindowKeeperPlan(
+    usageSnapshot({
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+        weeklyWindowWith({
+          usedPercent: 40,
+          remainingPercent: 0,
+          resetsAt: new Date(resetsAtMs).toISOString()
+        })
+      ]
+    }),
+    BASE_NOW,
+    undefined
+  )
+
+  assert.equal(plan.kind, 'waiting-weekly-reset')
+  assert.equal(plan.triggerAtMs, resetsAtMs + WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  assert.equal(plan.delayMs, 7 * 24 * 60 * 60 * 1000 + WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+})
+
+test('expired weekly reset schedules now plus ten seconds', () => {
+  const plan = calculateWindowKeeperPlan(
+    usageSnapshot({
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+        weeklyWindowWith({
+          usedPercent: 100,
+          remainingPercent: 0,
+          resetsAt: new Date(BASE_NOW - 1_000).toISOString()
+        })
+      ]
+    }),
+    BASE_NOW,
+    undefined
+  )
+
+  assert.equal(plan.kind, 'waiting-weekly-reset')
+  assert.equal(plan.triggerAtMs, BASE_NOW + WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+})
+
+test('exhausted weekly quota ignores rolling 5h reset_at', () => {
+  const plan = calculateWindowKeeperPlan(
+    usageSnapshot({
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 20 }),
+        weeklyWindowWith({
+          usedPercent: 100,
+          remainingPercent: 0,
+          resetsAt: new Date(BASE_NOW + 7 * 24 * 60 * 60 * 1000).toISOString()
+        })
+      ]
+    }),
+    BASE_NOW,
+    undefined
+  )
+
+  assert.equal(plan.kind, 'waiting-weekly-reset')
+  assert.equal(
+    plan.triggerAtMs,
+    BASE_NOW + 7 * 24 * 60 * 60 * 1000 + WINDOW_KEEPER_TRIGGER_BUFFER_MS
+  )
+})
+
+test('missing weekly reset waits for data', () => {
+  const plan = calculateWindowKeeperPlan(
+    usageSnapshot({
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+        weeklyWindowWith({ usedPercent: 100, remainingPercent: 0, resetsAt: undefined })
+      ]
+    }),
+    BASE_NOW,
+    undefined
+  )
+
+  assert.equal(plan.kind, 'wait-data')
+})
+
+test('recovered weekly quota cancels weekly timer', async () => {
+  const clock = new FakeClock(BASE_NOW)
+  const runner = createRunner()
+  const { keeper } = createKeeper({ clock, runner })
+  keeper.updateSnapshot(
+    usageSnapshot({
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+        weeklyWindowWith({
+          usedPercent: 100,
+          remainingPercent: 0,
+          resetsAt: new Date(BASE_NOW + 7 * 24 * 60 * 60 * 1000).toISOString()
+        })
+      ]
+    })
+  )
+
+  assert.equal(clock.activeTimers().length, 1)
+  const weeklyTimer = clock.activeTimers()[0]
+
+  keeper.updateSnapshot(
+    usageSnapshot({
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+        weeklyWindowWith({
+          usedPercent: 20,
+          remainingPercent: 80,
+          resetsAt: new Date(BASE_NOW + 7 * 24 * 60 * 60 * 1000).toISOString()
+        })
+      ]
+    })
+  )
+
+  assert.equal(weeklyTimer.cleared, true)
+  assert.equal(clock.activeTimers().length, 1)
+  assert.equal(clock.activeTimers()[0].dueAt, BASE_NOW + WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+})
+
+test('recovered weekly quota resumes existing 5h empty/used logic', async () => {
+  const clock = new FakeClock(BASE_NOW)
+  const runner = createRunner()
+  const { keeper } = createKeeper({ clock, runner })
+  keeper.updateSnapshot(
+    usageSnapshot({
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+        weeklyWindowWith({
+          usedPercent: 100,
+          remainingPercent: 0,
+          resetsAt: new Date(BASE_NOW + 7 * 24 * 60 * 60 * 1000).toISOString()
+        })
+      ]
+    })
+  )
+  keeper.updateSnapshot(
+    usageSnapshot({
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+        weeklyWindowWith({
+          usedPercent: 20,
+          remainingPercent: 80,
+          resetsAt: new Date(BASE_NOW + 7 * 24 * 60 * 60 * 1000).toISOString()
+        })
+      ]
+    })
+  )
+
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  assert.equal(runner.calls.length, 1)
+})
+
+test('exhausted weekly quota does not start CLI early', async () => {
+  const runner = createRunner()
+  const clock = new FakeClock(BASE_NOW)
+  const { keeper } = createKeeper({ clock, runner })
+  keeper.updateSnapshot(
+    usageSnapshot({
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW - 1_000).toISOString(), usedPercent: 0 }),
+        weeklyWindowWith({
+          usedPercent: 100,
+          remainingPercent: 0,
+          resetsAt: new Date(BASE_NOW + 7 * 24 * 60 * 60 * 1000).toISOString()
+        })
+      ]
+    })
+  )
+
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS + 1)
+  await flush()
+  assert.equal(runner.calls.length, 0)
+  assert.equal(clock.activeTimers().length, 1)
+})
+
+test('local fallback weekly exhaustion does not pause 5h scheduling', () => {
+  const plan = calculateWindowKeeperPlan(
+    usageSnapshot({
+      rateLimitSource: 'local',
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+        weeklyWindowWith({
+          usedPercent: 100,
+          remainingPercent: 0,
+          resetsAt: new Date(BASE_NOW + 7 * 24 * 60 * 60 * 1000).toISOString()
+        })
+      ]
+    }),
+    BASE_NOW,
+    undefined
+  )
+
+  assert.equal(plan.kind, 'wait-start')
+})
+
+test('changing weekly resetAt cancels and reschedules the active weekly timer', async () => {
+  const clock = new FakeClock(BASE_NOW)
+  const runner = createRunner()
+  const { keeper } = createKeeper({ clock, runner })
+  const firstResetAt = new Date(BASE_NOW + 7 * 24 * 60 * 60 * 1000).toISOString()
+  const secondResetAt = new Date(BASE_NOW + 3 * 24 * 60 * 60 * 1000).toISOString()
+
+  keeper.updateSnapshot(
+    usageSnapshot({
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+        weeklyWindowWith({
+          usedPercent: 100,
+          remainingPercent: 0,
+          resetsAt: firstResetAt
+        })
+      ]
+    })
+  )
+
+  assert.equal(clock.activeTimers().length, 1)
+  const initialTimer = clock.activeTimers()[0]
+  assert.equal(
+    initialTimer.dueAt,
+    BASE_NOW + 7 * 24 * 60 * 60 * 1000 + WINDOW_KEEPER_TRIGGER_BUFFER_MS
+  )
+
+  keeper.updateSnapshot(
+    usageSnapshot({
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+        weeklyWindowWith({
+          usedPercent: 100,
+          remainingPercent: 0,
+          resetsAt: secondResetAt
+        })
+      ]
+    })
+  )
+
+  assert.equal(initialTimer.cleared, true)
+  assert.equal(clock.activeTimers().length, 1)
+  const rescheduledTimer = clock.activeTimers()[0]
+  assert.equal(
+    rescheduledTimer.dueAt,
+    BASE_NOW + 3 * 24 * 60 * 60 * 1000 + WINDOW_KEEPER_TRIGGER_BUFFER_MS
+  )
+})
+
+test('weekly timer treats handle 0 as active and cancels on disable', () => {
+  let timerId = 0
+  const scheduled = []
+  const cleared = []
+  const customTimer = {
+    now: () => BASE_NOW,
+    setTimeout: (callback, delayMs) => {
+      const id = timerId++
+      scheduled.push({ id, delayMs, callback })
+      return id
+    },
+    clearTimeout: (id) => {
+      cleared.push(id)
+    }
+  }
+  const keeper = new WindowKeeper({
+    enabled: true,
+    onRefresh: async () => {},
+    ...customTimer
+  })
+  const snapshot = usageSnapshot({
+    rateLimits: [
+      fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+      weeklyWindowWith({
+        usedPercent: 100,
+        remainingPercent: 0,
+        resetsAt: new Date(BASE_NOW + 7 * 24 * 60 * 60 * 1000).toISOString()
+      })
+    ]
+  })
+  keeper.updateSnapshot(snapshot)
+  assert.equal(scheduled.length, 1)
+  assert.equal(scheduled[0].id, 0)
+
+  keeper.updateSnapshot(snapshot)
+  assert.equal(scheduled.length, 1)
+
+  keeper.setEnabled(false)
+  assert.deepEqual(cleared, [0])
 })

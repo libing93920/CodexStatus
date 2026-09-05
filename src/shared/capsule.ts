@@ -13,6 +13,7 @@ export type PanelFocusTarget = 'announcement' | 'messages'
 export type WindowKeeperState =
   | 'disabled'
   | 'waiting-data'
+  | 'waiting-weekly-reset'
   | 'waiting-reset'
   | 'triggering'
   | 'retrying'

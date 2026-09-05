@@ -2781,7 +2781,8 @@ body {
 }
 
 .window-keeper-row__state--disabled,
-.window-keeper-row__state--waiting-data {
+.window-keeper-row__state--waiting-data,
+.window-keeper-row__state--waiting-weekly-reset {
   color: var(--panel-muted);
 }
 

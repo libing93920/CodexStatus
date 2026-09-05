@@ -15,6 +15,7 @@ export const WINDOW_KEEPER_MAX_RETRY_DURATION_MS = 10 * 60 * 1000
 export const RETRY_DELAYS_MS = [30_000, 60_000, 120_000, 240_000, 480_000] as const
 
 const FIVE_HOUR_WINDOW_MINUTES = 5 * 60
+const WEEKLY_WINDOW_MIN_MINUTES = 1440
 const FIVE_HOUR_WINDOW_MS = 5 * 60 * 60 * 1000
 const CLI_TIMEOUT_MS = 60_000
 const CODEX_CLI_REQUEST: CodexCliRequest = {
@@ -39,6 +40,13 @@ export interface WindowKeeperOptions {
 export type WindowKeeperPlan =
   | {
       kind: 'wait-data'
+    }
+  | {
+      kind: 'waiting-weekly-reset'
+      windowId: string
+      resetAt: string
+      triggerAtMs: number
+      delayMs: number
     }
   | {
       kind: 'wait-start'
@@ -87,6 +95,23 @@ export function getFiveHourWindow(snapshot: UsageSnapshot): RateLimitWindowSnaps
   )
 }
 
+function getExhaustedWeeklyWindow(snapshot: UsageSnapshot): RateLimitWindowSnapshot | undefined {
+  return snapshot.rateLimits.find((windowState) => {
+    if ((windowState.windowMinutes ?? 0) < WEEKLY_WINDOW_MIN_MINUTES) {
+      return false
+    }
+    const remainingExhausted =
+      windowState.remainingPercent !== undefined &&
+      Number.isFinite(windowState.remainingPercent) &&
+      windowState.remainingPercent <= 0
+    const usedExhausted =
+      windowState.usedPercent !== undefined &&
+      Number.isFinite(windowState.usedPercent) &&
+      windowState.usedPercent >= 100
+    return remainingExhausted || usedExhausted
+  })
+}
+
 export function calculateWindowKeeperPlan(
   snapshot: UsageSnapshot,
   nowMs: number,
@@ -103,6 +128,26 @@ export function calculateWindowKeeperPlan(
       reason: 'not-eligible',
       windowId: windowState?.id,
       resetAt: windowState?.resetsAt
+    }
+  }
+
+  const weeklyWindow =
+    snapshot.rateLimitSource === 'official' ? getExhaustedWeeklyWindow(snapshot) : undefined
+  if (weeklyWindow) {
+    const weeklyResetAtMs = weeklyWindow.resetsAt ? Date.parse(weeklyWindow.resetsAt) : NaN
+    if (!weeklyWindow.resetsAt || !Number.isFinite(weeklyResetAtMs)) {
+      return { kind: 'wait-data' }
+    }
+    const triggerAtMs =
+      weeklyResetAtMs > nowMs
+        ? weeklyResetAtMs + WINDOW_KEEPER_TRIGGER_BUFFER_MS
+        : nowMs + WINDOW_KEEPER_TRIGGER_BUFFER_MS
+    return {
+      kind: 'waiting-weekly-reset',
+      windowId: weeklyWindow.id,
+      resetAt: weeklyWindow.resetsAt,
+      triggerAtMs,
+      delayMs: Math.max(0, triggerAtMs - nowMs)
     }
   }
 
@@ -185,6 +230,7 @@ export class WindowKeeper {
   private stopped = false
   private snapshot: UsageSnapshot | undefined
   private activeEvent: ActiveEvent | undefined
+  private weeklyTimer: { key: string; handle: unknown } | undefined
   private finishedEventKey: string | undefined
   private status: WindowKeeperStatus
 
@@ -221,6 +267,7 @@ export class WindowKeeper {
     }
     this.enabled = enabled
     this.cancelActiveEvent()
+    this.cancelWeeklyTimer()
     this.finishedEventKey = undefined
     if (!enabled) {
       this.setStatus({
@@ -246,11 +293,13 @@ export class WindowKeeper {
   stop(): void {
     this.stopped = true
     this.cancelActiveEvent()
+    this.cancelWeeklyTimer()
   }
 
   private reconcile(): void {
     if (!this.snapshot) {
       this.cancelActiveEvent()
+      this.cancelWeeklyTimer()
       this.setStatus({
         state: 'waiting-data',
         nextActionAt: undefined,
@@ -262,6 +311,7 @@ export class WindowKeeper {
     const plan = calculateWindowKeeperPlan(this.snapshot, this.timer.now(), this.persisted)
     if (plan.kind === 'wait-data') {
       this.cancelActiveEvent()
+      this.cancelWeeklyTimer()
       this.setStatus({
         state: 'waiting-data',
         nextActionAt: undefined,
@@ -269,6 +319,43 @@ export class WindowKeeper {
       })
       return
     }
+    if (plan.kind === 'waiting-weekly-reset') {
+      this.cancelActiveEvent()
+      const weeklyKey = createEventKey(plan.windowId, plan.resetAt)
+      if (this.weeklyTimer !== undefined && this.weeklyTimer.key !== weeklyKey) {
+        this.cancelWeeklyTimer()
+      }
+      if (this.weeklyTimer === undefined) {
+        const handle = this.timer.setTimeout(() => {
+          this.weeklyTimer = undefined
+          this.setStatus({
+            state: 'waiting-data',
+            nextActionAt: undefined,
+            recentError: undefined
+          })
+          void this.onRefresh().catch((error) => {
+            if (!this.stopped && this.enabled) {
+              this.setStatus({
+                state: 'waiting-data',
+                recentError: normalizeError(error)
+              })
+            }
+          })
+        }, plan.delayMs)
+        this.weeklyTimer = {
+          key: weeklyKey,
+          handle
+        }
+      }
+      this.setStatus({
+        state: 'waiting-weekly-reset',
+        nextActionAt: new Date(plan.triggerAtMs).toISOString(),
+        recentError: undefined
+      })
+      return
+    }
+
+    this.cancelWeeklyTimer()
     if (plan.kind === 'skip') {
       this.cancelActiveEvent()
       this.finishedEventKey =
@@ -517,6 +604,15 @@ export class WindowKeeper {
     }
     event.controller?.abort()
     this.activeEvent = undefined
+  }
+
+  private cancelWeeklyTimer(): void {
+    if (this.weeklyTimer !== undefined) {
+      if (this.weeklyTimer.handle !== undefined) {
+        this.timer.clearTimeout(this.weeklyTimer.handle)
+      }
+      this.weeklyTimer = undefined
+    }
   }
 
   private setStatus(patch: Partial<WindowKeeperStatus> & Pick<WindowKeeperStatus, 'state'>): void {

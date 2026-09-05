@@ -209,7 +209,10 @@ test('用量统计时间 tab 切换复用 Quick Snap 动效', () => {
     cssSource,
     /\.usage-card\.is-window-switching\s*:is\([^)]*\)\s*{[^}]*animation:\s*panel-tab-content-snap 380ms cubic-bezier\(0\.34, 1\.56, 0\.64, 1\) backwards/s
   )
-  assert.match(cssSource, /\.usage-card\.is-window-switching\s*:is\(\.usage-summary, \.usage-range-panel\)/)
+  assert.match(
+    cssSource,
+    /\.usage-card\.is-window-switching\s*:is\(\.usage-summary, \.usage-range-panel\)/
+  )
   assert.match(
     cssSource,
     /\.usage-card\.is-window-switching :is\(\.usage-summary, \.usage-range-panel\)\s*{[^}]*animation-delay:\s*0ms/s
@@ -268,6 +271,7 @@ test('Window Keeper 状态卡复用详情行样式并支持展开明细', () => 
   assert.match(component, /role="region"/)
   assert.match(component, /copy\.windowKeeperState/)
   assert.match(component, /copy\.windowKeeperRecentError/)
+  assert.match(appSource, /windowKeeperWaitingWeeklyReset/)
 })
 
 test('Window Keeper 展开样式不再使用独立的旧信息卡布局', () => {
@@ -308,10 +312,14 @@ test('通用设置按开机自启动、极简模式、自动保持 5h 窗口排�
   assert.ok(section.indexOf('copy.minimalMode') < section.indexOf('copy.autoKeep5hWindow'))
 })
 
-test('Window Keeper 只在 Codex ChatGPT 模式显示', () => {
+test('Window Keeper 只在 Codex ChatGPT 且存在 5h 窗口时显示', () => {
   assert.match(
     appSource,
-    /const isWindowKeeperAvailable = isCodex && snapshot\.authMode === 'chatgpt'/
+    /const hasFiveHourWindow = snapshot\.rateLimits\.some\(\s*\(windowState\) => windowState\.windowMinutes === 300\s*\)/
+  )
+  assert.match(
+    appSource,
+    /const isWindowKeeperAvailable =\s*isCodex && snapshot\.authMode === 'chatgpt' && hasFiveHourWindow/
   )
   assert.match(appSource, /\{isWindowKeeperAvailable \? \(\s*<WindowKeeperStatusCard/s)
   assert.match(appSource, /\{isWindowKeeperAvailable \? \(\s*<div className="setting-row">/s)

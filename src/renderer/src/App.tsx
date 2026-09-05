@@ -219,6 +219,7 @@ const COPY = {
     windowKeeperRecentError: '最近错误',
     windowKeeperDisabled: '已关闭',
     windowKeeperWaitingData: '等待额度数据',
+    windowKeeperWaitingWeeklyReset: '等待周额度恢复',
     windowKeeperWaitingReset: '等待 5h 重置',
     windowKeeperWaitingWindow: '等待 5h 窗口',
     windowKeeperTriggering: '正在触发',
@@ -345,6 +346,7 @@ const COPY = {
     windowKeeperRecentError: 'Recent error',
     windowKeeperDisabled: 'Disabled',
     windowKeeperWaitingData: 'Waiting for quota data',
+    windowKeeperWaitingWeeklyReset: 'Waiting for weekly quota reset',
     windowKeeperWaitingReset: 'Waiting for 5h reset',
     windowKeeperWaitingWindow: 'Waiting for 5h window',
     windowKeeperTriggering: 'Triggering',
@@ -683,7 +685,11 @@ function App(): React.JSX.Element {
   const canEditCustomRefresh = settings.refreshMode === 'auto' && isCustomRefreshInterval
   const isApiMode = snapshot.authMode === 'api'
   const isCodex = settings.agentId === 'codex'
-  const isWindowKeeperAvailable = isCodex && snapshot.authMode === 'chatgpt'
+  const hasFiveHourWindow = snapshot.rateLimits.some(
+    (windowState) => windowState.windowMinutes === 300
+  )
+  const isWindowKeeperAvailable =
+    isCodex && snapshot.authMode === 'chatgpt' && hasFiveHourWindow
   const sourceValue = isApiMode
     ? copy.apiModeSource
     : snapshot.rateLimitSource === 'none'
@@ -2613,6 +2619,8 @@ function resolveWindowKeeperStateLabel(
       return copy.windowKeeperDisabled
     case 'waiting-data':
       return copy.windowKeeperWaitingData
+    case 'waiting-weekly-reset':
+      return copy.windowKeeperWaitingWeeklyReset
     case 'waiting-reset':
       return isEligible ? copy.windowKeeperWaitingReset : copy.windowKeeperWaitingWindow
     case 'triggering':
