@@ -168,6 +168,29 @@ test('Window Keeper 使用隔离配置执行官方 codex exec', () => {
   ])
 })
 
+test('Window Keeper 直接启动可执行文件并通过 ComSpec 兼容 codex.cmd', () => {
+  const args = ['exec', '6']
+  assert.deepEqual(
+    windowKeeperRunner.buildCodexSpawnCommand('C:\\Codex\\codex.exe', args, 'win32'),
+    {
+      file: 'C:\\Codex\\codex.exe',
+      args
+    }
+  )
+  assert.deepEqual(
+    windowKeeperRunner.buildCodexSpawnCommand(
+      'C:\\Users\\tester\\AppData\\Roaming\\npm\\codex.cmd',
+      args,
+      'win32',
+      'C:\\Windows\\System32\\cmd.exe'
+    ),
+    {
+      file: 'C:\\Windows\\System32\\cmd.exe',
+      args: ['/d', '/c', 'C:\\Users\\tester\\AppData\\Roaming\\npm\\codex.cmd', ...args]
+    }
+  )
+})
+
 test('codex exec 退出码为 0 但没有模型回复仍判定失败', () => {
   assert.doesNotThrow(() => windowKeeperRunner.assertCodexExecCompleted(0, '6'))
   assert.throws(
@@ -175,6 +198,19 @@ test('codex exec 退出码为 0 但没有模型回复仍判定失败', () => {
     /without a completed model reply/
   )
   assert.throws(() => windowKeeperRunner.assertCodexExecCompleted(1, '6'), /exited with code 1/)
+  assert.throws(
+    () =>
+      windowKeeperRunner.assertCodexExecCompleted(
+        1,
+        '',
+        '\u001b[31mnetwork failed Bearer secret-token\u001b[0m'
+      ),
+    (error) => {
+      assert.match(error.message, /network failed Bearer \[redacted\]/)
+      assert.doesNotMatch(error.message, /secret-token/)
+      return true
+    }
+  )
 })
 
 test('Window Keeper 不把父 Codex Desktop 内部环境传给子 CLI', () => {
@@ -190,7 +226,7 @@ test('Window Keeper 不把父 Codex Desktop 内部环境传给子 CLI', () => {
   assert.equal(env.CODEX_HOME, 'C:\\CodexHome')
   assert.equal(env.CODEX_THREAD_ID, undefined)
   assert.equal(env.CODEX_APP_TOOLS_PIPE_PATH, undefined)
-  assert.equal(env.TERM, 'xterm-256color')
+  assert.equal(env.TERM, undefined)
 })
 
 async function flush() {
