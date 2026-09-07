@@ -1,8 +1,8 @@
 import { spawnSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
+import { promises as fs } from 'node:fs'
 import os from 'node:os'
-
-const CLI_MIN_RUNTIME_BEFORE_EXIT_MS = 3_000
-const CLI_IDLE_BEFORE_EXIT_MS = 1_500
+import path from 'node:path'
 
 export interface CodexCliRequest {
   model: string
@@ -16,83 +16,101 @@ export interface CodexCliRunner {
 
 export function createCodexCliRunner(): CodexCliRunner {
   return {
-    run: (request, signal) => runCodexCli(request, signal)
+    run: (request, signal) => runCodexExec(request, signal)
   }
 }
 
-async function runCodexCli(request: CodexCliRequest, signal: AbortSignal): Promise<void> {
+async function runCodexExec(request: CodexCliRequest, signal: AbortSignal): Promise<void> {
   const executable = resolveCodexExecutable()
+  const outputPath = path.join(os.tmpdir(), `codex-status-window-keeper-${randomUUID()}.txt`)
   const nodePty = await loadNodePty()
-  const args = [
-    '--model',
-    request.model,
-    '--config',
-    `model_reasoning_effort=${request.reasoningEffort}`,
-    request.prompt
-  ]
-  const ptyProcess = nodePty.spawn(executable, args, {
+  const ptyProcess = nodePty.spawn(executable, buildCodexExecArgs(request, outputPath), {
     name: 'xterm-color',
     cols: 80,
     rows: 24,
     cwd: os.homedir(),
-    env: { ...process.env }
+    env: buildCodexCliEnvironment(process.env)
   })
 
-  return new Promise<void>((resolve, reject) => {
+  try {
+    const exitCode = await waitForExit(ptyProcess, signal)
+    const finalMessage = await readFinalMessage(outputPath)
+    assertCodexExecCompleted(exitCode, finalMessage)
+  } finally {
+    await fs.unlink(outputPath).catch(() => undefined)
+  }
+}
+
+export function buildCodexExecArgs(request: CodexCliRequest, outputPath: string): string[] {
+  return [
+    'exec',
+    '--ignore-user-config',
+    '--ephemeral',
+    '--skip-git-repo-check',
+    '--model',
+    request.model,
+    '--config',
+    `model_reasoning_effort=${request.reasoningEffort}`,
+    '--output-last-message',
+    outputPath,
+    request.prompt
+  ]
+}
+
+export function assertCodexExecCompleted(exitCode: number, finalMessage: string): void {
+  if (exitCode !== 0) {
+    throw new Error(`Codex CLI exited with code ${exitCode}`)
+  }
+  if (!finalMessage.trim()) {
+    throw new Error('Codex CLI exited without a completed model reply')
+  }
+}
+
+export function buildCodexCliEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env = { ...source }
+  for (const key of Object.keys(env)) {
+    const normalized = key.toUpperCase()
+    if (normalized.startsWith('CODEX_') && normalized !== 'CODEX_HOME') {
+      delete env[key]
+    }
+    if (normalized === 'TERM') {
+      delete env[key]
+    }
+  }
+  env.TERM = 'xterm-256color'
+  return env
+}
+
+function waitForExit(ptyProcess: PtyProcess, signal: AbortSignal): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
     let settled = false
-    let idleTimer: NodeJS.Timeout | undefined
-    let minRuntimeTimer: NodeJS.Timeout | undefined
-    const settle = (error?: Error): void => {
+    const settle = (exitCode?: number, error?: Error): void => {
       if (settled) {
         return
       }
       settled = true
-      if (idleTimer) {
-        clearTimeout(idleTimer)
-      }
-      if (minRuntimeTimer) {
-        clearTimeout(minRuntimeTimer)
-      }
       signal.removeEventListener('abort', handleAbort)
-      error ? reject(error) : resolve()
+      error ? reject(error) : resolve(exitCode ?? -1)
     }
     const handleAbort = (): void => {
-      try {
-        ptyProcess.kill()
-      } finally {
-        settle(new Error('Codex CLI cancelled'))
-      }
-    }
-    const requestExitWhenIdle = (): void => {
-      if (settled) {
-        return
-      }
-      if (idleTimer) {
-        clearTimeout(idleTimer)
-      }
-      idleTimer = setTimeout(() => {
-        try {
-          ptyProcess.write('\u0004')
-        } catch {
-          ptyProcess.kill()
-        }
-      }, CLI_IDLE_BEFORE_EXIT_MS)
+      settle(undefined, new Error('Codex CLI cancelled'))
+      ptyProcess.kill()
     }
 
-    ptyProcess.onData(() => {
-      if (minRuntimeTimer === undefined) {
-        requestExitWhenIdle()
-      }
-    })
-    ptyProcess.onExit(({ exitCode }) => {
-      settle(exitCode === 0 ? undefined : new Error(`Codex CLI exited with code ${exitCode}`))
-    })
+    ptyProcess.onExit(({ exitCode }) => settle(exitCode))
     signal.addEventListener('abort', handleAbort, { once: true })
-    minRuntimeTimer = setTimeout(() => {
-      minRuntimeTimer = undefined
-      requestExitWhenIdle()
-    }, CLI_MIN_RUNTIME_BEFORE_EXIT_MS)
+    if (signal.aborted) {
+      handleAbort()
+    }
   })
+}
+
+async function readFinalMessage(outputPath: string): Promise<string> {
+  try {
+    return await fs.readFile(outputPath, 'utf8')
+  } catch {
+    return ''
+  }
 }
 
 function resolveCodexExecutable(): string {
@@ -156,8 +174,6 @@ interface NodePtyModule {
 }
 
 interface PtyProcess {
-  write(data: string): void
-  onData(listener: (data: string) => void): void
   onExit(listener: (event: { exitCode: number }) => void): void
   kill(): void
 }

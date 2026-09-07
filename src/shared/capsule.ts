@@ -16,6 +16,7 @@ export type WindowKeeperState =
   | 'waiting-weekly-reset'
   | 'waiting-reset'
   | 'triggering'
+  | 'verifying'
   | 'retrying'
   | 'error'
 
@@ -108,6 +109,8 @@ export interface WindowKeeperPersistedState {
   windowId?: string
   resetAt?: string
   lastTriggeredAt?: string
+  /** 仅新版完成 CLI 与官方额度双重确认后写入 */
+  verified?: boolean
 }
 
 /** 团队成员一行:排行榜展示 5h/7d 双窗口剩余额度% + 重置卡数量,按短窗口剩余降序排名 */

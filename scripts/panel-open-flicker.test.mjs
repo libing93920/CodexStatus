@@ -272,6 +272,7 @@ test('Window Keeper 状态卡复用详情行样式并支持展开明细', () => 
   assert.match(component, /copy\.windowKeeperState/)
   assert.match(component, /copy\.windowKeeperRecentError/)
   assert.match(appSource, /windowKeeperWaitingWeeklyReset/)
+  assert.match(appSource, /windowKeeperVerifying:\s*'正在验证额度'/)
 })
 
 test('Window Keeper 展开样式不再使用独立的旧信息卡布局', () => {

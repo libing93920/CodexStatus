@@ -333,7 +333,10 @@ if (hasSingleInstanceLock) {
     windowKeeper = new WindowKeeper({
       enabled: persistedState.settings.autoKeep5hWindow,
       persisted: persistedState.windowKeeper,
-      onRefresh: () => refreshStatus({ forceCredentialCheck: true }),
+      onRefresh: async () => {
+        await refreshStatus({ forceCredentialCheck: true })
+        return currentSnapshot
+      },
       onStatusChange: applyWindowKeeperStatus,
       onPersistenceChange: persistWindowKeeperState,
       onExhausted: notifyWindowKeeperExhausted

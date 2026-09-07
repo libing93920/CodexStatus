@@ -67,10 +67,11 @@ function normalizeWindowKeeperState(
   const windowId = getString(input.windowId)
   const resetAt = getString(input.resetAt)
   const lastTriggeredAt = getString(input.lastTriggeredAt)
-  if (!windowId && !resetAt && !lastTriggeredAt) {
+  const verified = input.verified === true
+  if (!windowId && !resetAt && !lastTriggeredAt && !verified) {
     return undefined
   }
-  return { windowId, resetAt, lastTriggeredAt }
+  return { windowId, resetAt, lastTriggeredAt, verified }
 }
 
 function getString(value: unknown): string | undefined {

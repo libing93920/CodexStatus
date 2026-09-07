@@ -12,6 +12,7 @@ import {
 
 export const WINDOW_KEEPER_TRIGGER_BUFFER_MS = 10_000
 export const WINDOW_KEEPER_MAX_RETRY_DURATION_MS = 10 * 60 * 1000
+export const WINDOW_KEEPER_VERIFY_DELAY_MS = 60_000
 export const RETRY_DELAYS_MS = [30_000, 60_000, 120_000, 240_000, 480_000] as const
 
 const FIVE_HOUR_WINDOW_MINUTES = 5 * 60
@@ -28,7 +29,7 @@ export interface WindowKeeperOptions {
   enabled: boolean
   persisted?: WindowKeeperPersistedState
   runner?: CodexCliRunner
-  onRefresh: () => Promise<void>
+  onRefresh: () => Promise<UsageSnapshot | void>
   onStatusChange?: (status: WindowKeeperStatus) => void
   onPersistenceChange?: (state: WindowKeeperPersistedState) => void
   onExhausted?: (error: string) => void
@@ -87,6 +88,9 @@ interface ActiveEvent {
   timerEndsEvent: boolean
   controller?: AbortController
   running: boolean
+  verifying: boolean
+  triggeredAt?: string
+  verificationResetAt?: string
 }
 
 export function getFiveHourWindow(snapshot: UsageSnapshot): RateLimitWindowSnapshot | undefined {
@@ -165,7 +169,7 @@ export function calculateWindowKeeperPlan(
     return { kind: 'wait-data' }
   }
 
-  if (isSamePersistedEvent(windowState.id, resetAt, persisted)) {
+  if (resetAtMs <= nowMs && isSamePersistedEvent(windowState.id, resetAt, persisted)) {
     return {
       kind: 'skip',
       reason: 'already-triggered',
@@ -203,7 +207,9 @@ function calculateUnanchoredPlan(
   persisted: WindowKeeperPersistedState | undefined
 ): Extract<WindowKeeperPlan, { kind: 'wait-start' }> {
   const lastTriggeredAtMs =
-    persisted?.windowId === windowId ? parseTimestamp(persisted.lastTriggeredAt) : undefined
+    persisted?.verified === true && persisted.windowId === windowId
+      ? parseTimestamp(persisted.lastTriggeredAt)
+      : undefined
   const nextWindowAtMs =
     lastTriggeredAtMs === undefined ? nowMs : lastTriggeredAtMs + FIVE_HOUR_WINDOW_MS
   const triggerAtMs = Math.max(nowMs, nextWindowAtMs) + WINDOW_KEEPER_TRIGGER_BUFFER_MS
@@ -220,7 +226,7 @@ function calculateUnanchoredPlan(
 
 export class WindowKeeper {
   private readonly runner: CodexCliRunner
-  private readonly onRefresh: () => Promise<void>
+  private readonly onRefresh: () => Promise<UsageSnapshot | void>
   private readonly onStatusChange?: (status: WindowKeeperStatus) => void
   private readonly onPersistenceChange?: (state: WindowKeeperPersistedState) => void
   private readonly onExhausted?: (error: string) => void
@@ -249,7 +255,7 @@ export class WindowKeeper {
     }
     this.status = {
       state: this.enabled ? 'waiting-data' : 'disabled',
-      lastTriggeredAt: this.persisted.lastTriggeredAt
+      lastTriggeredAt: this.persisted.verified === true ? this.persisted.lastTriggeredAt : undefined
     }
     this.emitStatus()
   }
@@ -285,7 +291,7 @@ export class WindowKeeper {
       return
     }
     this.snapshot = snapshot
-    if (this.enabled) {
+    if (this.enabled && this.activeEvent?.verifying !== true) {
       this.reconcile()
     }
   }
@@ -404,7 +410,8 @@ export class WindowKeeper {
       deadlineAtMs: plan.triggerAtMs + WINDOW_KEEPER_MAX_RETRY_DURATION_MS,
       retryIndex: 0,
       timerEndsEvent: false,
-      running: false
+      running: false,
+      verifying: false
     }
     this.activeEvent = event
     this.scheduleTimer(event, plan.delayMs, false)
@@ -464,7 +471,7 @@ export class WindowKeeper {
         return
       }
       event.lastError = normalizeError(error)
-      this.scheduleRetry(event)
+      await this.refreshBeforeRetry(event)
       return
     } finally {
       event.running = false
@@ -476,7 +483,144 @@ export class WindowKeeper {
     if (this.activeEvent !== event || !this.enabled || this.stopped) {
       return
     }
-    this.finishSuccess(event)
+    await this.beginVerification(event)
+  }
+
+  private async beginVerification(event: ActiveEvent): Promise<void> {
+    event.verifying = true
+    event.triggeredAt = new Date(this.timer.now()).toISOString()
+    this.setStatus({
+      state: 'verifying',
+      nextActionAt: undefined,
+      recentError: undefined
+    })
+
+    const snapshot = await this.refreshForEvent(event)
+    if (!snapshot || this.activeEvent !== event) {
+      return
+    }
+    const windowState = this.resolveVerificationWindow(event, snapshot)
+    if (!windowState) {
+      return
+    }
+    if (!windowState.resetsAt) {
+      this.failVerification(event, 'Official 5h window has no reset_at')
+      return
+    }
+
+    event.verificationResetAt = windowState.resetsAt
+    const remainingMs = event.deadlineAtMs - this.timer.now()
+    if (remainingMs <= 0) {
+      this.finishError(event)
+      return
+    }
+    if (remainingMs < WINDOW_KEEPER_VERIFY_DELAY_MS) {
+      event.lastError = 'Not enough time to verify the official 5h window'
+      this.scheduleTimer(event, remainingMs, true)
+      this.setStatus({
+        state: 'verifying',
+        nextActionAt: new Date(event.deadlineAtMs).toISOString(),
+        recentError: undefined
+      })
+      return
+    }
+    const delayMs = WINDOW_KEEPER_VERIFY_DELAY_MS
+    event.timer = this.timer.setTimeout(() => {
+      event.timer = undefined
+      void this.completeVerification(event)
+    }, delayMs)
+    this.setStatus({
+      state: 'verifying',
+      nextActionAt: new Date(this.timer.now() + delayMs).toISOString(),
+      recentError: undefined
+    })
+  }
+
+  private async completeVerification(event: ActiveEvent): Promise<void> {
+    if (this.activeEvent !== event || !event.verifying) {
+      return
+    }
+    const snapshot = await this.refreshForEvent(event)
+    if (!snapshot || this.activeEvent !== event) {
+      return
+    }
+    const windowState = this.resolveVerificationWindow(event, snapshot)
+    if (!windowState) {
+      return
+    }
+    if (!windowState.resetsAt) {
+      this.failVerification(event, 'Official 5h window has no reset_at')
+      return
+    }
+    if (windowState.resetsAt === event.verificationResetAt) {
+      this.finishSuccess(event, windowState)
+      return
+    }
+    this.failVerification(event, 'Official 5h window was not started')
+  }
+
+  private async refreshForEvent(event: ActiveEvent): Promise<UsageSnapshot | undefined> {
+    try {
+      const refreshed = await this.onRefresh()
+      if (refreshed) {
+        this.snapshot = refreshed
+      }
+      return this.snapshot
+    } catch (error) {
+      if (this.activeEvent === event) {
+        this.failVerification(event, `Quota refresh failed: ${normalizeError(error)}`)
+      }
+      return undefined
+    }
+  }
+
+  private resolveVerificationWindow(
+    event: ActiveEvent,
+    snapshot: UsageSnapshot
+  ): RateLimitWindowSnapshot | undefined {
+    const plan = calculateWindowKeeperPlan(snapshot, this.timer.now(), this.persisted)
+    if (plan.kind === 'waiting-weekly-reset' || plan.kind === 'skip') {
+      event.verifying = false
+      this.reconcile()
+      return undefined
+    }
+    if (snapshot.rateLimitSource !== 'official') {
+      this.failVerification(event, 'Official quota data unavailable')
+      return undefined
+    }
+    const windowState = getFiveHourWindow(snapshot)
+    if (!windowState) {
+      this.failVerification(event, 'Official 5h window unavailable')
+      return undefined
+    }
+    return windowState
+  }
+
+  private failVerification(event: ActiveEvent, error: string): void {
+    if (this.activeEvent !== event) {
+      return
+    }
+    event.verifying = false
+    event.lastError = error
+    this.scheduleRetry(event)
+  }
+
+  private async refreshBeforeRetry(event: ActiveEvent): Promise<void> {
+    try {
+      const refreshed = await this.onRefresh()
+      if (refreshed) {
+        this.snapshot = refreshed
+      }
+    } catch {
+      // 保留 CLI 原始错误，由现有重试策略处理。
+    }
+    if (this.activeEvent !== event || !this.enabled || this.stopped) {
+      return
+    }
+    this.reconcile()
+    if (this.activeEvent === event) {
+      this.scheduleRetry(event)
+    }
   }
 
   private runWithTimeout(controller: AbortController): Promise<void> {
@@ -550,14 +694,13 @@ export class WindowKeeper {
     })
   }
 
-  private finishSuccess(event: ActiveEvent): void {
-    const triggeredAt = new Date(this.timer.now()).toISOString()
+  private finishSuccess(event: ActiveEvent, windowState: RateLimitWindowSnapshot): void {
+    const triggeredAt = event.triggeredAt ?? new Date(this.timer.now()).toISOString()
     const nextPersisted: WindowKeeperPersistedState = {
       windowId: event.windowId,
-      lastTriggeredAt: triggeredAt
-    }
-    if (event.resetAt) {
-      nextPersisted.resetAt = event.resetAt
+      resetAt: windowState.resetsAt,
+      lastTriggeredAt: triggeredAt,
+      verified: true
     }
     this.persisted = nextPersisted
     this.onPersistenceChange?.({ ...this.persisted })
@@ -569,14 +712,7 @@ export class WindowKeeper {
       lastTriggeredAt: triggeredAt,
       recentError: undefined
     })
-    void this.onRefresh().catch((error) => {
-      if (!this.stopped && this.enabled) {
-        this.setStatus({
-          state: 'waiting-data',
-          recentError: normalizeError(error)
-        })
-      }
-    })
+    this.reconcile()
   }
 
   private finishError(event: ActiveEvent): void {
@@ -619,7 +755,7 @@ export class WindowKeeper {
     this.status = {
       ...this.status,
       ...patch,
-      lastTriggeredAt: this.persisted.lastTriggeredAt
+      lastTriggeredAt: this.persisted.verified === true ? this.persisted.lastTriggeredAt : undefined
     }
     this.emitStatus()
   }
@@ -638,7 +774,9 @@ function isSamePersistedEvent(
   resetAt: string,
   persisted: WindowKeeperPersistedState | undefined
 ): boolean {
-  return persisted?.windowId === windowId && persisted.resetAt === resetAt
+  return (
+    persisted?.verified === true && persisted.windowId === windowId && persisted.resetAt === resetAt
+  )
 }
 
 function parseTimestamp(value: string | undefined): number | undefined {

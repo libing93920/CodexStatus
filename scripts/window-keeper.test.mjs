@@ -5,12 +5,14 @@ import {
   RETRY_DELAYS_MS,
   WINDOW_KEEPER_MAX_RETRY_DURATION_MS,
   WINDOW_KEEPER_TRIGGER_BUFFER_MS,
+  WINDOW_KEEPER_VERIFY_DELAY_MS,
   WindowKeeper,
   calculateWindowKeeperPlan
 } from '../src/main/services/window-keeper.ts'
-import { selectCodexExecutablePath } from '../src/main/services/window-keeper-runner.ts'
+import * as windowKeeperRunner from '../src/main/services/window-keeper-runner.ts'
 
 const BASE_NOW = Date.parse('2026-09-04T00:00:00.000Z')
+const { selectCodexExecutablePath } = windowKeeperRunner
 
 class FakeClock {
   constructor(nowMs) {
@@ -140,9 +142,59 @@ test('Windows PATH 解析优先 exe，无 exe 时使用 codex.cmd', () => {
   )
 })
 
+test('Window Keeper 使用隔离配置执行官方 codex exec', () => {
+  const outputPath = 'C:\\Temp\\window-keeper-output.txt'
+  const args = windowKeeperRunner.buildCodexExecArgs(
+    {
+      model: 'gpt-5.6-luna',
+      reasoningEffort: 'low',
+      prompt: '6'
+    },
+    outputPath
+  )
+
+  assert.deepEqual(args, [
+    'exec',
+    '--ignore-user-config',
+    '--ephemeral',
+    '--skip-git-repo-check',
+    '--model',
+    'gpt-5.6-luna',
+    '--config',
+    'model_reasoning_effort=low',
+    '--output-last-message',
+    outputPath,
+    '6'
+  ])
+})
+
+test('codex exec 退出码为 0 但没有模型回复仍判定失败', () => {
+  assert.doesNotThrow(() => windowKeeperRunner.assertCodexExecCompleted(0, '6'))
+  assert.throws(
+    () => windowKeeperRunner.assertCodexExecCompleted(0, '  '),
+    /without a completed model reply/
+  )
+  assert.throws(() => windowKeeperRunner.assertCodexExecCompleted(1, '6'), /exited with code 1/)
+})
+
+test('Window Keeper 不把父 Codex Desktop 内部环境传给子 CLI', () => {
+  const env = windowKeeperRunner.buildCodexCliEnvironment({
+    PATH: 'C:\\Windows',
+    CODEX_HOME: 'C:\\CodexHome',
+    CODEX_THREAD_ID: 'parent-thread',
+    CODEX_APP_TOOLS_PIPE_PATH: '\\\\.\\pipe\\parent-tools',
+    TERM: 'dumb'
+  })
+
+  assert.equal(env.PATH, 'C:\\Windows')
+  assert.equal(env.CODEX_HOME, 'C:\\CodexHome')
+  assert.equal(env.CODEX_THREAD_ID, undefined)
+  assert.equal(env.CODEX_APP_TOOLS_PIPE_PATH, undefined)
+  assert.equal(env.TERM, 'xterm-256color')
+})
+
 async function flush() {
-  await Promise.resolve()
-  await Promise.resolve()
+  await new Promise((resolve) => setImmediate(resolve))
 }
 
 function createKeeper({ clock, runner, persisted, onRefresh, onExhausted } = {}) {
@@ -232,12 +284,21 @@ test('reset_at 已过且窗口无使用记录时等待 10 秒后触发', async (
 
 test('成功触发后记录窗口 identity、成功时间并请求刷新', async () => {
   const resetAt = new Date(BASE_NOW - 1_000).toISOString()
+  const verifiedResetAt = new Date(BASE_NOW + 5 * 60 * 60 * 1000).toISOString()
   const runner = createRunner([undefined])
   let refreshCount = 0
   const { clock, keeper, persistedChanges, statuses } = createKeeper({
     runner,
     onRefresh: async () => {
       refreshCount += 1
+      return usageSnapshot({
+        rateLimits: [
+          fiveHourWindow({
+            resetAt: verifiedResetAt,
+            usedPercent: 1
+          })
+        ]
+      })
     }
   })
   keeper.updateSnapshot(
@@ -248,18 +309,66 @@ test('成功触发后记录窗口 identity、成功时间并请求刷新', async
 
   clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
   await flush()
+
+  assert.equal(refreshCount, 1)
+  assert.equal(persistedChanges.length, 0)
+  assert.equal(statuses.at(-1).state, 'verifying')
+
+  clock.advance(WINDOW_KEEPER_VERIFY_DELAY_MS)
+  await flush()
+
   const persisted = persistedChanges.at(-1)
   assert.deepEqual(persisted, {
     windowId: 'primary',
-    lastTriggeredAt: new Date(clock.nowMs).toISOString()
+    resetAt: verifiedResetAt,
+    lastTriggeredAt: new Date(BASE_NOW + WINDOW_KEEPER_TRIGGER_BUFFER_MS).toISOString(),
+    verified: true
   })
-  assert.equal(refreshCount, 1)
+  assert.equal(refreshCount, 2)
   assert.equal(statuses.at(-1).lastTriggeredAt, persisted.lastTriggeredAt)
+})
+
+test('额度验证成功后按新窗口 reset_at 安排下一轮', async () => {
+  const nextResetAtMs = BASE_NOW + 5 * 60 * 60 * 1000
+  const { clock, keeper } = createKeeper({
+    runner: createRunner([undefined]),
+    onRefresh: async () =>
+      usageSnapshot({
+        rateLimits: [
+          fiveHourWindow({ resetAt: new Date(nextResetAtMs).toISOString(), usedPercent: 1 })
+        ]
+      })
+  })
+  keeper.updateSnapshot(
+    usageSnapshot({
+      rateLimits: [fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString() })]
+    })
+  )
+
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  clock.advance(WINDOW_KEEPER_VERIFY_DELAY_MS)
+  await flush()
+
+  assert.equal(clock.activeTimers().length, 1)
+  assert.equal(clock.activeTimers()[0].dueAt, nextResetAtMs + WINDOW_KEEPER_TRIGGER_BUFFER_MS)
 })
 
 test('空窗口触发后 reset_at 滚动不会重建下一次调度', async () => {
   const runner = createRunner([undefined])
-  const { clock, keeper } = createKeeper({ runner })
+  const stableResetAt = new Date(BASE_NOW + 5 * 60 * 60 * 1000).toISOString()
+  const refreshSnapshots = [
+    usageSnapshot({
+      rateLimits: [fiveHourWindow({ resetAt: stableResetAt, usedPercent: 0 })]
+    }),
+    usageSnapshot({
+      rateLimits: [fiveHourWindow({ resetAt: stableResetAt, usedPercent: 0 })]
+    })
+  ]
+  const { clock, keeper } = createKeeper({
+    runner,
+    onRefresh: async () => refreshSnapshots.shift()
+  })
   const firstSnapshot = usageSnapshot({
     rateLimits: [
       fiveHourWindow({
@@ -287,6 +396,8 @@ test('空窗口触发后 reset_at 滚动不会重建下一次调度', async () =
 
   assert.equal(runner.calls.length, 1)
   assert.equal(clock.activeTimers().length, 1)
+  clock.advance(60_000)
+  await flush()
   assert.equal(
     clock.activeTimers()[0].dueAt,
     BASE_NOW +
@@ -310,7 +421,8 @@ test('应用重启后空窗口沿用 lastTriggeredAt 防止重复触发', () => 
     BASE_NOW,
     {
       windowId: 'primary',
-      lastTriggeredAt
+      lastTriggeredAt,
+      verified: true
     }
   )
 
@@ -552,7 +664,8 @@ test('应用重启后同一 reset_at 和窗口 identity 不重复触发', async 
     persisted: {
       windowId: 'primary',
       resetAt,
-      lastTriggeredAt: new Date(BASE_NOW - 500).toISOString()
+      lastTriggeredAt: new Date(BASE_NOW - 500).toISOString(),
+      verified: true
     }
   })
   keeper.updateSnapshot(
@@ -970,4 +1083,241 @@ test('weekly timer treats handle 0 as active and cancels on disable', () => {
 
   keeper.setEnabled(false)
   assert.deepEqual(cleared, [0])
+})
+
+test('CLI 完成后先验证官方额度再记录成功', async () => {
+  const clock = new FakeClock(BASE_NOW)
+  const runner = createRunner([undefined])
+  const stableResetAt = new Date(BASE_NOW + 5 * 60 * 60 * 1000).toISOString()
+  const refreshSnapshots = [
+    usageSnapshot({
+      rateLimits: [fiveHourWindow({ resetAt: stableResetAt, usedPercent: 0 })]
+    }),
+    usageSnapshot({
+      rateLimits: [fiveHourWindow({ resetAt: stableResetAt, usedPercent: 0 })]
+    })
+  ]
+  const { keeper, persistedChanges, statuses } = createKeeper({
+    clock,
+    runner,
+    onRefresh: async () => refreshSnapshots.shift()
+  })
+  keeper.updateSnapshot(
+    usageSnapshot({
+      rateLimits: [
+        fiveHourWindow({
+          resetAt: new Date(BASE_NOW + 60_000).toISOString(),
+          usedPercent: 0
+        })
+      ]
+    })
+  )
+
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+
+  assert.equal(statuses.at(-1).state, 'verifying')
+  assert.equal(persistedChanges.length, 0)
+
+  clock.advance(60_000)
+  await flush()
+
+  assert.equal(persistedChanges.length, 1)
+  assert.equal(persistedChanges[0].verified, true)
+  assert.equal(persistedChanges[0].resetAt, stableResetAt)
+})
+
+test('额度验证只依赖 reset_at，不要求 used_percent', async () => {
+  const clock = new FakeClock(BASE_NOW)
+  const stableResetAt = new Date(BASE_NOW + 5 * 60 * 60 * 1000).toISOString()
+  const windowWithoutUsage = () => {
+    const windowState = fiveHourWindow({ resetAt: stableResetAt })
+    delete windowState.usedPercent
+    delete windowState.remainingPercent
+    return windowState
+  }
+  const refreshSnapshots = [
+    usageSnapshot({ rateLimits: [windowWithoutUsage()] }),
+    usageSnapshot({ rateLimits: [windowWithoutUsage()] })
+  ]
+  const { keeper, persistedChanges } = createKeeper({
+    clock,
+    runner: createRunner([undefined]),
+    onRefresh: async () => refreshSnapshots.shift()
+  })
+  keeper.updateSnapshot(
+    usageSnapshot({
+      rateLimits: [fiveHourWindow({ resetAt: stableResetAt, usedPercent: 0 })]
+    })
+  )
+
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  clock.advance(WINDOW_KEEPER_VERIFY_DELAY_MS)
+  await flush()
+
+  assert.equal(persistedChanges.length, 1)
+  assert.equal(persistedChanges[0].resetAt, stableResetAt)
+})
+
+test('额度验证期间 reset_at 继续滚动会进入重试', async () => {
+  const clock = new FakeClock(BASE_NOW)
+  const firstResetAt = new Date(BASE_NOW + 5 * 60 * 60 * 1000).toISOString()
+  const secondResetAt = new Date(BASE_NOW + 5 * 60 * 60 * 1000 + 60_000).toISOString()
+  const refreshSnapshots = [
+    usageSnapshot({
+      rateLimits: [fiveHourWindow({ resetAt: firstResetAt, usedPercent: 0 })]
+    }),
+    usageSnapshot({
+      rateLimits: [fiveHourWindow({ resetAt: secondResetAt, usedPercent: 0 })]
+    })
+  ]
+  const { keeper, persistedChanges, statuses } = createKeeper({
+    clock,
+    runner: createRunner([undefined]),
+    onRefresh: async () => refreshSnapshots.shift()
+  })
+  keeper.updateSnapshot(
+    usageSnapshot({
+      rateLimits: [fiveHourWindow({ resetAt: firstResetAt, usedPercent: 0 })]
+    })
+  )
+
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  clock.advance(60_000)
+  await flush()
+
+  assert.equal(persistedChanges.length, 0)
+  assert.equal(statuses.at(-1).state, 'retrying')
+  assert.match(statuses.at(-1).recentError, /5h window/i)
+})
+
+test('剩余重试期限不足一分钟时不会提前判定 reset_at 稳定', async () => {
+  const clock = new FakeClock(BASE_NOW)
+  const stableResetAt = new Date(BASE_NOW + 5 * 60 * 60 * 1000).toISOString()
+  let refreshCount = 0
+  const { keeper, persistedChanges, statuses } = createKeeper({
+    clock,
+    runner: createRunner([undefined]),
+    onRefresh: async () => {
+      refreshCount += 1
+      if (refreshCount === 1) {
+        clock.nowMs += 9 * 60 * 1000 + 30_000
+      }
+      return usageSnapshot({
+        rateLimits: [fiveHourWindow({ resetAt: stableResetAt, usedPercent: 0 })]
+      })
+    }
+  })
+  keeper.updateSnapshot(
+    usageSnapshot({
+      rateLimits: [fiveHourWindow({ resetAt: stableResetAt, usedPercent: 0 })]
+    })
+  )
+
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  clock.advance(30_000)
+  await flush()
+
+  assert.equal(refreshCount, 1)
+  assert.equal(persistedChanges.length, 0)
+  assert.equal(statuses.at(-1).state, 'error')
+})
+
+test('CLI 无有效回复且官方周额度耗尽时等待周额度恢复', async () => {
+  const clock = new FakeClock(BASE_NOW)
+  const weeklyResetAt = new Date(BASE_NOW + 7 * 24 * 60 * 60 * 1000).toISOString()
+  const exhaustedSnapshot = usageSnapshot({
+    rateLimits: [
+      fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+      weeklyWindowWith({ usedPercent: 100, remainingPercent: 0, resetsAt: weeklyResetAt })
+    ]
+  })
+  const { keeper, statuses } = createKeeper({
+    clock,
+    runner: createRunner([new Error('Codex CLI session completed without a model reply')]),
+    onRefresh: async () => exhaustedSnapshot
+  })
+  keeper.updateSnapshot(
+    usageSnapshot({
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+        weeklyWindowWith({
+          usedPercent: 99,
+          remainingPercent: 1,
+          resetsAt: weeklyResetAt
+        })
+      ]
+    })
+  )
+
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+
+  assert.equal(statuses.at(-1).state, 'waiting-weekly-reset')
+  assert.equal(
+    statuses.at(-1).nextActionAt,
+    new Date(Date.parse(weeklyResetAt) + 10_000).toISOString()
+  )
+})
+
+test('旧版未验证成功记录不会阻止空窗口重新触发', () => {
+  const plan = calculateWindowKeeperPlan(
+    usageSnapshot({
+      rateLimits: [
+        fiveHourWindow({
+          resetAt: new Date(BASE_NOW + 60_000).toISOString(),
+          usedPercent: 0
+        })
+      ]
+    }),
+    BASE_NOW,
+    {
+      windowId: 'primary',
+      lastTriggeredAt: new Date(BASE_NOW - 60_000).toISOString()
+    }
+  )
+
+  assert.equal(plan.kind, 'wait-start')
+  assert.equal(plan.delayMs, WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+})
+
+test('旧版未验证成功时间不会显示为上次成功', () => {
+  const { statuses } = createKeeper({
+    persisted: {
+      windowId: 'primary',
+      lastTriggeredAt: new Date(BASE_NOW - 60_000).toISOString()
+    }
+  })
+
+  assert.equal(statuses[0].lastTriggeredAt, undefined)
+})
+
+test('验证额度期间关闭开关会取消验证 timer', async () => {
+  const stableResetAt = new Date(BASE_NOW + 5 * 60 * 60 * 1000).toISOString()
+  const { clock, keeper, persistedChanges, statuses } = createKeeper({
+    runner: createRunner([undefined]),
+    onRefresh: async () =>
+      usageSnapshot({
+        rateLimits: [fiveHourWindow({ resetAt: stableResetAt, usedPercent: 0 })]
+      })
+  })
+  keeper.updateSnapshot(
+    usageSnapshot({
+      rateLimits: [fiveHourWindow({ resetAt: stableResetAt, usedPercent: 0 })]
+    })
+  )
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+
+  assert.equal(statuses.at(-1).state, 'verifying')
+  keeper.setEnabled(false)
+  clock.advance(60_000)
+  await flush()
+
+  assert.equal(clock.activeTimers().length, 0)
+  assert.equal(persistedChanges.length, 0)
+  assert.equal(statuses.at(-1).state, 'disabled')
 })

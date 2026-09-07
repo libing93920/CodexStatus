@@ -223,6 +223,7 @@ const COPY = {
     windowKeeperWaitingReset: '等待 5h 重置',
     windowKeeperWaitingWindow: '等待 5h 窗口',
     windowKeeperTriggering: '正在触发',
+    windowKeeperVerifying: '正在验证额度',
     windowKeeperRetrying: '重试中',
     windowKeeperError: '异常'
   },
@@ -350,6 +351,7 @@ const COPY = {
     windowKeeperWaitingReset: 'Waiting for 5h reset',
     windowKeeperWaitingWindow: 'Waiting for 5h window',
     windowKeeperTriggering: 'Triggering',
+    windowKeeperVerifying: 'Verifying quota',
     windowKeeperRetrying: 'Retrying',
     windowKeeperError: 'Error'
   }
@@ -2625,6 +2627,8 @@ function resolveWindowKeeperStateLabel(
       return isEligible ? copy.windowKeeperWaitingReset : copy.windowKeeperWaitingWindow
     case 'triggering':
       return copy.windowKeeperTriggering
+    case 'verifying':
+      return copy.windowKeeperVerifying
     case 'retrying':
       return copy.windowKeeperRetrying
     case 'error':
