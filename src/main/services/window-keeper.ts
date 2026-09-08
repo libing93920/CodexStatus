@@ -17,7 +17,6 @@ export const RETRY_DELAYS_MS = [30_000, 60_000, 120_000, 240_000, 480_000] as co
 
 const FIVE_HOUR_WINDOW_MINUTES = 5 * 60
 const WEEKLY_WINDOW_MIN_MINUTES = 1440
-const FIVE_HOUR_WINDOW_MS = 5 * 60 * 60 * 1000
 const CLI_TIMEOUT_MS = 60_000
 const CODEX_CLI_REQUEST: CodexCliRequest = {
   model: 'gpt-5.6-luna',
@@ -50,7 +49,7 @@ export type WindowKeeperPlan =
       delayMs: number
     }
   | {
-      kind: 'wait-start'
+      kind: 'wait-start' | 'observe'
       windowId: string
       cycleKey: string
       triggerAtMs: number
@@ -65,7 +64,7 @@ export type WindowKeeperPlan =
     }
   | {
       kind: 'skip'
-      reason: 'already-started' | 'already-triggered' | 'not-eligible'
+      reason: 'not-eligible'
       windowId?: string
       resetAt?: string
     }
@@ -91,6 +90,8 @@ interface ActiveEvent {
   verifying: boolean
   triggeredAt?: string
   verificationResetAt?: string
+  observing?: boolean
+  requesting?: boolean
 }
 
 export function getFiveHourWindow(snapshot: UsageSnapshot): RateLimitWindowSnapshot | undefined {
@@ -155,72 +156,37 @@ export function calculateWindowKeeperPlan(
     }
   }
 
-  if (windowState.usedPercent === undefined || !Number.isFinite(windowState.usedPercent)) {
-    return { kind: 'wait-data' }
-  }
-
-  if (windowState.usedPercent <= 0) {
-    return calculateUnanchoredPlan(windowState.id, nowMs, persisted)
-  }
-
   const resetAt = windowState.resetsAt
-  const resetAtMs = resetAt ? Date.parse(resetAt) : NaN
-  if (!resetAt || !Number.isFinite(resetAtMs)) {
+  const resetAtMs = parseTimestamp(resetAt)
+  if (snapshot.rateLimitSource !== 'official' || !resetAt || resetAtMs === undefined) {
     return { kind: 'wait-data' }
   }
-
-  if (resetAtMs <= nowMs && isSamePersistedEvent(windowState.id, resetAt, persisted)) {
-    return {
-      kind: 'skip',
-      reason: 'already-triggered',
-      windowId: windowState.id,
-      resetAt
-    }
-  }
-
-  const triggerAtMs =
-    resetAtMs > nowMs
-      ? resetAtMs + WINDOW_KEEPER_TRIGGER_BUFFER_MS
-      : nowMs + WINDOW_KEEPER_TRIGGER_BUFFER_MS
-
   if (resetAtMs <= nowMs) {
     return {
-      kind: 'skip',
-      reason: 'already-started',
+      kind: 'wait-start',
       windowId: windowState.id,
-      resetAt
+      // 同一窗口在等待到期前后必须共用事件键，失败后不能被轮询重新开启。
+      cycleKey: createEventKey(windowState.id, resetAt),
+      triggerAtMs: nowMs + WINDOW_KEEPER_TRIGGER_BUFFER_MS,
+      delayMs: WINDOW_KEEPER_TRIGGER_BUFFER_MS
     }
   }
-
+  if (!isSamePersistedEvent(windowState.id, resetAt, persisted)) {
+    return {
+      kind: 'observe',
+      windowId: windowState.id,
+      cycleKey: `${windowState.id}:observe:${persisted?.resetAt ?? 'initial'}`,
+      triggerAtMs: nowMs + WINDOW_KEEPER_VERIFY_DELAY_MS,
+      delayMs: WINDOW_KEEPER_VERIFY_DELAY_MS
+    }
+  }
+  const triggerAtMs = resetAtMs + WINDOW_KEEPER_TRIGGER_BUFFER_MS
   return {
     kind: 'wait-reset',
     windowId: windowState.id,
     resetAt,
     triggerAtMs,
-    delayMs: Math.max(0, triggerAtMs - nowMs)
-  }
-}
-
-function calculateUnanchoredPlan(
-  windowId: string,
-  nowMs: number,
-  persisted: WindowKeeperPersistedState | undefined
-): Extract<WindowKeeperPlan, { kind: 'wait-start' }> {
-  const lastTriggeredAtMs =
-    persisted?.verified === true && persisted.windowId === windowId
-      ? parseTimestamp(persisted.lastTriggeredAt)
-      : undefined
-  const nextWindowAtMs =
-    lastTriggeredAtMs === undefined ? nowMs : lastTriggeredAtMs + FIVE_HOUR_WINDOW_MS
-  const triggerAtMs = Math.max(nowMs, nextWindowAtMs) + WINDOW_KEEPER_TRIGGER_BUFFER_MS
-  const cycleKey = `${windowId}:unanchored:${lastTriggeredAtMs ?? 'initial'}`
-
-  return {
-    kind: 'wait-start',
-    windowId,
-    cycleKey,
-    triggerAtMs,
-    delayMs: Math.max(0, triggerAtMs - nowMs)
+    delayMs: triggerAtMs - nowMs
   }
 }
 
@@ -231,6 +197,7 @@ export class WindowKeeper {
   private readonly onPersistenceChange?: (state: WindowKeeperPersistedState) => void
   private readonly onExhausted?: (error: string) => void
   private readonly timer: TimerApi
+  private observedWindow: WindowKeeperPersistedState | undefined
   private persisted: WindowKeeperPersistedState
   private enabled: boolean
   private stopped = false
@@ -314,7 +281,11 @@ export class WindowKeeper {
       return
     }
 
-    const plan = calculateWindowKeeperPlan(this.snapshot, this.timer.now(), this.persisted)
+    const plan = calculateWindowKeeperPlan(
+      this.snapshot,
+      this.timer.now(),
+      this.observedWindow ?? this.persisted
+    )
     if (plan.kind === 'wait-data') {
       this.cancelActiveEvent()
       this.cancelWeeklyTimer()
@@ -364,10 +335,7 @@ export class WindowKeeper {
     this.cancelWeeklyTimer()
     if (plan.kind === 'skip') {
       this.cancelActiveEvent()
-      this.finishedEventKey =
-        plan.reason === 'not-eligible' || !plan.windowId || !plan.resetAt
-          ? undefined
-          : createEventKey(plan.windowId, plan.resetAt)
+      this.finishedEventKey = undefined
       this.setStatus({
         state: 'waiting-reset',
         nextActionAt: undefined,
@@ -376,8 +344,13 @@ export class WindowKeeper {
       return
     }
 
+    // 普通同步不能重建进行中的请求或重试，否则会延长本轮截止时间。
+    if (this.activeEvent && (this.activeEvent.requesting || this.activeEvent.retryIndex > 0)) {
+      return
+    }
+
     const eventKey =
-      plan.kind === 'wait-start' ? plan.cycleKey : createEventKey(plan.windowId, plan.resetAt)
+      plan.kind !== 'wait-reset' ? plan.cycleKey : createEventKey(plan.windowId, plan.resetAt)
     if (this.finishedEventKey === eventKey) {
       if (this.status.state === 'error') {
         return
@@ -399,7 +372,7 @@ export class WindowKeeper {
   }
 
   private startEvent(
-    plan: Extract<WindowKeeperPlan, { kind: 'wait-start' | 'wait-reset' }>,
+    plan: Extract<WindowKeeperPlan, { kind: 'wait-start' | 'observe' | 'wait-reset' }>,
     key: string
   ): void {
     const event: ActiveEvent = {
@@ -411,12 +384,17 @@ export class WindowKeeper {
       retryIndex: 0,
       timerEndsEvent: false,
       running: false,
-      verifying: false
+      verifying: plan.kind === 'observe',
+      observing: plan.kind === 'observe',
+      verificationResetAt:
+        plan.kind === 'observe' && this.snapshot
+          ? getFiveHourWindow(this.snapshot)?.resetsAt
+          : undefined
     }
     this.activeEvent = event
     this.scheduleTimer(event, plan.delayMs, false)
     this.setStatus({
-      state: 'waiting-reset',
+      state: plan.kind === 'observe' ? 'verifying' : 'waiting-reset',
       nextActionAt: new Date(plan.triggerAtMs).toISOString(),
       recentError: undefined
     })
@@ -434,10 +412,46 @@ export class WindowKeeper {
           this.finishError(event)
           return
         }
-        void this.triggerEvent(event)
+        void (event.observing ? this.observeWindow(event) : this.triggerEvent(event))
       },
       Math.max(0, delayMs)
     )
+  }
+
+  private async observeWindow(event: ActiveEvent): Promise<void> {
+    if (this.timer.now() >= event.deadlineAtMs) {
+      this.finishError(event)
+      return
+    }
+    event.verifying = true
+    const snapshot = await this.refreshForEvent(event)
+    if (!snapshot || this.activeEvent !== event) return
+    const windowState = this.resolveVerificationWindow(event, snapshot)
+    if (!windowState) return
+    const resetAtMs = parseTimestamp(windowState.resetsAt)
+    if (resetAtMs === undefined) {
+      this.failVerification(event, 'Official 5h window has no valid reset_at')
+      return
+    }
+    if (resetAtMs > this.timer.now() && windowState.resetsAt === event.verificationResetAt) {
+      // 观察确认不代表本工具发送过请求，不改写上次 CLI 成功记录。
+      this.observedWindow = {
+        windowId: windowState.id,
+        resetAt: windowState.resetsAt,
+        verified: true
+      }
+      this.cancelActiveEvent()
+      this.reconcile()
+      return
+    }
+    event.observing = false
+    event.verifying = false
+    event.requesting = true
+    this.scheduleTimer(event, WINDOW_KEEPER_TRIGGER_BUFFER_MS, false)
+    this.setStatus({
+      state: 'waiting-reset',
+      nextActionAt: new Date(this.timer.now() + WINDOW_KEEPER_TRIGGER_BUFFER_MS).toISOString()
+    })
   }
 
   private async triggerEvent(event: ActiveEvent): Promise<void> {
@@ -449,6 +463,7 @@ export class WindowKeeper {
       return
     }
 
+    event.requesting = true
     event.running = true
     const controller = new AbortController()
     event.controller = controller
@@ -552,7 +567,10 @@ export class WindowKeeper {
       this.failVerification(event, 'Official 5h window has no reset_at')
       return
     }
-    if (windowState.resetsAt === event.verificationResetAt) {
+    if (
+      windowState.resetsAt === event.verificationResetAt &&
+      (parseTimestamp(windowState.resetsAt) ?? 0) > this.timer.now()
+    ) {
       this.finishSuccess(event, windowState)
       return
     }
@@ -702,6 +720,7 @@ export class WindowKeeper {
       lastTriggeredAt: triggeredAt,
       verified: true
     }
+    this.observedWindow = undefined
     this.persisted = nextPersisted
     this.onPersistenceChange?.({ ...this.persisted })
     this.cancelActiveEvent()

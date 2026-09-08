@@ -12,7 +12,140 @@ import {
 import * as windowKeeperRunner from '../src/main/services/window-keeper-runner.ts'
 
 const BASE_NOW = Date.parse('2026-09-04T00:00:00.000Z')
+
+test('已确认 resetAt 不受使用率和 CLI 完成时间影响', () => {
+  const resetAt = new Date(BASE_NOW + 120_000).toISOString()
+  const persisted = {
+    windowId: 'primary',
+    resetAt,
+    verified: true,
+    lastTriggeredAt: new Date(BASE_NOW - 60_000).toISOString()
+  }
+  for (const usedPercent of [0, 20, undefined]) {
+    const window = { ...fiveHourWindow({ resetAt }), usedPercent }
+    const plan = calculateWindowKeeperPlan(
+      usageSnapshot({ rateLimits: [window] }),
+      BASE_NOW,
+      persisted
+    )
+    assert.equal(plan.kind, 'wait-reset')
+    assert.equal(plan.delayMs, 130_000)
+  }
+})
+
+test('未知未来窗口先观察，稳定时不调用 CLI，不伪造成功记录', async () => {
+  const resetAt = new Date(BASE_NOW + 3_600_000).toISOString()
+  const snapshot = usageSnapshot({ rateLimits: [fiveHourWindow({ resetAt })] })
+  const runner = createRunner()
+  const { clock, keeper, persistedChanges } = createKeeper({
+    runner,
+    onRefresh: async () => snapshot
+  })
+  keeper.updateSnapshot(snapshot)
+  assert.equal(keeper.getStatus().state, 'verifying')
+  clock.advance(WINDOW_KEEPER_VERIFY_DELAY_MS)
+  await flush()
+  assert.equal(runner.calls.length, 0)
+  assert.equal(persistedChanges.length, 0)
+  assert.equal(
+    keeper.getStatus().nextActionAt,
+    new Date(Date.parse(resetAt) + 10_000).toISOString()
+  )
+  keeper.stop()
+})
 const { selectCodexExecutablePath } = windowKeeperRunner
+
+test('官方改变 resetAt 后稳定则跟随新窗口，不依赖使用率', async () => {
+  for (const usedPercent of [0, 20, undefined]) {
+    const oldResetAt = new Date(BASE_NOW + 120_000).toISOString()
+    const resetAt = new Date(BASE_NOW + 3_600_000).toISOString()
+    const snapshot = usageSnapshot({
+      rateLimits: [{ ...fiveHourWindow({ resetAt }), usedPercent }]
+    })
+    const runner = createRunner()
+    const { clock, keeper, persistedChanges } = createKeeper({
+      runner,
+      persisted: { windowId: 'primary', resetAt: oldResetAt, verified: true },
+      onRefresh: async () => snapshot
+    })
+    keeper.updateSnapshot(snapshot)
+    clock.advance(WINDOW_KEEPER_VERIFY_DELAY_MS)
+    await flush()
+    assert.equal(runner.calls.length, 0)
+    assert.equal(persistedChanges.length, 0)
+    assert.equal(clock.activeTimers()[0].dueAt, Date.parse(resetAt) + 10_000)
+    clock.advance(Date.parse(resetAt) + 10_000 - clock.nowMs)
+    await flush()
+    assert.equal(runner.calls.length, 1)
+    keeper.stop()
+  }
+})
+
+test('观察失败只重试查询，恢复后时间滚动才发送 CLI', async () => {
+  const firstResetAt = new Date(BASE_NOW + 3_600_000).toISOString()
+  const secondResetAt = new Date(BASE_NOW + 3_660_000).toISOString()
+  let refreshCount = 0
+  const runner = createRunner()
+  const { clock, keeper } = createKeeper({
+    runner,
+    onRefresh: async () => {
+      if (++refreshCount === 1) throw new Error('offline')
+      return usageSnapshot({
+        rateLimits: [fiveHourWindow({ resetAt: secondResetAt, usedPercent: 20 })]
+      })
+    }
+  })
+  keeper.updateSnapshot(
+    usageSnapshot({ rateLimits: [fiveHourWindow({ resetAt: firstResetAt, usedPercent: 20 })] })
+  )
+  clock.advance(WINDOW_KEEPER_VERIFY_DELAY_MS)
+  await flush()
+  assert.equal(keeper.getStatus().state, 'retrying')
+  assert.equal(runner.calls.length, 0)
+  clock.advance(RETRY_DELAYS_MS[0])
+  await flush()
+  assert.equal(runner.calls.length, 0)
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  assert.equal(runner.calls.length, 1)
+  keeper.stop()
+})
+
+test('观察查询返回前关闭功能，不重新创建调度', async () => {
+  const resetAt = new Date(BASE_NOW + 3_600_000).toISOString()
+  const snapshot = usageSnapshot({ rateLimits: [fiveHourWindow({ resetAt })] })
+  let resolveRefresh
+  const runner = createRunner()
+  const { clock, keeper } = createKeeper({
+    runner,
+    onRefresh: () =>
+      new Promise((resolve) => {
+        resolveRefresh = resolve
+      })
+  })
+  keeper.updateSnapshot(snapshot)
+  clock.advance(WINDOW_KEEPER_VERIFY_DELAY_MS)
+  keeper.setEnabled(false)
+  resolveRefresh(snapshot)
+  await flush()
+  assert.equal(clock.activeTimers().length, 0)
+  assert.equal(runner.calls.length, 0)
+  assert.equal(keeper.getStatus().state, 'disabled')
+})
+
+test('CLI 后重复返回已到期 resetAt 不算成功', async () => {
+  const resetAt = new Date(BASE_NOW - 1_000).toISOString()
+  const snapshot = usageSnapshot({ rateLimits: [fiveHourWindow({ resetAt })] })
+  const { clock, keeper, persistedChanges } = createKeeper({ onRefresh: async () => snapshot })
+  keeper.updateSnapshot(snapshot)
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  clock.advance(WINDOW_KEEPER_VERIFY_DELAY_MS)
+  await flush()
+  assert.equal(persistedChanges.length, 0)
+  assert.equal(keeper.getStatus().state, 'retrying')
+  keeper.stop()
+})
 
 class FakeClock {
   constructor(nowMs) {
@@ -156,6 +289,8 @@ test('Window Keeper 使用隔离配置执行官方 codex exec', () => {
   assert.deepEqual(args, [
     'exec',
     '--ignore-user-config',
+    '--enable',
+    'respect_system_proxy',
     '--ephemeral',
     '--skip-git-repo-check',
     '--model',
@@ -268,7 +403,7 @@ test('reset_at 未到时计算 reset_at 加 10 秒的等待时间', () => {
       rateLimits: [fiveHourWindow({ resetAt: new Date(resetAtMs).toISOString(), usedPercent: 20 })]
     }),
     BASE_NOW,
-    undefined
+    { windowId: 'primary', resetAt: new Date(resetAtMs).toISOString(), verified: true }
   )
 
   assert.equal(plan.kind, 'wait-reset')
@@ -276,7 +411,7 @@ test('reset_at 未到时计算 reset_at 加 10 秒的等待时间', () => {
   assert.equal(plan.triggerAtMs, resetAtMs + WINDOW_KEEPER_TRIGGER_BUFFER_MS)
 })
 
-test('used_percent 为 0 时忽略未来滚动 reset_at 并在 10 秒后触发', () => {
+test('未知未来 reset_at 先观察而不根据零使用率触发', () => {
   const plan = calculateWindowKeeperPlan(
     usageSnapshot({
       rateLimits: [
@@ -290,9 +425,9 @@ test('used_percent 为 0 时忽略未来滚动 reset_at 并在 10 秒后触发',
     undefined
   )
 
-  assert.equal(plan.kind, 'wait-start')
-  assert.equal(plan.delayMs, WINDOW_KEEPER_TRIGGER_BUFFER_MS)
-  assert.equal(plan.triggerAtMs, BASE_NOW + WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  assert.equal(plan.kind, 'observe')
+  assert.equal(plan.delayMs, WINDOW_KEEPER_VERIFY_DELAY_MS)
+  assert.equal(plan.triggerAtMs, BASE_NOW + WINDOW_KEEPER_VERIFY_DELAY_MS)
 })
 
 test('reset_at 已过且窗口无使用记录时等待 10 秒后触发', async () => {
@@ -377,7 +512,7 @@ test('额度验证成功后按新窗口 reset_at 安排下一轮', async () => {
   })
   keeper.updateSnapshot(
     usageSnapshot({
-      rateLimits: [fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString() })]
+      rateLimits: [fiveHourWindow({ resetAt: new Date(BASE_NOW - 1_000).toISOString() })]
     })
   )
 
@@ -408,7 +543,7 @@ test('空窗口触发后 reset_at 滚动不会重建下一次调度', async () =
   const firstSnapshot = usageSnapshot({
     rateLimits: [
       fiveHourWindow({
-        resetAt: new Date(BASE_NOW + 60 * 60 * 1000).toISOString(),
+        resetAt: new Date(BASE_NOW - 1_000).toISOString(),
         usedPercent: 0
       })
     ]
@@ -436,14 +571,11 @@ test('空窗口触发后 reset_at 滚动不会重建下一次调度', async () =
   await flush()
   assert.equal(
     clock.activeTimers()[0].dueAt,
-    BASE_NOW +
-      WINDOW_KEEPER_TRIGGER_BUFFER_MS +
-      5 * 60 * 60 * 1000 +
-      WINDOW_KEEPER_TRIGGER_BUFFER_MS
+    BASE_NOW + 5 * 60 * 60 * 1000 + WINDOW_KEEPER_TRIGGER_BUFFER_MS
   )
 })
 
-test('应用重启后空窗口沿用 lastTriggeredAt 防止重复触发', () => {
+test('应用重启后沿用已确认 resetAt 防止重复触发', () => {
   const lastTriggeredAt = new Date(BASE_NOW - 60_000).toISOString()
   const plan = calculateWindowKeeperPlan(
     usageSnapshot({
@@ -457,16 +589,17 @@ test('应用重启后空窗口沿用 lastTriggeredAt 防止重复触发', () => 
     BASE_NOW,
     {
       windowId: 'primary',
+      resetAt: new Date(BASE_NOW + 60 * 60 * 1000).toISOString(),
       lastTriggeredAt,
       verified: true
     }
   )
 
-  assert.equal(plan.kind, 'wait-start')
-  assert.equal(plan.delayMs, 5 * 60 * 60 * 1000 + WINDOW_KEEPER_TRIGGER_BUFFER_MS - 60_000)
+  assert.equal(plan.kind, 'wait-reset')
+  assert.equal(plan.delayMs, 60 * 60 * 1000 + WINDOW_KEEPER_TRIGGER_BUFFER_MS)
 })
 
-test('使用率变为正值后按官方 reset_at 调度', () => {
+test('观察期间使用率变化不跳过时间稳定性检查', () => {
   const clock = new FakeClock(BASE_NOW)
   const runner = createRunner()
   const { keeper } = createKeeper({ clock, runner })
@@ -494,10 +627,10 @@ test('使用率变为正值后按官方 reset_at 调度', () => {
   )
 
   assert.equal(clock.activeTimers().length, 1)
-  assert.equal(clock.activeTimers()[0].dueAt, resetAtMs + WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  assert.equal(clock.activeTimers()[0].dueAt, BASE_NOW + WINDOW_KEEPER_VERIFY_DELAY_MS)
 })
 
-test('reset_at 已过但窗口已有使用记录时跳过', async () => {
+test('reset_at 已过即触发，不受残留使用率影响', async () => {
   const runner = createRunner()
   const { clock, keeper } = createKeeper({ runner })
   keeper.updateSnapshot(
@@ -513,8 +646,8 @@ test('reset_at 已过但窗口已有使用记录时跳过', async () => {
 
   clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS + 1)
   await flush()
-  assert.equal(runner.calls.length, 0)
-  assert.equal(clock.activeTimers().length, 0)
+  assert.equal(runner.calls.length, 1)
+  assert.equal(clock.activeTimers().length, 1)
 })
 
 test('5h 窗口不存在时不触发', async () => {
@@ -600,6 +733,39 @@ test('单次 reset 事件在 10 分钟后结束重试并进入异常', async () 
   clock.advance(10 * 60 * 1000)
   await flush()
   assert.equal(exhaustedCount, 1)
+})
+
+test('未来 resetAt 到期后的失败事件不会被后续同步重新开启', async () => {
+  const resetAt = new Date(BASE_NOW + 60_000).toISOString()
+  const runner = createRunner([
+    new Error('first'),
+    new Error('second'),
+    new Error('third'),
+    new Error('fourth'),
+    new Error('fifth')
+  ])
+  const { clock, keeper, statuses } = createKeeper({
+    runner,
+    persisted: { windowId: 'primary', resetAt, verified: true }
+  })
+  keeper.updateSnapshot(
+    usageSnapshot({ rateLimits: [fiveHourWindow({ resetAt, usedPercent: 20 })] })
+  )
+  clock.advance(70_000)
+  await flush()
+  for (const delayMs of RETRY_DELAYS_MS.slice(0, 4)) {
+    clock.advance(delayMs)
+    await flush()
+  }
+  clock.advance(WINDOW_KEEPER_MAX_RETRY_DURATION_MS - 450_000)
+  await flush()
+  assert.equal(statuses.at(-1).state, 'error')
+  const callsAfterError = runner.calls.length
+  keeper.updateSnapshot(
+    usageSnapshot({ rateLimits: [fiveHourWindow({ resetAt, usedPercent: 20 })] })
+  )
+  assert.equal(runner.calls.length, callsAfterError)
+  assert.equal(statuses.at(-1).state, 'error')
 })
 
 test('初始等待 timer 延迟到重试截止后会进入异常', async () => {
@@ -693,7 +859,7 @@ test('重复设置相同开关值时不重置当前调度', () => {
 })
 
 test('应用重启后同一 reset_at 和窗口 identity 不重复触发', async () => {
-  const resetAt = new Date(BASE_NOW - 1_000).toISOString()
+  const resetAt = new Date(BASE_NOW + 3_600_000).toISOString()
   const runner = createRunner()
   const { clock, keeper } = createKeeper({
     runner,
@@ -716,7 +882,7 @@ test('应用重启后同一 reset_at 和窗口 identity 不重复触发', async 
 })
 
 test('API 模式暂不可用后恢复到 ChatGPT 时仍会调度同一窗口', async () => {
-  const resetAt = new Date(BASE_NOW + 60_000).toISOString()
+  const resetAt = new Date(BASE_NOW - 1_000).toISOString()
   const runner = createRunner()
   const { clock, keeper } = createKeeper({ runner })
   const rateLimits = [fiveHourWindow({ resetAt, usedPercent: 0 })]
@@ -729,7 +895,7 @@ test('API 模式暂不可用后恢复到 ChatGPT 时仍会调度同一窗口', a
   assert.equal(runner.calls.length, 1)
 })
 
-test('新快照确认窗口已有使用后取消当前重试流程', async () => {
+test('使用率变化不会清除已过期窗口的重试状态', async () => {
   const runner = createRunner([new Error('temporary')])
   const { clock, keeper, statuses } = createKeeper({ runner })
   const resetAt = new Date(BASE_NOW - 1_000).toISOString()
@@ -750,7 +916,7 @@ test('新快照确认窗口已有使用后取消当前重试流程', async () =>
   clock.advance(10 * 60 * 1000)
   await flush()
   assert.equal(runner.calls.length, 1)
-  assert.equal(statuses.at(-1).state, 'waiting-reset')
+  assert.equal(statuses.at(-1).state, 'error')
 })
 
 test('关闭开关会取消正在运行的 runner', async () => {
@@ -951,7 +1117,7 @@ test('recovered weekly quota cancels weekly timer', async () => {
 
   assert.equal(weeklyTimer.cleared, true)
   assert.equal(clock.activeTimers().length, 1)
-  assert.equal(clock.activeTimers()[0].dueAt, BASE_NOW + WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  assert.equal(clock.activeTimers()[0].dueAt, BASE_NOW + WINDOW_KEEPER_VERIFY_DELAY_MS)
 })
 
 test('recovered weekly quota resumes existing 5h empty/used logic', async () => {
@@ -961,7 +1127,7 @@ test('recovered weekly quota resumes existing 5h empty/used logic', async () => 
   keeper.updateSnapshot(
     usageSnapshot({
       rateLimits: [
-        fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+        fiveHourWindow({ resetAt: new Date(BASE_NOW - 1_000).toISOString(), usedPercent: 0 }),
         weeklyWindowWith({
           usedPercent: 100,
           remainingPercent: 0,
@@ -973,7 +1139,7 @@ test('recovered weekly quota resumes existing 5h empty/used logic', async () => 
   keeper.updateSnapshot(
     usageSnapshot({
       rateLimits: [
-        fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+        fiveHourWindow({ resetAt: new Date(BASE_NOW - 1_000).toISOString(), usedPercent: 0 }),
         weeklyWindowWith({
           usedPercent: 20,
           remainingPercent: 80,
@@ -1011,7 +1177,7 @@ test('exhausted weekly quota does not start CLI early', async () => {
   assert.equal(clock.activeTimers().length, 1)
 })
 
-test('local fallback weekly exhaustion does not pause 5h scheduling', () => {
+test('local quota cannot establish an official window schedule', () => {
   const plan = calculateWindowKeeperPlan(
     usageSnapshot({
       rateLimitSource: 'local',
@@ -1028,7 +1194,7 @@ test('local fallback weekly exhaustion does not pause 5h scheduling', () => {
     undefined
   )
 
-  assert.equal(plan.kind, 'wait-start')
+  assert.equal(plan.kind, 'wait-data')
 })
 
 test('changing weekly resetAt cancels and reschedules the active weekly timer', async () => {
@@ -1142,7 +1308,7 @@ test('CLI 完成后先验证官方额度再记录成功', async () => {
     usageSnapshot({
       rateLimits: [
         fiveHourWindow({
-          resetAt: new Date(BASE_NOW + 60_000).toISOString(),
+          resetAt: new Date(BASE_NOW - 1_000).toISOString(),
           usedPercent: 0
         })
       ]
@@ -1183,7 +1349,9 @@ test('额度验证只依赖 reset_at，不要求 used_percent', async () => {
   })
   keeper.updateSnapshot(
     usageSnapshot({
-      rateLimits: [fiveHourWindow({ resetAt: stableResetAt, usedPercent: 0 })]
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW - 1_000).toISOString(), usedPercent: 0 })
+      ]
     })
   )
 
@@ -1215,7 +1383,9 @@ test('额度验证期间 reset_at 继续滚动会进入重试', async () => {
   })
   keeper.updateSnapshot(
     usageSnapshot({
-      rateLimits: [fiveHourWindow({ resetAt: firstResetAt, usedPercent: 0 })]
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW - 1_000).toISOString(), usedPercent: 0 })
+      ]
     })
   )
 
@@ -1248,7 +1418,9 @@ test('剩余重试期限不足一分钟时不会提前判定 reset_at 稳定', a
   })
   keeper.updateSnapshot(
     usageSnapshot({
-      rateLimits: [fiveHourWindow({ resetAt: stableResetAt, usedPercent: 0 })]
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW - 1_000).toISOString(), usedPercent: 0 })
+      ]
     })
   )
 
@@ -1267,7 +1439,7 @@ test('CLI 无有效回复且官方周额度耗尽时等待周额度恢复', asyn
   const weeklyResetAt = new Date(BASE_NOW + 7 * 24 * 60 * 60 * 1000).toISOString()
   const exhaustedSnapshot = usageSnapshot({
     rateLimits: [
-      fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+      fiveHourWindow({ resetAt: new Date(BASE_NOW - 1_000).toISOString(), usedPercent: 0 }),
       weeklyWindowWith({ usedPercent: 100, remainingPercent: 0, resetsAt: weeklyResetAt })
     ]
   })
@@ -1279,7 +1451,7 @@ test('CLI 无有效回复且官方周额度耗尽时等待周额度恢复', asyn
   keeper.updateSnapshot(
     usageSnapshot({
       rateLimits: [
-        fiveHourWindow({ resetAt: new Date(BASE_NOW + 60_000).toISOString(), usedPercent: 0 }),
+        fiveHourWindow({ resetAt: new Date(BASE_NOW - 1_000).toISOString(), usedPercent: 0 }),
         weeklyWindowWith({
           usedPercent: 99,
           remainingPercent: 1,
@@ -1299,7 +1471,7 @@ test('CLI 无有效回复且官方周额度耗尽时等待周额度恢复', asyn
   )
 })
 
-test('旧版未验证成功记录不会阻止空窗口重新触发', () => {
+test('未验证记录不会跳过未来窗口的观察', () => {
   const plan = calculateWindowKeeperPlan(
     usageSnapshot({
       rateLimits: [
@@ -1316,8 +1488,8 @@ test('旧版未验证成功记录不会阻止空窗口重新触发', () => {
     }
   )
 
-  assert.equal(plan.kind, 'wait-start')
-  assert.equal(plan.delayMs, WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  assert.equal(plan.kind, 'observe')
+  assert.equal(plan.delayMs, WINDOW_KEEPER_VERIFY_DELAY_MS)
 })
 
 test('旧版未验证成功时间不会显示为上次成功', () => {
@@ -1329,6 +1501,81 @@ test('旧版未验证成功时间不会显示为上次成功', () => {
   })
 
   assert.equal(statuses[0].lastTriggeredAt, undefined)
+})
+
+test('官方重置后时间滚动才补请求，连续同步不推迟观察，验证后按 resetAt 等待', async () => {
+  const oldResetAt = new Date(BASE_NOW + 3 * 60 * 60 * 1000).toISOString()
+  const newResetAt = new Date(BASE_NOW + 5 * 60 * 60 * 1000).toISOString()
+  const runner = createRunner()
+  const snapshot = (resetAt, usedPercent = 0) =>
+    usageSnapshot({ rateLimits: [fiveHourWindow({ resetAt, usedPercent })] })
+  const { clock, keeper, persistedChanges } = createKeeper({
+    runner,
+    persisted: {
+      windowId: 'primary',
+      resetAt: oldResetAt,
+      lastTriggeredAt: new Date(BASE_NOW - 2 * 60 * 60 * 1000).toISOString(),
+      verified: true
+    },
+    onRefresh: async () => snapshot(new Date(Date.parse(newResetAt) + 60_000).toISOString())
+  })
+  keeper.updateSnapshot(snapshot(oldResetAt, 20))
+  const oldTimer = clock.activeTimers()[0]
+  keeper.updateSnapshot(snapshot(newResetAt))
+  assert.equal(oldTimer.cleared, true)
+  assert.equal(clock.activeTimers()[0].dueAt, BASE_NOW + WINDOW_KEEPER_VERIFY_DELAY_MS)
+  clock.advance(5_000)
+  keeper.updateSnapshot(snapshot(new Date(Date.parse(newResetAt) + 5_000).toISOString()))
+  assert.equal(clock.activeTimers()[0].dueAt, BASE_NOW + WINDOW_KEEPER_VERIFY_DELAY_MS)
+  assert.equal(runner.calls.length, 0)
+  clock.advance(55_000)
+  await flush()
+  assert.equal(runner.calls.length, 0)
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  assert.equal(runner.calls.length, 1)
+  clock.advance(WINDOW_KEEPER_VERIFY_DELAY_MS)
+  await flush()
+  assert.equal(
+    persistedChanges.at(-1).resetAt,
+    new Date(Date.parse(newResetAt) + 60_000).toISOString()
+  )
+  keeper.updateSnapshot(snapshot(new Date(Date.parse(newResetAt) + 60_000).toISOString()))
+  assert.equal(runner.calls.length, 1)
+  assert.equal(
+    clock.activeTimers()[0].dueAt,
+    Date.parse(newResetAt) + 60_000 + WINDOW_KEEPER_TRIGGER_BUFFER_MS
+  )
+  keeper.stop()
+})
+
+test('官方窗口变化统一观察，无效或本地数据不触发', () => {
+  const oldResetAt = new Date(BASE_NOW + 3 * 60 * 60 * 1000).toISOString()
+  const newResetAt = new Date(BASE_NOW + 5 * 60 * 60 * 1000).toISOString()
+  const persisted = {
+    windowId: 'primary',
+    resetAt: oldResetAt,
+    lastTriggeredAt: new Date(BASE_NOW - 2 * 60 * 60 * 1000).toISOString(),
+    verified: true
+  }
+  for (const { source, resetAt, usedPercent, expectedDelay } of [
+    { source: 'official', resetAt: newResetAt, usedPercent: 0, expectedDelay: 60_000 },
+    { source: 'official', resetAt: oldResetAt, usedPercent: 0, expectedDelay: 10_810_000 },
+    { source: 'local', resetAt: newResetAt, usedPercent: 0, expectedDelay: undefined },
+    { source: 'official', resetAt: undefined, usedPercent: 0, expectedDelay: undefined },
+    { source: 'official', resetAt: 'invalid', usedPercent: 0, expectedDelay: undefined },
+    { source: 'official', resetAt: newResetAt, usedPercent: 2, expectedDelay: 60_000 }
+  ]) {
+    const plan = calculateWindowKeeperPlan(
+      usageSnapshot({
+        rateLimitSource: source,
+        rateLimits: [fiveHourWindow({ resetAt, usedPercent })]
+      }),
+      BASE_NOW,
+      persisted
+    )
+    assert.equal(plan.delayMs, expectedDelay, `${source}/${resetAt}/${usedPercent}`)
+  }
 })
 
 test('验证额度期间关闭开关会取消验证 timer', async () => {

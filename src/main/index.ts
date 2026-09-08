@@ -334,7 +334,12 @@ if (hasSingleInstanceLock) {
       enabled: persistedState.settings.autoKeep5hWindow,
       persisted: persistedState.windowKeeper,
       onRefresh: async () => {
+        const previousGeneratedAt = currentSnapshot.generatedAt
         await refreshStatus({ forceCredentialCheck: true })
+        // 刷新失败时界面会保留旧快照，不能把它当作第二次窗口稳定性证据。
+        if (currentSnapshot.generatedAt === previousGeneratedAt) {
+          throw new Error('Quota refresh did not return a fresh snapshot')
+        }
         return currentSnapshot
       },
       onStatusChange: applyWindowKeeperStatus,

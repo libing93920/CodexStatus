@@ -63,6 +63,8 @@ export function buildCodexExecArgs(request: CodexCliRequest, outputPath: string)
   return [
     'exec',
     '--ignore-user-config',
+    '--enable',
+    'respect_system_proxy',
     '--ephemeral',
     '--skip-git-repo-check',
     '--model',
