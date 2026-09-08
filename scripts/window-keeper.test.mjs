@@ -1364,7 +1364,7 @@ test('额度验证只依赖 reset_at，不要求 used_percent', async () => {
   assert.equal(persistedChanges[0].resetAt, stableResetAt)
 })
 
-test('额度验证期间 reset_at 继续滚动会进入重试', async () => {
+test('额度验证期间 reset_at 先变化后固定会继续观察并成功', async () => {
   const clock = new FakeClock(BASE_NOW)
   const firstResetAt = new Date(BASE_NOW + 5 * 60 * 60 * 1000).toISOString()
   const secondResetAt = new Date(BASE_NOW + 5 * 60 * 60 * 1000 + 60_000).toISOString()
@@ -1374,11 +1374,15 @@ test('额度验证期间 reset_at 继续滚动会进入重试', async () => {
     }),
     usageSnapshot({
       rateLimits: [fiveHourWindow({ resetAt: secondResetAt, usedPercent: 0 })]
+    }),
+    usageSnapshot({
+      rateLimits: [fiveHourWindow({ resetAt: secondResetAt, usedPercent: 0 })]
     })
   ]
+  const runner = createRunner([undefined])
   const { keeper, persistedChanges, statuses } = createKeeper({
     clock,
-    runner: createRunner([undefined]),
+    runner,
     onRefresh: async () => refreshSnapshots.shift()
   })
   keeper.updateSnapshot(
@@ -1395,8 +1399,61 @@ test('额度验证期间 reset_at 继续滚动会进入重试', async () => {
   await flush()
 
   assert.equal(persistedChanges.length, 0)
-  assert.equal(statuses.at(-1).state, 'retrying')
-  assert.match(statuses.at(-1).recentError, /5h window/i)
+  assert.equal(statuses.at(-1).state, 'verifying')
+  assert.equal(runner.calls.length, 1)
+
+  clock.advance(60_000)
+  await flush()
+
+  assert.equal(persistedChanges.length, 1)
+  assert.equal(persistedChanges[0].resetAt, secondResetAt)
+  assert.equal(statuses.at(-1).state, 'waiting-reset')
+  assert.equal(runner.calls.length, 1)
+})
+
+test('额度验证期间 reset_at 持续滚动会在期限结束后失败且不重复发送 CLI', async () => {
+  const clock = new FakeClock(BASE_NOW)
+  const runner = createRunner([undefined])
+  let refreshCount = 0
+  let exhaustedCount = 0
+  const { keeper, persistedChanges, statuses } = createKeeper({
+    clock,
+    runner,
+    onRefresh: async () => {
+      refreshCount += 1
+      return usageSnapshot({
+        rateLimits: [
+          fiveHourWindow({
+            resetAt: new Date(clock.nowMs + 5 * 60 * 60 * 1000 + refreshCount * 1000).toISOString(),
+            usedPercent: 0
+          })
+        ]
+      })
+    },
+    onExhausted: () => {
+      exhaustedCount += 1
+    }
+  })
+  keeper.updateSnapshot(
+    usageSnapshot({
+      rateLimits: [
+        fiveHourWindow({ resetAt: new Date(BASE_NOW - 1_000).toISOString(), usedPercent: 0 })
+      ]
+    })
+  )
+
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  for (let elapsedMs = 0; elapsedMs < WINDOW_KEEPER_MAX_RETRY_DURATION_MS; elapsedMs += 60_000) {
+    clock.advance(60_000)
+    await flush()
+  }
+
+  assert.equal(persistedChanges.length, 0)
+  assert.equal(statuses.at(-1).state, 'error')
+  assert.match(statuses.at(-1).recentError, /did not stabilize/i)
+  assert.equal(runner.calls.length, 1)
+  assert.equal(exhaustedCount, 1)
 })
 
 test('剩余重试期限不足一分钟时不会提前判定 reset_at 稳定', async () => {

@@ -504,6 +504,7 @@ export class WindowKeeper {
   private async beginVerification(event: ActiveEvent): Promise<void> {
     event.verifying = true
     event.triggeredAt = new Date(this.timer.now()).toISOString()
+    event.lastError = undefined
     this.setStatus({
       state: 'verifying',
       nextActionAt: undefined,
@@ -524,13 +525,17 @@ export class WindowKeeper {
     }
 
     event.verificationResetAt = windowState.resetsAt
+    this.scheduleVerification(event)
+  }
+
+  private scheduleVerification(event: ActiveEvent): void {
     const remainingMs = event.deadlineAtMs - this.timer.now()
     if (remainingMs <= 0) {
       this.finishError(event)
       return
     }
     if (remainingMs < WINDOW_KEEPER_VERIFY_DELAY_MS) {
-      event.lastError = 'Not enough time to verify the official 5h window'
+      event.lastError ??= 'Not enough time to verify the official 5h window'
       this.scheduleTimer(event, remainingMs, true)
       this.setStatus({
         state: 'verifying',
@@ -567,14 +572,23 @@ export class WindowKeeper {
       this.failVerification(event, 'Official 5h window has no reset_at')
       return
     }
-    if (
-      windowState.resetsAt === event.verificationResetAt &&
-      (parseTimestamp(windowState.resetsAt) ?? 0) > this.timer.now()
-    ) {
+    const resetAtMs = parseTimestamp(windowState.resetsAt)
+    if (resetAtMs === undefined) {
+      this.failVerification(event, 'Official 5h window has no valid reset_at')
+      return
+    }
+    if (resetAtMs <= this.timer.now()) {
+      this.failVerification(event, 'Official 5h window was not started')
+      return
+    }
+    if (windowState.resetsAt === event.verificationResetAt) {
       this.finishSuccess(event, windowState)
       return
     }
-    this.failVerification(event, 'Official 5h window was not started')
+    // 首次查询可能早于官方记账完成；以新值继续观察，避免重复发送 CLI。
+    event.verificationResetAt = windowState.resetsAt
+    event.lastError = 'Official 5h window reset_at did not stabilize'
+    this.scheduleVerification(event)
   }
 
   private async refreshForEvent(event: ActiveEvent): Promise<UsageSnapshot | undefined> {
