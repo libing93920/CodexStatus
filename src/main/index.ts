@@ -6,7 +6,6 @@ import {
   Menu,
   Tray,
   nativeImage,
-  Notification,
   screen,
   powerMonitor,
   type MenuItemConstructorOptions,
@@ -82,6 +81,21 @@ import {
   setUpdaterProgressListener
 } from './services/updater'
 import { WindowKeeper } from './services/window-keeper'
+import {
+  createEmptyIslandSnapshot,
+  getDisplayStatus,
+  ISLAND_ALERT_DURATION_MS,
+  type IslandSnapshot
+} from '../shared/island'
+import { CodexActivityService } from './services/codex-activity'
+import {
+  getDefaultCodexHooksPath,
+  installCodexHooks,
+  uninstallCodexHooks
+} from './services/codex-hook-installer'
+import { resolveCodexExecutable } from './services/window-keeper-runner'
+import { createIslandWindow, positionIslandWindow } from './windows/island-window'
+import { WindowsFullscreenMonitor, type FullscreenState } from './services/windows-fullscreen'
 
 const CHANNELS = {
   bootstrap: 'codex-status:bootstrap',
@@ -112,7 +126,12 @@ const CHANNELS = {
   markAnnouncementRead: 'codex-status:mark-announcement-read',
   acknowledgeAnnouncement: 'codex-status:acknowledge-announcement',
   sendReaction: 'codex-status:send-reaction',
-  reaction: 'codex-status:reaction'
+  reaction: 'codex-status:reaction',
+  islandUpdated: 'codex-status:island-updated',
+  islandReady: 'codex-status:island-ready',
+  islandInteractive: 'codex-status:island-interactive',
+  islandOpenTask: 'codex-status:island-open-task',
+  islandDismissTask: 'codex-status:island-dismiss-task'
 } as const
 
 const SINGLE_CAPSULE_WINDOW_WIDTH = 160
@@ -120,6 +139,7 @@ const SINGLE_ORB_WINDOW_HEIGHT = 96
 
 let mainWindow: BrowserWindow | null = null
 let panelWindow: BrowserWindow | null = null
+let islandWindow: BrowserWindow | null = null
 let panelRevealPending = false
 let tray: Tray | null = null
 let refreshTimer: NodeJS.Timeout | undefined
@@ -135,6 +155,13 @@ let panelFocusTarget: PanelFocusTarget | undefined
 let currentAnnouncement: AnnouncementState | null = null
 let capsuleMinimalRuntime: { width: number; height: number } | null = null
 let windowKeeper: WindowKeeper | undefined
+let codexActivity: CodexActivityService | undefined
+let fullscreenMonitor: WindowsFullscreenMonitor | undefined
+let islandSyncPromise = Promise.resolve()
+let fullscreenState: FullscreenState | undefined
+let fullscreenAlertUntil = 0
+let fullscreenAlertTimer: NodeJS.Timeout | undefined
+let lastIslandAttentionKey: string | undefined
 const lanService = new LanService()
 let persistedState: PersistedState = {
   settings: { ...DEFAULT_SETTINGS },
@@ -142,6 +169,7 @@ let persistedState: PersistedState = {
   panel: {}
 }
 let currentSnapshot: UsageSnapshot = createEmptySnapshot()
+let currentIslandSnapshot: IslandSnapshot = createEmptyIslandSnapshot()
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
@@ -301,6 +329,19 @@ function createPanelWindow(): BrowserWindow {
   return window
 }
 
+function ensureIslandWindow(): BrowserWindow {
+  if (islandWindow && !islandWindow.isDestroyed()) return islandWindow
+  const window = createIslandWindow({
+    preloadPath: join(__dirname, '../preload/index.js'),
+    loadRenderer: (target) => loadRenderer(target, 'island')
+  })
+  window.on('closed', () => {
+    if (islandWindow === window) islandWindow = null
+  })
+  islandWindow = window
+  return window
+}
+
 function loadRenderer(window: BrowserWindow, role: RendererWindowRole): void {
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     const url = new URL(process.env['ELECTRON_RENDERER_URL'])
@@ -343,8 +384,7 @@ if (hasSingleInstanceLock) {
         return currentSnapshot
       },
       onStatusChange: applyWindowKeeperStatus,
-      onPersistenceChange: persistWindowKeeperState,
-      onExhausted: notifyWindowKeeperExhausted
+      onPersistenceChange: persistWindowKeeperState
     })
     currentSnapshot = {
       ...currentSnapshot,
@@ -390,6 +430,7 @@ if (hasSingleInstanceLock) {
       updateCheckTimer = setInterval(() => void doCheck(), 2 * 60 * 60 * 1000)
     }
     mainWindow = createCapsuleWindow()
+    queueSyncIslandService()
     createTray()
     watchCodexAuthFile()
     syncLanService()
@@ -424,10 +465,21 @@ if (hasSingleInstanceLock) {
       if (mainWindow && mainWindow.isVisible()) {
         showWindow()
       }
+      if (islandWindow && !islandWindow.isDestroyed()) {
+        positionIslandWindow(islandWindow)
+      }
+    })
+    screen.on('display-added', () => {
+      if (islandWindow && !islandWindow.isDestroyed()) {
+        positionIslandWindow(islandWindow)
+      }
     })
     screen.on('display-removed', () => {
       if (mainWindow && mainWindow.isVisible()) {
         showWindow()
+      }
+      if (islandWindow && !islandWindow.isDestroyed()) {
+        positionIslandWindow(islandWindow)
       }
     })
   })
@@ -443,6 +495,9 @@ app.on('before-quit', () => {
   clearCodexAuthWatcher()
   stopRadarTimer()
   windowKeeper?.stop()
+  void codexActivity?.stop()
+  fullscreenMonitor?.stop()
+  if (fullscreenAlertTimer) clearTimeout(fullscreenAlertTimer)
   lanService.stop()
 })
 
@@ -459,6 +514,7 @@ function registerIpcHandlers(): void {
       focusUpdate: role === 'panel' ? consumeFocusUpdate() : false,
       focusTarget: role === 'panel' ? consumeFocusTarget() : undefined,
       announcement: currentAnnouncement,
+      island: createIslandRendererSnapshot(),
       version: app.getVersion()
     }
   })
@@ -492,6 +548,7 @@ function registerIpcHandlers(): void {
     syncRefreshTimer()
     refreshTrayMenu()
     broadcastPreferences()
+    if (patch.island !== undefined) queueSyncIslandService()
 
     // 团队口令/昵称变更:重启 LAN service(更新发布信息或启停)
     if (
@@ -723,6 +780,36 @@ function registerIpcHandlers(): void {
     return result
   })
 
+  ipcMain.handle(CHANNELS.islandReady, async (event) => {
+    if (resolveRendererRole(event.sender.id) === 'island') syncIslandWindowVisibility()
+  })
+
+  ipcMain.handle(CHANNELS.islandInteractive, async (event, interactive: unknown) => {
+    if (resolveRendererRole(event.sender.id) !== 'island' || typeof interactive !== 'boolean')
+      return
+    islandWindow?.setIgnoreMouseEvents(!interactive, { forward: true })
+  })
+
+  ipcMain.handle(CHANNELS.islandOpenTask, async (event, threadId: unknown) => {
+    if (resolveRendererRole(event.sender.id) !== 'island' || typeof threadId !== 'string')
+      return false
+    const task = currentIslandSnapshot.tasks.find((candidate) => candidate.threadId === threadId)
+    if (!task) return false
+    try {
+      await shell.openExternal(`codex://threads/${encodeURIComponent(threadId)}`)
+      codexActivity?.markViewed(task.requests[0]?.id ?? task.latestEventId)
+      return true
+    } catch {
+      return false
+    }
+  })
+
+  ipcMain.handle(CHANNELS.islandDismissTask, async (event, threadId: unknown) => {
+    if (resolveRendererRole(event.sender.id) !== 'island' || typeof threadId !== 'string')
+      return false
+    return codexActivity?.dismissTask(threadId) ?? false
+  })
+
   // 下载已检测到的新版本安装包;进度经 updateProgress 通道推送
   ipcMain.handle(CHANNELS.downloadUpdate, async () => {
     await downloadUpdate()
@@ -925,8 +1012,11 @@ function prepareToQuit(): void {
   clearCodexAuthWatcher()
   stopRadarTimer()
   windowKeeper?.stop()
+  fullscreenMonitor?.stop()
+  void codexActivity?.stop()
   tray?.destroy()
   panelWindow?.destroy()
+  islandWindow?.destroy()
 }
 
 function quitApp(): void {
@@ -1253,21 +1343,171 @@ function persistWindowKeeperState(state: NonNullable<PersistedState['windowKeepe
   queuePersistState()
 }
 
-function notifyWindowKeeperExhausted(error: string): void {
-  if (!Notification.isSupported()) {
-    return
-  }
-  const isChinese = persistedState.settings.locale === 'zh-CN'
-  new Notification({
-    title: 'CodexStatus',
-    body: isChinese
-      ? `5h 窗口自动保持异常：${error}`
-      : `5h window keeper stopped after retries: ${error}`
-  }).show()
-}
-
 function broadcastPreferences(): void {
   sendToRenderers(CHANNELS.preferencesUpdated, createPreferencesPayload())
+}
+
+function queueSyncIslandService(): void {
+  islandSyncPromise = islandSyncPromise.then(syncIslandService).catch(() => {
+    void codexActivity?.stop()
+    codexActivity = undefined
+    stopFullscreenMonitor()
+    currentIslandSnapshot = createEmptyIslandSnapshot()
+    broadcastIslandSnapshot()
+    islandWindow?.hide()
+  })
+}
+
+async function syncIslandService(): Promise<void> {
+  if (!persistedState.settings.island.enabled) {
+    await codexActivity?.stop()
+    codexActivity = undefined
+    currentIslandSnapshot = createEmptyIslandSnapshot()
+    broadcastIslandSnapshot()
+    islandWindow?.hide()
+    stopFullscreenMonitor()
+    await uninstallCodexHooks(getDefaultCodexHooksPath(), join(app.getPath('userData'), 'hooks'))
+    return
+  }
+  const window = ensureIslandWindow()
+  ensureFullscreenMonitor()
+  positionIslandWindow(window)
+  await installIslandHooks()
+  await codexActivity?.stop()
+  codexActivity = undefined
+  codexActivity = new CodexActivityService({
+    executable: tryResolveCodexExecutable(),
+    cwd: app.getPath('home'),
+    descriptorPath: getIslandDescriptorPath(),
+    viewedEventIds: persistedState.islandViewedEventIds,
+    onViewedEventsChange: (eventIds) => {
+      persistedState = { ...persistedState, islandViewedEventIds: eventIds }
+      queuePersistState()
+    },
+    onSnapshot: (snapshot) => {
+      currentIslandSnapshot = snapshot
+      updateFullscreenAlertWindow(snapshot)
+      broadcastIslandSnapshot()
+      syncIslandWindowVisibility()
+    }
+  })
+  await codexActivity.start()
+}
+
+async function installIslandHooks(): Promise<void> {
+  const userData = app.getPath('userData')
+  await installCodexHooks({
+    hooksPath: getDefaultCodexHooksPath(),
+    installDirectory: join(userData, 'hooks'),
+    sourceScriptPath: app.isPackaged
+      ? join(process.resourcesPath, 'hooks', 'codex-status-hook.cjs')
+      : join(app.getAppPath(), 'resources', 'hooks', 'codex-status-hook.cjs'),
+    executablePath: process.execPath,
+    descriptorPath: getIslandDescriptorPath()
+  })
+}
+
+function getIslandDescriptorPath(): string {
+  return join(app.getPath('userData'), 'codex-island-endpoint.json')
+}
+
+function tryResolveCodexExecutable(): string | undefined {
+  try {
+    return resolveCodexExecutable()
+  } catch {
+    return undefined
+  }
+}
+
+function broadcastIslandSnapshot(): void {
+  const snapshot = createIslandRendererSnapshot()
+  islandWindow?.webContents.send(CHANNELS.islandUpdated, snapshot)
+  panelWindow?.webContents.send(CHANNELS.islandUpdated, snapshot)
+}
+
+function createIslandRendererSnapshot(): IslandSnapshot {
+  const visibility = !persistedState.settings.island.enabled
+    ? 'disabled'
+    : currentIslandSnapshot.tasks.length === 0
+      ? 'waiting'
+      : isSelectedDisplayFullscreen() && Date.now() >= fullscreenAlertUntil
+        ? 'fullscreen'
+        : 'visible'
+  return { ...currentIslandSnapshot, visibility }
+}
+
+function syncIslandWindowVisibility(): void {
+  if (!islandWindow || islandWindow.isDestroyed()) return
+  const fullscreenSuppressed = isSelectedDisplayFullscreen() && Date.now() >= fullscreenAlertUntil
+  const shouldShow =
+    persistedState.settings.island.enabled &&
+    currentIslandSnapshot.tasks.length > 0 &&
+    !fullscreenSuppressed
+  if (!shouldShow) {
+    islandWindow.hide()
+    return
+  }
+  positionIslandWindow(islandWindow)
+  if (!islandWindow.isVisible()) islandWindow.showInactive()
+}
+
+function ensureFullscreenMonitor(): void {
+  if (fullscreenMonitor) return
+  fullscreenMonitor = new WindowsFullscreenMonitor(
+    (state) => {
+      fullscreenState = state
+      syncIslandWindowVisibility()
+      broadcastIslandSnapshot()
+    },
+    () => {
+      fullscreenState = undefined
+      syncIslandWindowVisibility()
+      broadcastIslandSnapshot()
+    }
+  )
+  fullscreenMonitor.start()
+}
+
+function stopFullscreenMonitor(): void {
+  fullscreenMonitor?.stop()
+  fullscreenMonitor = undefined
+  fullscreenState = undefined
+  fullscreenAlertUntil = 0
+  lastIslandAttentionKey = undefined
+  if (fullscreenAlertTimer) clearTimeout(fullscreenAlertTimer)
+  fullscreenAlertTimer = undefined
+}
+
+function updateFullscreenAlertWindow(snapshot: IslandSnapshot): void {
+  const task = snapshot.tasks.find((candidate) => {
+    const status = getDisplayStatus(candidate)
+    return status === 'waiting-approval' || status === 'waiting-input' || status === 'failed'
+  })
+  if (!task) return
+  const key = task.requests[0]?.id ?? task.latestEventId
+  if (key === lastIslandAttentionKey) return
+  lastIslandAttentionKey = key
+  fullscreenAlertUntil = Date.now() + ISLAND_ALERT_DURATION_MS
+  if (fullscreenAlertTimer) clearTimeout(fullscreenAlertTimer)
+  fullscreenAlertTimer = setTimeout(
+    () => {
+      syncIslandWindowVisibility()
+      broadcastIslandSnapshot()
+    },
+    Math.max(0, fullscreenAlertUntil - Date.now())
+  )
+}
+
+function isSelectedDisplayFullscreen(): boolean {
+  if (!fullscreenState?.fullscreen) return false
+  const selected = screen.getPrimaryDisplay()
+  const bounds = fullscreenState.monitor
+  return (
+    selected.bounds.x === bounds.x &&
+    selected.bounds.y === bounds.y &&
+    selected.bounds.width === bounds.width &&
+    selected.bounds.height === bounds.height
+  )
 }
 
 function createPreferencesPayload(): PreferencesPayload {
@@ -1622,9 +1862,11 @@ function resolvePanelBounds(x?: number, y?: number): Rectangle {
 function sendToRenderers(channel: string, payload: unknown): void {
   mainWindow?.webContents.send(channel, payload)
   panelWindow?.webContents.send(channel, payload)
+  islandWindow?.webContents.send(channel, payload)
 }
 
 function resolveRendererRole(webContentsId: number): RendererWindowRole {
+  if (islandWindow?.webContents.id === webContentsId) return 'island'
   return panelWindow?.webContents.id === webContentsId ? 'panel' : 'capsule'
 }
 

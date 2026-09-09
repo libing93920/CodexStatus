@@ -24,10 +24,17 @@ export async function loadPersistedState(): Promise<PersistedState> {
     const parsed = getRecord(JSON.parse(content))
 
     return {
-      settings: normalizeSettings(getRecord(parsed?.settings) as Partial<typeof DEFAULT_SETTINGS> | undefined),
-      window: normalizeWindowPreferences(getRecord(parsed?.window) as Partial<WindowPreferences> | undefined),
-      panel: normalizePanelPreferences(getRecord(parsed?.panel) as Partial<PanelPreferences> | undefined),
-      windowKeeper: normalizeWindowKeeperState(getRecord(parsed?.windowKeeper))
+      settings: normalizeSettings(
+        getRecord(parsed?.settings) as Partial<typeof DEFAULT_SETTINGS> | undefined
+      ),
+      window: normalizeWindowPreferences(
+        getRecord(parsed?.window) as Partial<WindowPreferences> | undefined
+      ),
+      panel: normalizePanelPreferences(
+        getRecord(parsed?.panel) as Partial<PanelPreferences> | undefined
+      ),
+      windowKeeper: normalizeWindowKeeperState(getRecord(parsed?.windowKeeper)),
+      islandViewedEventIds: normalizeEventIds(parsed?.islandViewedEventIds)
     }
   } catch {
     return createDefaultState()
@@ -76,4 +83,10 @@ function normalizeWindowKeeperState(
 
 function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+}
+
+function normalizeEventIds(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const ids = value.filter((item): item is string => typeof item === 'string' && item.length > 0)
+  return [...new Set(ids)].slice(-256)
 }

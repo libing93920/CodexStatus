@@ -1,3 +1,10 @@
+import {
+  DEFAULT_ISLAND_PREFERENCES,
+  normalizeIslandPreferences,
+  type IslandPreferences,
+  type IslandSnapshot
+} from './island'
+
 export type PercentageMode = 'remaining' | 'used'
 export type RefreshMode = 'auto' | 'manual'
 export type LocaleCode = 'zh-CN' | 'en-US'
@@ -5,7 +12,8 @@ export type RateLimitSource = 'official' | 'local' | 'none'
 export type AuthMode = 'chatgpt' | 'api' | 'none'
 export type AgentId = 'codex' | 'claude' | 'opencode'
 export type PanelView = 'details' | 'settings' | 'team'
-export type RendererWindowRole = 'capsule' | 'panel'
+
+export type RendererWindowRole = 'capsule' | 'panel' | 'island'
 export type CapsuleViewMode = 'capsule' | 'orb'
 export type DockEdge = 'left' | 'right'
 export type RendererCommandType = 'show-panel-view'
@@ -272,6 +280,8 @@ export interface AppSettings {
   capsuleMinimalMode: boolean
   /** 5h 额度窗口重置后自动发送一次低成本 Codex 请求 */
   autoKeep5hWindow: boolean
+  /** 独立 Codex 灵动岛设置；与额度胶囊无联动 */
+  island: IslandPreferences
 }
 
 export interface WindowPreferences {
@@ -293,6 +303,7 @@ export interface PersistedState {
   windowKeeper?: WindowKeeperPersistedState
   /** 本机 LAN 标识,跨重启稳定;首次启动生成 UUID */
   peerId?: string
+  islandViewedEventIds?: string[]
 }
 
 export interface BootstrapPayload {
@@ -310,6 +321,7 @@ export interface BootstrapPayload {
   focusTarget?: PanelFocusTarget
   /** 当前运行期最新公告;进程退出后自然清空 */
   announcement: AnnouncementState | null
+  island: IslandSnapshot
 }
 
 export interface PreferencesPayload {
@@ -393,6 +405,11 @@ export interface CodexStatusApi {
   sendReaction: (targetPeerId: string, action: 'add' | 'remove') => Promise<ReactionSendResult>
   /** 订阅收到同组点赞事件(含自己回显,由 senderPeerId 区分) */
   onReaction: (listener: (reaction: ReactionMessage) => void) => () => void
+  onIslandUpdated: (listener: (snapshot: IslandSnapshot) => void) => () => void
+  notifyIslandReady: () => Promise<void>
+  setIslandInteractive: (interactive: boolean) => Promise<void>
+  openIslandTask: (threadId: string) => Promise<boolean>
+  dismissIslandTask: (threadId: string) => Promise<boolean>
 }
 
 /** 检查更新的结果;available=false 表示已是最新或不可用(如 dev 环境) */
@@ -451,7 +468,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   iqThreshold: DEFAULT_IQ_THRESHOLD,
   theme: 'midnight',
   capsuleMinimalMode: true,
-  autoKeep5hWindow: true
+  autoKeep5hWindow: true,
+  island: { ...DEFAULT_ISLAND_PREFERENCES }
 }
 
 export const DEFAULT_WINDOW_PREFERENCES: WindowPreferences = {
@@ -516,7 +534,8 @@ export function normalizeSettings(input: Partial<AppSettings> | undefined): AppS
     autoKeep5hWindow:
       typeof input?.autoKeep5hWindow === 'boolean'
         ? input.autoKeep5hWindow
-        : DEFAULT_SETTINGS.autoKeep5hWindow
+        : DEFAULT_SETTINGS.autoKeep5hWindow,
+    island: normalizeIslandPreferences(input?.island)
   }
 }
 

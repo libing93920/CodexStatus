@@ -17,6 +17,9 @@ files:
   - '!node_modules/**/{test,tests,__tests__,example,examples,doc,docs,license,LICENSE,CHANGELOG.md,README.md,readme.md}'
 asarUnpack:
   - build/icon-*.png
+extraResources:
+  - from: resources/hooks
+    to: hooks
 win:
   executableName: CodexStatus
   icon: build/icon.ico

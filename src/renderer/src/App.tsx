@@ -35,6 +35,8 @@ import {
   type WindowPreferences
 } from '../../shared/capsule'
 import { formatAnnouncementTime, resolveCapsuleAlert } from '../../shared/announcement'
+import { createEmptyIslandSnapshot, type IslandSnapshot } from '../../shared/island'
+import { IslandSettingsCard } from './island/IslandSettingsCard'
 
 const DEFAULT_CUSTOM_REFRESH_INTERVAL_SECONDS = 40
 const CAPSULE_CLICK_DRAG_DISTANCE = 5
@@ -362,6 +364,7 @@ function App(): React.JSX.Element {
   // API Key 模式胶囊:今日 token 用量(取 1d 窗口,算缓存命中率与今日用量)
   const [capsuleToday, setCapsuleToday] = useState<TokenUsageOverview | undefined>(undefined)
   const [settings, setSettings] = useState<AppSettings>({ ...DEFAULT_SETTINGS })
+  const [islandSnapshot, setIslandSnapshot] = useState<IslandSnapshot>(createEmptyIslandSnapshot)
   const [windowPreferences, setWindowPreferences] = useState<WindowPreferences>({
     ...DEFAULT_WINDOW_PREFERENCES
   })
@@ -461,6 +464,7 @@ function App(): React.JSX.Element {
 
         setSnapshot(payload.snapshot)
         setSettings(payload.settings)
+        setIslandSnapshot(payload.island)
         setWindowPreferences(payload.window)
         setWindowRole(payload.role)
         setPanelView(payload.panelView)
@@ -502,6 +506,8 @@ function App(): React.JSX.Element {
       setTeamNicknameInput(payload.settings.teamNickname ?? '')
       setTeamGroupInput(payload.settings.teamGroup ?? '')
     })
+
+    const disposeIsland = window.codexStatus.onIslandUpdated(setIslandSnapshot)
 
     const disposeCommand = window.codexStatus.onCommand((payload) => {
       if (payload.type !== 'show-panel-view') {
@@ -631,6 +637,7 @@ function App(): React.JSX.Element {
       }
       disposeSnapshot()
       disposePreferences()
+      disposeIsland()
       disposeCommand()
       disposeUpdateProgress()
       disposeBroadcast()
@@ -690,8 +697,7 @@ function App(): React.JSX.Element {
   const hasFiveHourWindow = snapshot.rateLimits.some(
     (windowState) => windowState.windowMinutes === 300
   )
-  const isWindowKeeperAvailable =
-    isCodex && snapshot.authMode === 'chatgpt' && hasFiveHourWindow
+  const isWindowKeeperAvailable = isCodex && snapshot.authMode === 'chatgpt' && hasFiveHourWindow
   const sourceValue = isApiMode
     ? copy.apiModeSource
     : snapshot.rateLimitSource === 'none'
@@ -726,13 +732,14 @@ function App(): React.JSX.Element {
         )
       : rateLimitWindows[0]
   // 窗口标签:标识主指标所属额度窗口;>=1440 分钟按长窗口口径显示"1周"/"7d",否则"5h"
-  const capsuleWindowBadge = !isApiMode && displayedRateLimit
-    ? (displayedRateLimit.windowMinutes ?? 0) >= 1440
-      ? settings.locale === 'zh-CN'
-        ? '1周'
-        : '7d'
-      : '5h'
-    : ''
+  const capsuleWindowBadge =
+    !isApiMode && displayedRateLimit
+      ? (displayedRateLimit.windowMinutes ?? 0) >= 1440
+        ? settings.locale === 'zh-CN'
+          ? '1周'
+          : '7d'
+        : '5h'
+      : ''
   // API Key 模式:无订阅额度窗口,主指标改为今日缓存命中率,左槽改为今日 token
   const apiTodayTotal = capsuleToday?.available === true ? capsuleToday.totals.total : undefined
   const apiTodayInput = capsuleToday?.available === true ? capsuleToday.totals.input : 0
@@ -818,14 +825,7 @@ function App(): React.JSX.Element {
     if (width > 0 && height > 0) {
       void window.codexStatus.setCapsuleSize({ width, height })
     }
-  }, [
-    isApiMode,
-    windowRole,
-    apiTokenText,
-    apiHitText,
-    capsuleViewMode,
-    minimalStage
-  ])
+  }, [isApiMode, windowRole, apiTokenText, apiHitText, capsuleViewMode, minimalStage])
   // 团队额度排行榜:主键 7d(长窗口)剩余降序,7d 相同则次键 5h(短窗口)剩余降序;缺窗口视为最低排末尾。API Key 无订阅额度(恒 0),不参与额度排行
   const teamPeers = [...(snapshot.teamPeers ?? [])]
     .filter((peer) => peer.authMode !== 'api')
@@ -2181,6 +2181,34 @@ function App(): React.JSX.Element {
                       value={settings.agentId}
                     />
                   </SettingField>
+                  <div className="setting-stack tool-settings-list">
+                    {isWindowKeeperAvailable ? (
+                      <div className="setting-row tool-setting-row">
+                        <div className="tool-setting-copy">
+                          <span className="setting-field__label">{copy.autoKeep5hWindow}</span>
+                          <small className="setting-field__hint">
+                            {settings.locale === 'zh-CN'
+                              ? '在当前 5h 窗口到期后自动启动下一窗口'
+                              : 'Start the next 5h window after the current window expires'}
+                          </small>
+                        </div>
+                        <ToggleSwitch
+                          checked={settings.autoKeep5hWindow}
+                          offLabel={copy.disabled}
+                          onChange={(checked) => {
+                            void handleSettingsPatch({ autoKeep5hWindow: checked })
+                          }}
+                          onLabel={copy.enabled}
+                        />
+                      </div>
+                    ) : null}
+                    <IslandSettingsCard
+                      locale={settings.locale}
+                      onChange={(island) => void handleSettingsPatch({ island })}
+                      preferences={settings.island}
+                      snapshot={islandSnapshot}
+                    />
+                  </div>
                 </div>
 
                 <div className="settings-section">
@@ -2315,19 +2343,6 @@ function App(): React.JSX.Element {
                       onLabel={copy.enabled}
                     />
                   </div>
-                  {isWindowKeeperAvailable ? (
-                    <div className="setting-row">
-                      <span>{copy.autoKeep5hWindow}</span>
-                      <ToggleSwitch
-                        checked={settings.autoKeep5hWindow}
-                        offLabel={copy.disabled}
-                        onChange={(checked) => {
-                          void handleSettingsPatch({ autoKeep5hWindow: checked })
-                        }}
-                        onLabel={copy.enabled}
-                      />
-                    </div>
-                  ) : null}
                 </div>
 
                 <div className="settings-section">

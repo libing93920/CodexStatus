@@ -19,6 +19,7 @@ import type {
   UsageWindow,
   WindowPreferences
 } from '../shared/capsule'
+import type { IslandSnapshot } from '../shared/island'
 
 const CHANNELS = {
   bootstrap: 'codex-status:bootstrap',
@@ -49,7 +50,12 @@ const CHANNELS = {
   markAnnouncementRead: 'codex-status:mark-announcement-read',
   acknowledgeAnnouncement: 'codex-status:acknowledge-announcement',
   sendReaction: 'codex-status:send-reaction',
-  reaction: 'codex-status:reaction'
+  reaction: 'codex-status:reaction',
+  islandUpdated: 'codex-status:island-updated',
+  islandReady: 'codex-status:island-ready',
+  islandInteractive: 'codex-status:island-interactive',
+  islandOpenTask: 'codex-status:island-open-task',
+  islandDismissTask: 'codex-status:island-dismiss-task'
 } as const
 
 const api: CodexStatusApi = {
@@ -95,7 +101,16 @@ const api: CodexStatusApi = {
   onBroadcastMessage: (listener) => subscribe(CHANNELS.broadcastMessage, listener),
   onAnnouncementUpdated: (listener: (state: AnnouncementState | null) => void) =>
     subscribe(CHANNELS.announcementUpdated, listener),
-  onReaction: (listener) => subscribe(CHANNELS.reaction, listener)
+  onReaction: (listener) => subscribe(CHANNELS.reaction, listener),
+  onIslandUpdated: (listener: (snapshot: IslandSnapshot) => void) =>
+    subscribe(CHANNELS.islandUpdated, listener),
+  notifyIslandReady: () => ipcRenderer.invoke(CHANNELS.islandReady) as Promise<void>,
+  setIslandInteractive: (interactive: boolean) =>
+    ipcRenderer.invoke(CHANNELS.islandInteractive, interactive) as Promise<void>,
+  openIslandTask: (threadId: string) =>
+    ipcRenderer.invoke(CHANNELS.islandOpenTask, threadId) as Promise<boolean>,
+  dismissIslandTask: (threadId: string) =>
+    ipcRenderer.invoke(CHANNELS.islandDismissTask, threadId) as Promise<boolean>
 }
 
 if (process.contextIsolated) {

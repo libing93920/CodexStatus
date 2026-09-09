@@ -4103,6 +4103,38 @@ body {
   margin-top: 10px;
 }
 
+.tool-settings-list {
+  margin-top: 14px;
+}
+
+.tool-setting-row {
+  align-items: flex-start;
+  min-height: 62px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.tool-setting-copy {
+  min-width: 0;
+}
+
+.tool-setting-copy > span,
+.tool-setting-copy > small {
+  display: block;
+}
+
+.tool-setting-copy > .setting-field__hint {
+  margin-top: 5px;
+}
+
+.tool-setting-status {
+  color: var(--panel-text-2);
+}
+
+.tool-setting-status.is-visible {
+  color: var(--panel-accent);
+}
+
 .inline-input {
   display: grid;
   grid-template-columns: 130px minmax(0, 1fr) auto;

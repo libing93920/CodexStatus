@@ -302,15 +302,25 @@ test('Window Keeper 与详情行保持间距、图标和文字层级一致', () 
   assert.match(waitingResetRule, /color:\s*var\(--panel-text\)/)
 })
 
-test('通用设置按开机自启动、极简模式、自动保持 5h 窗口排序', () => {
+test('通用设置只保留开机自启动和极简模式', () => {
   const sectionStart = appSource.indexOf(
     '<div className="settings-section settings-section--general">'
   )
-  const sectionEnd = appSource.indexOf('\n                </div>', sectionStart)
+  const sectionEnd = appSource.indexOf('copy.groupRegion', sectionStart)
   const section = appSource.slice(sectionStart, sectionEnd)
 
   assert.ok(section.indexOf('copy.launchAtLogin') < section.indexOf('copy.minimalMode'))
-  assert.ok(section.indexOf('copy.minimalMode') < section.indexOf('copy.autoKeep5hWindow'))
+  assert.doesNotMatch(section, /copy\.autoKeep5hWindow|IslandSettingsCard/)
+})
+
+test('工具设置包含监控工具、5h 窗口和灵动岛', () => {
+  const sectionStart = appSource.indexOf('{copy.groupAgent}')
+  const sectionEnd = appSource.indexOf('{copy.groupRefresh}', sectionStart)
+  const section = appSource.slice(sectionStart, sectionEnd)
+
+  assert.ok(section.indexOf('copy.agentId') < section.indexOf('copy.autoKeep5hWindow'))
+  assert.ok(section.indexOf('copy.autoKeep5hWindow') < section.indexOf('IslandSettingsCard'))
+  assert.match(section, /className="setting-row tool-setting-row"/)
 })
 
 test('Window Keeper 只在 Codex ChatGPT 且存在 5h 窗口时显示', () => {
@@ -323,5 +333,8 @@ test('Window Keeper 只在 Codex ChatGPT 且存在 5h 窗口时显示', () => {
     /const isWindowKeeperAvailable =\s*isCodex && snapshot\.authMode === 'chatgpt' && hasFiveHourWindow/
   )
   assert.match(appSource, /\{isWindowKeeperAvailable \? \(\s*<WindowKeeperStatusCard/s)
-  assert.match(appSource, /\{isWindowKeeperAvailable \? \(\s*<div className="setting-row">/s)
+  assert.match(
+    appSource,
+    /\{isWindowKeeperAvailable \? \(\s*<div className="setting-row tool-setting-row">/s
+  )
 })

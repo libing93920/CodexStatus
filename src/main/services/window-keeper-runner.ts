@@ -183,7 +183,7 @@ async function readFinalMessage(outputPath: string): Promise<string> {
   }
 }
 
-function resolveCodexExecutable(): string {
+export function resolveCodexExecutable(): string {
   const lookupCommand = process.platform === 'win32' ? 'where.exe' : 'which'
   const candidates = process.platform === 'win32' ? ['codex.exe', 'codex'] : ['codex', 'codex.exe']
   for (const candidate of candidates) {
