@@ -2,13 +2,64 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-const [mainSource, appSource, cssSource] = (
-  await Promise.all([
-    readFile(new URL('../src/main/index.ts', import.meta.url), 'utf8'),
-    readFile(new URL('../src/renderer/src/App.tsx', import.meta.url), 'utf8'),
-    readFile(new URL('../src/renderer/src/assets/main.css', import.meta.url), 'utf8')
-  ])
-).map((source) => source.replaceAll('\r\n', '\n'))
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+function normalizeLineEndings(source) {
+  return source.replace(/\r\n?/g, '\n')
+}
+
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+async function readCssTree(fileUrl, seen = new Set(), readSource = readFile) {
+  if (seen.has(fileUrl.href)) {
+    return ''
+  }
+  seen.add(fileUrl.href)
+  const source = normalizeLineEndings(await readSource(fileUrl, 'utf8'))
+  const parts = source.split(/(@import\s+['"][^'"]+['"]\s*;)/g)
+  let flattened = ''
+  for (const part of parts) {
+    const match = part.match(/^@import\s+['"]([^'"]+)['"]\s*;$/)
+    flattened += match ? await readCssTree(new URL(match[1], fileUrl), seen, readSource) : part
+  }
+  return flattened
+}
+
+const assetRoot = new URL('../src/renderer/src/assets/', import.meta.url)
+const [
+  mainSource,
+  appFileSource,
+  usageSource,
+  controlsSource,
+  uiConstantsSource,
+  copySource,
+  cssSource
+] = await Promise.all([
+  readFile(new URL('../src/main/index.ts', import.meta.url), 'utf8').then(normalizeLineEndings),
+  readFile(new URL('../src/renderer/src/App.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/renderer/src/components/usage.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/renderer/src/components/controls.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/renderer/src/ui-constants.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/renderer/src/copy.ts', import.meta.url), 'utf8'),
+  Promise.all([
+    readCssTree(new URL('./main.css', assetRoot)),
+    readCssTree(new URL('./themes.css', assetRoot))
+  ]).then((sources) => sources.join('\n'))
+])
+
+const appSource = [appFileSource, usageSource, controlsSource, uiConstantsSource, copySource]
+  .map(normalizeLineEndings)
+  .join('\n')
+
+test('Panel 源码读取兼容 LF 与 CRLF', async () => {
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+  const crlfReader = async (fileUrl, encoding) => {
+    const source = await readFile(fileUrl, encoding)
+    return source.replace(/\r?\n/g, '\r\n')
+  }
+  const crlfCss = await readCssTree(new URL('./main.css', assetRoot), new Set(), crlfReader)
+
+  assert.doesNotMatch(crlfCss, /\r/)
+  assert.match(crlfCss, /\.panel__body\.is-tab-switching\n\s{2}:is\(/)
+})
 
 test('隐藏 Panel 等待 renderer ready 后再显示', () => {
   const start = mainSource.indexOf('function openPanelWindow(')

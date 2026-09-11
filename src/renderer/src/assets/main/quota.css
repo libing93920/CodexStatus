@@ -1,0 +1,131 @@
+.quota-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 14px 13px;
+  overflow: hidden;
+  /* 大圆角,层级靠明度阶梯:默认常规卡,--is-accent 时升为主卡 */
+  border-radius: var(--panel-radius-xl);
+  border: 1px solid var(--panel-line);
+  background: var(--panel-card);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  /* hover 上浮 + 边缘高光,柔和缓动 220ms */
+  transition:
+    transform 220ms cubic-bezier(0.22, 0.9, 0.3, 1),
+    box-shadow 220ms cubic-bezier(0.22, 0.9, 0.3, 1),
+    border-color 220ms cubic-bezier(0.22, 0.9, 0.3, 1);
+  --metric-accent: rgba(148, 163, 184, 0.78);
+}
+
+/* 主卡:更亮的明度 + 顶部中性柔光(Apple 风不堆色彩光晕) */
+.quota-card.is-accent {
+  background: var(--panel-card-3);
+}
+
+.quota-card.is-accent::before {
+  position: absolute;
+  inset: -46% -22% auto;
+  height: 88%;
+  content: '';
+  pointer-events: none;
+  background: radial-gradient(58% 62% at 50% 0%, rgba(255, 255, 255, 0.06) 0%, transparent 72%);
+}
+
+/* hover:卡片轻微上浮,边缘高光增强 */
+.quota-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--panel-line-strong);
+  box-shadow:
+    0 16px 32px rgba(0, 0, 0, 0.3),
+    0 2px 6px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.quota-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.quota-card__label {
+  color: var(--panel-text);
+  font-size: 13px;
+  font-weight: 660;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.quota-card__mode {
+  overflow: hidden;
+  color: var(--panel-muted);
+  font-size: 10px;
+  font-weight: 480;
+  line-height: 1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 主数据:重字重撑起视觉重心,不用霓虹发光;主卡 28px,次卡 24px(由 is-accent 控制) */
+.quota-card__value {
+  color: var(--metric-accent);
+  font-size: 26px;
+  font-weight: 760;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.quota-card.is-accent .quota-card__value {
+  font-size: 28px;
+  font-weight: 780;
+}
+
+.quota-card__progress {
+  height: 3px;
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.quota-card.is-accent .quota-card__progress {
+  height: 4px;
+}
+
+.quota-card__progress span {
+  width: var(--metric-progress);
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--metric-accent) 72%, transparent) 0%,
+    var(--metric-accent) 100%
+  );
+  transition: width 400ms cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+
+.quota-card__reset {
+  color: var(--panel-text-2);
+  font-size: 12px;
+  font-weight: 460;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.quota-card__expiry {
+  color: var(--panel-muted);
+  font-size: 11px;
+  font-weight: 460;
+  line-height: 1;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 用量统计卡片:1/7/30 天 token 与花费 */

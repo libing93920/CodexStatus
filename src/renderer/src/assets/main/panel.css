@@ -1,0 +1,287 @@
+.panel {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* 页面四周统一 24px 内边距,顶部光晕更克制 */
+  padding: var(--panel-space-page) var(--panel-space-page) 0;
+  /* 整体可拖动(panel 的 padding 边缘与 header 空白区作为拖拽区);content 内部交互元素逐个 no-drag */
+  -webkit-app-region: drag;
+  /* 形状/底/顶饰改用 token,默认值见下方 .panel{} 覆写块;此处仅声明动画与层级 */
+  will-change: transform;
+  animation: panel-in 220ms cubic-bezier(0.22, 0.9, 0.3, 1);
+  overflow: hidden;
+  isolation: isolate;
+  /* ===== 深色 token 体系(三页共用,带青蓝调的深色,Linear/Raycast 质感) =====
+     纯中性灰在信息密集小窗里显廉价;带色温的深色能消化密集信息,层次靠明度对比而非发光 */
+  /* 背景:带青蓝调的深色,非纯黑,有色彩倾向 */
+  --panel-bg: linear-gradient(168deg, #0e1116 0%, #161b22 100%);
+  /* 卡片明度阶梯:带青蓝调,三档拉开约 6-8% 明度,小卡上能分出层次 */
+  --panel-card: #1c2128;
+  --panel-card-2: #21262d;
+  --panel-card-3: #283038;
+  --panel-surface: var(--panel-card);
+  --panel-surface-2: var(--panel-card-2);
+  --panel-inset: rgba(0, 0, 0, 0.32);
+  --panel-raised: rgba(255, 255, 255, 0.05);
+  --panel-glass-blur: 14px;
+  --panel-glass-saturate: 150%;
+  /* 文字三级:偏冷白 + 青灰次级/弱化,字重对比撑高级感(不全靠色彩) */
+  --panel-text: #e6edf3;
+  --panel-text-2: #8b949e;
+  --panel-muted: #6e7681;
+  /* 强调色:青蓝(Raycast 风,非系统正蓝);辅助 Linear 紫,克制使用 */
+  --panel-accent: #79c0ff;
+  --panel-accent-2: #a371f7;
+  --panel-accent-soft: rgba(121, 192, 255, 0.14);
+  /* 进度/状态:系统绿(进度),柔粉红(危险,替代高饱和橙红) */
+  --panel-success: #56d36c;
+  --panel-danger: #f87171;
+  /* 描边:极细半透白,Linear 风无明显边框 */
+  --panel-line: rgba(255, 255, 255, 0.08);
+  --panel-line-strong: rgba(255, 255, 255, 0.14);
+  /* 圆角阶梯 */
+  --panel-radius-xl: 22px;
+  --panel-radius-lg: 18px;
+  --panel-radius-md: 14px;
+  --panel-radius-sm: 10px;
+  /* 8pt 栅格间距 */
+  --panel-space-section: 18px;
+  --panel-space-inner: 14px;
+  --panel-space-page: 24px;
+  /* icon 色板:同明度同饱和度的柔和色相,克制不彩虹;明度略提让其在深背景上"浮"出质感 */
+  --panel-icon-blue: #8ec9ff; /* 默认:接口/来源 */
+  --panel-icon-violet: #b585ff; /* 推荐/雷达 */
+  --panel-icon-amber: #ecc05a; /* 时间/重置/倒计时 */
+  --panel-icon-pink: #fc92c8; /* 重置卡/凭证 */
+  --panel-icon-green: #6fe085; /* 成功/在线 */
+  color: var(--panel-text);
+}
+
+/* panel 形状/底/顶饰 token:默认与现状一致;主题按 [data-theme] 覆盖 */
+.panel {
+  border-radius: var(--panel-radius, 26px);
+  clip-path: var(--panel-clip, inset(0 round 26px));
+  border: var(--panel-border, 1px solid rgba(255, 255, 255, 0.07));
+  background:
+    var(
+      --panel-tint,
+      radial-gradient(circle at 22% 0%, rgba(255, 255, 255, 0.04) 0%, transparent 52%)
+    ),
+    var(--panel-bg, linear-gradient(168deg, #0e1116 0%, #161b22 100%));
+  box-shadow: var(
+    --panel-shadow,
+    0 28px 64px rgba(0, 0, 0, 0.42),
+    0 8px 20px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06)
+  );
+  backdrop-filter: var(--panel-backdrop, none);
+  -webkit-backdrop-filter: var(--panel-backdrop, none);
+  font-family: var(--panel-font, inherit);
+}
+
+.panel--details {
+  height: 100%;
+}
+
+.panel--settings {
+  height: 100%;
+}
+
+.panel__body {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel__content {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  /* content 内部可滚动可交互,不作为窗口拖拽区(拖拽靠 panel 边缘 padding 与 header) */
+  -webkit-app-region: no-drag;
+}
+
+/* 极细弱化滚动条:3px + 近透明,hover 才提亮;保留可滚动暗示但不抢视觉 */
+.panel__content {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+
+.panel__content::-webkit-scrollbar {
+  width: 3px;
+}
+
+.panel__content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.panel__content::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.panel__content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.panel__body.is-tab-switching
+  :is(
+    .panel__header,
+    .quota-card,
+    .usage-card,
+    .detail-row,
+    .team-announcement,
+    .team-mode-switch,
+    .team-window-switch,
+    .team-broadcast,
+    .settings-section
+  )
+  > *,
+.panel__body--team.is-tab-switching .team-empty,
+.panel__body--team.is-team-switching .team-empty {
+  animation: panel-tab-content-snap 380ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  animation-delay: calc(var(--panel-tab-card-delay, 0ms) + var(--panel-tab-content-delay, 0ms));
+}
+
+.panel__body--details.is-tab-switching .quota-card:nth-child(1),
+.panel__body--settings.is-tab-switching .settings-section:nth-child(1),
+.panel__body--team.is-tab-switching .team-mode-switch {
+  --panel-tab-card-delay: 40ms;
+}
+
+.panel__body--details.is-tab-switching .quota-card:nth-child(2),
+.panel__body--settings.is-tab-switching .settings-section:nth-child(2),
+.panel__body--team.is-tab-switching .panel__header {
+  --panel-tab-card-delay: 80ms;
+}
+
+.panel__body--details.is-tab-switching .usage-card,
+.panel__body--settings.is-tab-switching .settings-section:nth-child(n + 3),
+.panel__body--team.is-tab-switching .team-window-switch {
+  --panel-tab-card-delay: 120ms;
+}
+
+.panel__body--details.is-tab-switching .detail-row:nth-child(1),
+.panel__body--team.is-tab-switching .team-empty,
+.panel__body--team.is-tab-switching .team-broadcast {
+  --panel-tab-card-delay: 160ms;
+}
+
+.panel__body--details.is-tab-switching .detail-row:nth-child(2) {
+  --panel-tab-card-delay: 200ms;
+}
+
+.panel__body--details.is-tab-switching .detail-row:nth-child(n + 3) {
+  --panel-tab-card-delay: 240ms;
+}
+
+.panel__body.is-tab-switching
+  :is(
+    .panel__header,
+    .quota-card,
+    .usage-card,
+    .detail-row,
+    .team-announcement,
+    .team-mode-switch,
+    .team-window-switch,
+    .team-broadcast,
+    .settings-section
+  )
+  > :nth-child(2) {
+  --panel-tab-content-delay: 40ms;
+}
+
+.panel__body.is-tab-switching
+  :is(
+    .panel__header,
+    .quota-card,
+    .usage-card,
+    .detail-row,
+    .team-announcement,
+    .team-mode-switch,
+    .team-window-switch,
+    .team-broadcast,
+    .settings-section
+  )
+  > :nth-child(3) {
+  --panel-tab-content-delay: 80ms;
+}
+
+.panel__body.is-tab-switching
+  :is(
+    .panel__header,
+    .quota-card,
+    .usage-card,
+    .detail-row,
+    .team-announcement,
+    .team-mode-switch,
+    .team-window-switch,
+    .team-broadcast,
+    .settings-section
+  )
+  > :nth-child(n + 4) {
+  --panel-tab-content-delay: 120ms;
+}
+
+/* 已知按钮靠 translateY(-50%) 绝对居中，参与 snap 会与定位 transform 冲突导致切换时跳动 */
+.panel__body.is-tab-switching .team-announcement__acknowledge {
+  animation: none;
+}
+
+/* 用量统计时间 tab 切换:内容块复用页面 tab 的 Quick Snap,逐块错峰 */
+.usage-card.is-window-switching
+  :is(
+    .usage-summary,
+    .usage-range-panel,
+    .usage-chart,
+    .usage-bar,
+    .model-board,
+    .usage-card__spend-hint,
+    .usage-card__empty
+  ) {
+  animation: panel-tab-content-snap 380ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+.usage-card.is-window-switching :is(.usage-summary, .usage-range-panel) {
+  animation-delay: 0ms;
+}
+
+.usage-card.is-window-switching :is(.usage-chart, .usage-bar) {
+  animation-delay: 40ms;
+}
+
+.usage-card.is-window-switching :is(.model-board, .usage-card__spend-hint) {
+  animation-delay: 80ms;
+}
+
+/* 柱状图随窗口切换从底部一起长出,scaleY 不改动内联高度;等容器 snap 结束(40ms+380ms)再起播 */
+.usage-card.is-window-switching .usage-chart__bar--stack {
+  transform-origin: bottom;
+  animation: usage-bar-rise 380ms cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+  animation-delay: 420ms;
+}
+
+.panel__rows {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--panel-space-section);
+}
+
+.quota-grid {
+  margin-top: 2px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--panel-space-section);
+}
+
+.quota-grid--single {
+  grid-template-columns: minmax(0, 1fr);
+}

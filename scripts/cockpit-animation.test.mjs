@@ -9,12 +9,30 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 async function readRendererStyles() {
   const assetRoot = resolve(repositoryRoot, 'src/renderer/src/assets')
-  const [baseCss, mainCss, themesCss] = await Promise.all([
-    readFile(resolve(assetRoot, 'base.css'), 'utf8'),
-    readFile(resolve(assetRoot, 'main.css'), 'utf8'),
-    readFile(resolve(assetRoot, 'themes.css'), 'utf8')
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+  const readCssTree = async (filePath, seen = new Set()) => {
+    const normalizedPath = resolve(filePath)
+    if (seen.has(normalizedPath)) {
+      return ''
+    }
+    seen.add(normalizedPath)
+    const source = await readFile(normalizedPath, 'utf8')
+    const parts = source.split(/(@import\s+['"][^'"]+['"]\s*;)/g)
+    let flattened = ''
+    for (const part of parts) {
+      const match = part.match(/^@import\s+['"]([^'"]+)['"]\s*;$/)
+      flattened += match
+        ? await readCssTree(resolve(resolve(normalizedPath, '..'), match[1]), seen)
+        : part
+    }
+    return flattened
+  }
+
+  const [mainCss, themesCss] = await Promise.all([
+    readCssTree(resolve(assetRoot, 'main.css')),
+    readCssTree(resolve(assetRoot, 'themes.css'))
   ])
-  return `${baseCss}\n${mainCss.replace("@import './base.css';", '')}\n${themesCss}`
+  return `${mainCss}\n${themesCss}`
 }
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type

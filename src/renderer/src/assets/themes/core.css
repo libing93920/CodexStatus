@@ -1,0 +1,860 @@
+/* =====================================================================
+   主题系统:8 套,单文件 token + 结构覆盖
+   [data-theme="midnight"] 默认深色青蓝(现状);其余 7 套对应 design-previews
+   每个 [data-theme] 块只覆盖 token 与该主题独有的结构装饰,
+   布局/功能/动效完全复用 main.css,不重复
+   ===================================================================== */
+
+/* ============ 公共:装饰节点(默认隐藏,各主题按需开启) ============ */
+/* capsule 装饰层:承载各主题常驻装饰(极光描边/扫描线/糖珠/金扫光);
+   非该主题时 display:none,不影响布局与点击;pointer-events 穿透 */
+.capsule__deco,
+.panel__deco {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+  overflow: hidden;
+  display: none;
+}
+
+.panel__deco {
+  z-index: 0;
+}
+
+/* =====================================================================
+   1. MIDNIGHT · 默认深色青蓝(现状)
+   无装饰节点,无切角,与改造前完全一致
+   ===================================================================== */
+[data-theme='midnight'] {
+  --capsule-radius: 20px;
+  --capsule-orb-radius: 17px;
+  --capsule-clip: none;
+  --panel-radius: 26px;
+  --panel-clip: inset(0 round 26px);
+
+  /* 胶囊元素可调参数(填默认值,改变量即调本主题) */
+  --capsule-h-pad-y: 5px;
+  --capsule-h-pad-x: 5px;
+  --capsule-h-gap: 10px;
+  --capsule-v-pad-y: 6px;
+  --capsule-v-pad-x: 4px;
+  --capsule-v-gap: 4px;
+  --capsule-weekly-font: 17px;
+  --capsule-weekly-pad-y: 0px;
+  --capsule-weekly-pad-x: 0px;
+  --capsule-weekly-gap: 0px;
+  --capsule-percent-font: 17px;
+  --capsule-progress-h: 3px;
+  --capsule-progress-w: 100%;
+  --capsule-credit-font: 10px;
+  --capsule-credit-pad-y: 2px;
+  --capsule-credit-pad-x: 6px;
+  --capsule-pick-font: 9.5px;
+  --capsule-pick-pad-y: 2px;
+  --capsule-pick-pad-x: 6px;
+  --capsule-stat-label-font: 9px;
+  --capsule-stat-value-font: 14px;
+  --capsule-stat-pad-y: 0px;
+  --capsule-stat-pad-x: 0px;
+}
+
+/* 入场:柔和淡入上浮(默认主题,低调过场) */
+@keyframes midnight-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+[data-theme='midnight'] .panel {
+  animation: midnight-rise 0.45s cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+}
+
+/* =====================================================================
+   2. AURORA · 极光玻璃
+   深色玻璃拟态 + 缓慢旋转的极光 conic 描边 + shimmer 流光进度条 + 内部漂移雾气
+   ===================================================================== */
+[data-theme='aurora'] {
+  /* 胶囊 */
+  --capsule-radius: 20px;
+  --capsule-orb-radius: 17px;
+  --capsule-clip: none;
+  --capsule-text: rgba(238, 244, 250, 0.95);
+  --capsule-bg: linear-gradient(168deg, rgba(30, 38, 54, 0.6) 0%, rgba(12, 16, 26, 0.68) 100%);
+  --capsule-orb-bg: linear-gradient(180deg, rgba(30, 38, 54, 0.62) 0%, rgba(12, 16, 26, 0.7) 100%);
+  --capsule-edge: rgba(140, 180, 255, 0.34);
+  --capsule-edge-soft: rgba(255, 255, 255, 0.035);
+  --capsule-filter: blur(14px) saturate(1.5);
+  --capsule-accent: #58e8b1;
+  /* panel */
+  --panel-radius: 26px;
+  --panel-clip: inset(0 round 26px);
+  --panel-border: 1px solid rgba(255, 255, 255, 0.09);
+  --panel-tint:
+    radial-gradient(circle at 22% 0%, rgba(88, 232, 177, 0.06) 0%, transparent 46%),
+    radial-gradient(circle at 90% 8%, rgba(88, 101, 242, 0.08) 0%, transparent 42%);
+  --panel-bg: linear-gradient(168deg, #0d1118 0%, #131926 100%);
+  --panel-shadow: 0 32px 72px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  /* 色板 */
+  --panel-card: #141921;
+  --panel-card-2: #1a2030;
+  --panel-card-3: #222a3a;
+  --panel-inset: rgba(0, 0, 0, 0.32);
+  --panel-text: #e6edf3;
+  --panel-text-2: #8b98ac;
+  --panel-muted: #6f7d92;
+  --panel-accent: #79c0ff;
+  --panel-accent-2: #b585ff;
+  --panel-accent-soft: rgba(121, 192, 255, 0.14);
+  --panel-success: #38e8b1;
+  --panel-line: rgba(255, 255, 255, 0.08);
+  --panel-line-strong: rgba(140, 190, 255, 0.35);
+  --panel-icon-blue: #79c0ff;
+  --panel-icon-violet: #b585ff;
+  --panel-icon-amber: #ffdf8e;
+  --panel-icon-pink: #ffa27b;
+  --panel-icon-green: #38e8b1;
+
+  /* 胶囊元素可调参数(填默认值,改变量即调本主题) */
+  --capsule-h-pad-y: 5px;
+  --capsule-h-pad-x: 5px;
+  --capsule-h-gap: 10px;
+  --capsule-v-pad-y: 6px;
+  --capsule-v-pad-x: 4px;
+  --capsule-v-gap: 4px;
+  --capsule-weekly-font: 17px;
+  --capsule-weekly-pad-y: 0px;
+  --capsule-weekly-pad-x: 0px;
+  --capsule-weekly-gap: 0px;
+  --capsule-percent-font: 17px;
+  --capsule-progress-h: 3px;
+  --capsule-progress-w: 100%;
+  --capsule-credit-font: 10px;
+  --capsule-credit-pad-y: 2px;
+  --capsule-credit-pad-x: 6px;
+  --capsule-pick-font: 9.5px;
+  --capsule-pick-pad-y: 2px;
+  --capsule-pick-pad-x: 6px;
+  --capsule-stat-label-font: 9px;
+  --capsule-stat-value-font: 14px;
+  --capsule-stat-pad-y: 0px;
+  --capsule-stat-pad-x: 0px;
+}
+
+/* main.css 的 .panel{} 自身重声明了一批 token,元素自身声明优先于父级继承;
+   用 [data-theme='aurora'] .panel (特异性 0,2,0) 在 .panel 元素上重新赋主题值 */
+[data-theme='aurora'] .panel {
+  --panel-bg: linear-gradient(168deg, #0d1118 0%, #131926 100%);
+  --panel-card: #141921;
+  --panel-card-2: #1a2030;
+  --panel-card-3: #222a3a;
+  --panel-surface: #141921;
+  --panel-surface-2: #1a2030;
+  --panel-inset: rgba(0, 0, 0, 0.32);
+  --panel-text: #e6edf3;
+  --panel-text-2: #8b98ac;
+  --panel-muted: #6f7d92;
+  --panel-accent: #79c0ff;
+  --panel-accent-2: #b585ff;
+  --panel-accent-soft: rgba(121, 192, 255, 0.14);
+  --panel-success: #38e8b1;
+  --panel-line: rgba(255, 255, 255, 0.08);
+  --panel-line-strong: rgba(140, 190, 255, 0.35);
+  --panel-icon-blue: #79c0ff;
+  --panel-icon-violet: #b585ff;
+  --panel-icon-amber: #ffdf8e;
+  --panel-icon-pink: #ffa27b;
+  --panel-icon-green: #38e8b1;
+}
+
+/* 极光描边层:conic 渐变随角度旋转,只露出 1.2px 的环 */
+@property --aurora-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+[data-theme='aurora'] .capsule__deco,
+[data-theme='aurora'] .panel__deco {
+  display: block;
+}
+
+[data-theme='aurora'] .capsule__deco::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.2px;
+  background: conic-gradient(
+    from var(--aurora-angle),
+    #5865f2 0deg,
+    #38e8b1 80deg,
+    #79c0ff 160deg,
+    #b585ff 240deg,
+    #5865f2 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: aurora-spin 7s linear infinite;
+}
+
+[data-theme='aurora'] .capsule--orb .capsule__deco::before {
+  padding: 1.2px;
+}
+
+[data-theme='aurora'] .panel__deco::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #5865f2, #38e8b1, #79c0ff, transparent);
+  opacity: 0.8;
+  animation: aurora-topline-hue 6s linear infinite;
+}
+
+/* 内部极光雾气:左下角一团缓慢漂移的柔光 */
+[data-theme='aurora'] .capsule__deco::after {
+  content: '';
+  position: absolute;
+  width: 130%;
+  height: 220%;
+  left: -30%;
+  bottom: -120%;
+  border-radius: inherit;
+  background: radial-gradient(closest-side, rgba(88, 232, 177, 0.17), transparent 72%);
+  animation: aurora-mist-drift 9s ease-in-out infinite alternate;
+}
+
+@keyframes aurora-spin {
+  to {
+    --aurora-angle: 360deg;
+  }
+}
+
+@keyframes aurora-topline-hue {
+  0%,
+  100% {
+    filter: hue-rotate(0deg);
+    opacity: 0.55;
+  }
+  50% {
+    filter: hue-rotate(36deg);
+    opacity: 0.95;
+  }
+}
+
+@keyframes aurora-mist-drift {
+  from {
+    transform: translate(-8%, 6%) rotate(-6deg);
+    opacity: 0.7;
+  }
+  to {
+    transform: translate(10%, -4%) rotate(5deg);
+    opacity: 1;
+  }
+}
+
+/* 入场:雾气淡入 + 轻微缩放(呼应极光玻璃的朦胧质感) */
+@keyframes aurora-rise {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+
+[data-theme='aurora'] .panel {
+  animation: aurora-rise 0.5s cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+}
+
+/* =====================================================================
+   3. CYBER · 赛博终端
+   切角外形 + 扫描线 + 四角瞄准括号 + 分段刻度进度条 + 霓虹读数 + 等宽字体
+   ===================================================================== */
+[data-theme='cyber'] {
+  --capsule-radius: 0px;
+  --capsule-orb-radius: 0px;
+  /* 切角 polygon:左上/右下斜切,HUD 感;圆角设 0 让 polygon 干净 */
+  --capsule-clip: polygon(
+    12px 0,
+    100% 0,
+    100% calc(100% - 12px),
+    calc(100% - 12px) 100%,
+    0 100%,
+    0 12px
+  );
+  --capsule-text: #d8fff6;
+  --capsule-bg: linear-gradient(170deg, rgba(6, 26, 22, 0.78), rgba(3, 10, 9, 0.86));
+  --capsule-orb-bg: linear-gradient(180deg, rgba(6, 26, 22, 0.78), rgba(3, 10, 9, 0.86));
+  --capsule-edge: rgba(0, 255, 213, 0.35);
+  --capsule-edge-soft: rgba(0, 255, 213, 0.06);
+  --capsule-filter: blur(10px);
+  --capsule-accent: #00ffd5;
+  --capsule-font: 'Cascadia Code', Consolas, 'Microsoft YaHei UI', monospace;
+  /* panel 切角更大 */
+  --panel-radius: 0px;
+  --panel-clip: polygon(
+    18px 0,
+    100% 0,
+    100% calc(100% - 18px),
+    calc(100% - 18px) 100%,
+    0 100%,
+    0 18px
+  );
+  --panel-border: 0;
+  --panel-tint: repeating-linear-gradient(
+    0deg,
+    transparent 0 3px,
+    rgba(0, 255, 213, 0.016) 3px 4px
+  );
+  --panel-bg: linear-gradient(168deg, #071210 0%, #050a09 100%);
+  --panel-shadow: inset 0 0 0 1px rgba(0, 255, 213, 0.22), 0 30px 70px rgba(0, 0, 0, 0.6);
+  /* 色板 */
+  --panel-card: rgba(0, 255, 213, 0.028);
+  --panel-card-2: rgba(0, 255, 213, 0.04);
+  --panel-card-3: rgba(0, 255, 213, 0.06);
+  --panel-inset: rgba(0, 0, 0, 0.34);
+  --panel-text: #c9eadf;
+  --panel-text-2: #6da39a;
+  --panel-muted: #4f7a70;
+  --panel-accent: #00ffd5;
+  --panel-accent-2: #ff2d78;
+  --panel-accent-soft: rgba(0, 255, 213, 0.14);
+  --panel-success: #9dff5e;
+  --panel-danger: #ff2d78;
+  --panel-line: rgba(0, 255, 213, 0.13);
+  --panel-line-strong: rgba(0, 255, 213, 0.25);
+  --panel-icon-blue: #00ffd5;
+  --panel-icon-violet: #ff2d78;
+  --panel-icon-amber: #ffb347;
+  --panel-icon-pink: #ff7ba6;
+  --panel-icon-green: #9dff5e;
+  --panel-font: 'Cascadia Code', Consolas, 'Microsoft YaHei UI', monospace;
+
+  /* 胶囊元素可调参数(填默认值,改变量即调本主题) */
+  --capsule-h-pad-y: 5px;
+  --capsule-h-pad-x: 5px;
+  --capsule-h-gap: 10px;
+  --capsule-v-pad-y: 6px;
+  --capsule-v-pad-x: 4px;
+  --capsule-v-gap: 4px;
+  --capsule-weekly-font: 18px;
+  --capsule-weekly-pad-y: 0px;
+  --capsule-weekly-pad-x: 0px;
+  --capsule-weekly-gap: 2px;
+  --capsule-percent-font: 18px;
+  --capsule-progress-h: 3px;
+  --capsule-progress-w: 100%;
+  --capsule-credit-font: 10px;
+  --capsule-credit-pad-y: 2px;
+  --capsule-credit-pad-x: 6px;
+  --capsule-pick-font: 9.5px;
+  --capsule-pick-pad-y: 2px;
+  --capsule-pick-pad-x: 6px;
+  --capsule-stat-label-font: 9px;
+  --capsule-stat-value-font: 14px;
+  --capsule-stat-pad-y: 0px;
+  --capsule-stat-pad-x: 0px;
+}
+
+/* main.css 的 .panel{} 自身重声明了一批 token,元素自身声明优先于父级继承;
+   用 [data-theme='cyber'] .panel (特异性 0,2,0) 在 .panel 元素上重新赋主题值 */
+[data-theme='cyber'] .panel {
+  --panel-bg: linear-gradient(168deg, #071210 0%, #050a09 100%);
+  --panel-card: rgba(0, 255, 213, 0.028);
+  --panel-card-2: rgba(0, 255, 213, 0.04);
+  --panel-card-3: rgba(0, 255, 213, 0.06);
+  --panel-surface: rgba(0, 255, 213, 0.028);
+  --panel-surface-2: rgba(0, 255, 213, 0.04);
+  --panel-inset: rgba(0, 0, 0, 0.34);
+  --panel-text: #c9eadf;
+  --panel-text-2: #6da39a;
+  --panel-muted: #4f7a70;
+  --panel-accent: #00ffd5;
+  --panel-accent-2: #ff2d78;
+  --panel-accent-soft: rgba(0, 255, 213, 0.14);
+  --panel-success: #9dff5e;
+  --panel-danger: #ff2d78;
+  --panel-line: rgba(0, 255, 213, 0.13);
+  --panel-line-strong: rgba(0, 255, 213, 0.25);
+  --panel-icon-blue: #00ffd5;
+  --panel-icon-violet: #ff2d78;
+  --panel-icon-amber: #ffb347;
+  --panel-icon-pink: #ff7ba6;
+  --panel-icon-green: #9dff5e;
+}
+
+[data-theme='cyber'] .capsule__deco,
+[data-theme='cyber'] .panel__deco {
+  display: block;
+}
+
+/* 四角瞄准括号:左上/右下两个 L 形角标 */
+[data-theme='cyber'] .capsule__deco::before,
+[data-theme='cyber'] .capsule__deco::after {
+  content: '';
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  border: 0 solid var(--capsule-accent);
+  filter: drop-shadow(0 0 4px var(--capsule-accent));
+}
+
+[data-theme='cyber'] .capsule__deco::before {
+  top: 2px;
+  left: 2px;
+  border-top-width: 1.5px;
+  border-left-width: 1.5px;
+}
+
+[data-theme='cyber'] .capsule__deco::after {
+  bottom: 2px;
+  right: 2px;
+  border-bottom-width: 1.5px;
+  border-right-width: 1.5px;
+}
+
+/* 赛博胶囊扫描线:细亮线从上往下连续扫,周期拉长降低频繁感;
+   用 deco 背景动画承载,不占 ::before/::after(留给四角括号);
+   size 300% 保证 loop 两端(100%↔0%)亮带完全在胶囊外,无闪 */
+[data-theme='cyber'] .capsule__deco {
+  background: linear-gradient(
+    180deg,
+    transparent 44%,
+    rgba(0, 255, 213, 0.14) 50%,
+    transparent 56%
+  );
+  background-size: 100% 300%;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  animation: cyber-capsule-scan 8s linear infinite;
+}
+
+@keyframes cyber-capsule-scan {
+  from {
+    background-position: 0 100%;
+  }
+  to {
+    background-position: 0 0%;
+  }
+}
+
+/* panel 不加扫描线(仅胶囊保留四角括号);赛博 panel 靠切角+描边撑视觉 */
+
+/* 入场:故障扫描启动,CRT 通电式 RGB 偏移 + 横向扫描带掠过 */
+@keyframes cyber-power-on {
+  0% {
+    opacity: 0;
+    transform: translateX(-6px) skewX(-8deg);
+    filter: brightness(1.8);
+  }
+  30% {
+    opacity: 1;
+    transform: translateX(3px) skewX(0);
+  }
+  45% {
+    transform: translateX(-2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+    filter: brightness(1);
+  }
+}
+
+[data-theme='cyber'] .panel {
+  animation: cyber-power-on 0.5s cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+}
+
+/* =====================================================================
+   4. TITAN · 黑曜钛金
+   近黑岩面 + 钛银高光棱线 + 琥珀金强调 + 刻度进度条 + 金色扫光
+   ===================================================================== */
+[data-theme='titan'] {
+  --capsule-radius: 14px;
+  --capsule-orb-radius: 14px;
+  --capsule-clip: none;
+  --capsule-text: #eceded;
+  --capsule-bg:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.012) 0 2px, transparent 2px 4px),
+    linear-gradient(170deg, #232327 0%, #131316 55%, #0d0d10 100%);
+  --capsule-orb-bg:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.012) 0 2px, transparent 2px 4px),
+    linear-gradient(175deg, #232327 0%, #131316 55%, #0d0d10 100%);
+  --capsule-edge: rgba(255, 255, 255, 0.05);
+  --capsule-edge-soft: rgba(255, 255, 255, 0.16);
+  --capsule-filter: none;
+  --capsule-accent: #d9a441;
+  --panel-radius: 22px;
+  --panel-clip: inset(0 round 22px);
+  --panel-border: 0;
+  --panel-tint:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.008) 0 2px, transparent 2px 4px),
+    radial-gradient(circle at 18% 0%, rgba(217, 164, 65, 0.05) 0%, transparent 40%);
+  --panel-bg: linear-gradient(168deg, #1a1a1e 0%, #101013 100%);
+  --panel-shadow:
+    0 32px 72px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  /* 色板 */
+  --panel-card: linear-gradient(170deg, #26262b 0%, #18181c 100%);
+  --panel-card-2: linear-gradient(170deg, #202024 0%, #151518 100%);
+  --panel-card-3: linear-gradient(170deg, #2a2a2f 0%, #19191d 100%);
+  --panel-inset: rgba(0, 0, 0, 0.35);
+  --panel-text: #e8e8ea;
+  --panel-text-2: #8f939b;
+  --panel-muted: #6b6e76;
+  --panel-accent: #d9a441;
+  --panel-accent-2: #9db4f8;
+  --panel-accent-soft: rgba(217, 164, 65, 0.14);
+  --panel-success: #7fc99a;
+  --panel-danger: #e89a9a;
+  --panel-line: rgba(255, 255, 255, 0.045);
+  --panel-line-strong: rgba(217, 164, 65, 0.3);
+  --panel-icon-blue: #9db4f8;
+  --panel-icon-violet: #b595e8;
+  --panel-icon-amber: #ecd9ae;
+  --panel-icon-pink: #e89ab8;
+  --panel-icon-green: #7fc99a;
+
+  /* 胶囊元素参数(填默认值,改变量即调本主题) */
+  --capsule-h-pad-y: 5px;
+  --capsule-h-pad-x: 5px;
+  --capsule-h-gap: 10px;
+  --capsule-v-pad-y: 6px;
+  --capsule-v-pad-x: 4px;
+  --capsule-v-gap: 4px;
+  --capsule-weekly-font: 17px;
+  --capsule-weekly-pad-y: 0px;
+  --capsule-weekly-pad-x: 0px;
+  --capsule-weekly-gap: 1px;
+  --capsule-percent-font: 17px;
+  --capsule-progress-h: 3px;
+  --capsule-progress-w: 100%;
+  --capsule-credit-font: 10px;
+  --capsule-credit-pad-y: 2px;
+  --capsule-credit-pad-x: 6px;
+  --capsule-pick-font: 9.5px;
+  --capsule-pick-pad-y: 2px;
+  --capsule-pick-pad-x: 6px;
+  --capsule-stat-label-font: 9px;
+  --capsule-stat-value-font: 14px;
+  --capsule-stat-pad-y: 0px;
+  --capsule-stat-pad-x: 0px;
+}
+
+/* main.css 的 .panel{} 自身重声明了一批 token,元素自身声明优先于父级继承;
+   用 [data-theme='titan'] .panel (特异性 0,2,0) 在 .panel 元素上重新赋主题值 */
+[data-theme='titan'] .panel {
+  --panel-bg: linear-gradient(168deg, #1a1a1e 0%, #101013 100%);
+  --panel-card: linear-gradient(170deg, #26262b 0%, #18181c 100%);
+  --panel-card-2: linear-gradient(170deg, #202024 0%, #151518 100%);
+  --panel-card-3: linear-gradient(170deg, #2a2a2f 0%, #19191d 100%);
+  --panel-surface: linear-gradient(170deg, #26262b 0%, #18181c 100%);
+  --panel-surface-2: linear-gradient(170deg, #202024 0%, #151518 100%);
+  --panel-inset: rgba(0, 0, 0, 0.35);
+  --panel-text: #e8e8ea;
+  --panel-text-2: #8f939b;
+  --panel-muted: #6b6e76;
+  --panel-accent: #d9a441;
+  --panel-accent-2: #9db4f8;
+  --panel-accent-soft: rgba(217, 164, 65, 0.14);
+  --panel-success: #7fc99a;
+  --panel-danger: #e89a9a;
+  --panel-line: rgba(255, 255, 255, 0.045);
+  --panel-line-strong: rgba(217, 164, 65, 0.3);
+  --panel-icon-blue: #9db4f8;
+  --panel-icon-violet: #b595e8;
+  --panel-icon-amber: #ecd9ae;
+  --panel-icon-pink: #e89ab8;
+  --panel-icon-green: #7fc99a;
+}
+
+[data-theme='titan'] .capsule__deco,
+[data-theme='titan'] .panel__deco {
+  display: block;
+}
+
+/* 金色扫光:周期性一道斜光掠过岩面 */
+[data-theme='titan'] .capsule__deco::after {
+  content: '';
+  position: absolute;
+  inset: -40%;
+  background: linear-gradient(
+    115deg,
+    transparent 42%,
+    rgba(217, 164, 65, 0.13) 50%,
+    transparent 58%
+  );
+  transform: translateX(-70%);
+  animation: titan-gold-sweep 5.5s ease-in-out infinite;
+}
+
+[data-theme='titan'] .capsule--orb .capsule__deco::after {
+  background: linear-gradient(
+    175deg,
+    transparent 42%,
+    rgba(217, 164, 65, 0.13) 50%,
+    transparent 58%
+  );
+  transform: translateY(-70%);
+  animation-name: titan-gold-sweep-y;
+}
+
+/* panel 顶棱:一条金色发丝线 */
+[data-theme='titan'] .panel__deco::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 6%;
+  right: 6%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(217, 164, 65, 0.75), transparent);
+  filter: drop-shadow(0 0 4px rgba(217, 164, 65, 0.4));
+}
+
+@keyframes titan-gold-sweep {
+  0%,
+  55% {
+    transform: translateX(-70%);
+  }
+  85%,
+  100% {
+    transform: translateX(70%);
+  }
+}
+
+@keyframes titan-gold-sweep-y {
+  0%,
+  55% {
+    transform: translateY(-70%);
+  }
+  85%,
+  100% {
+    transform: translateY(70%);
+  }
+}
+
+/* 入场:金属唤醒,从暗岩到亮金(呼应钛金岩面质感) */
+@keyframes titan-awaken {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+    filter: brightness(0.4) saturate(0.6);
+  }
+  60% {
+    filter: brightness(1.2) saturate(1);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: brightness(1) saturate(1);
+  }
+}
+
+[data-theme='titan'] .panel {
+  animation: titan-awaken 0.55s cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+}
+
+/* =====================================================================
+   各主题进度条形态覆盖
+   A:shimmer 流光;B:分段刻度10格;D:刻度线条;C/midnight:普通渐变(默认)
+   ===================================================================== */
+
+/* A 极光:shimmer 流光扫过填充条 */
+[data-theme='aurora'] .capsule__progress span::after,
+[data-theme='aurora'] .quota-card__progress span::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.75) 50%,
+    transparent 70%
+  );
+  transform: translateX(-110%);
+  animation: aurora-shimmer 2.8s ease-in-out infinite;
+  animation-delay: 1.2s;
+}
+
+[data-theme='aurora'] .capsule__progress span,
+[data-theme='aurora'] .quota-card__progress span {
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes aurora-shimmer {
+  to {
+    transform: translateX(230%);
+  }
+}
+
+/* B 赛博:进度条槽底(胶囊与面板共用) */
+[data-theme='cyber'] .capsule__progress,
+[data-theme='cyber'] .quota-card__progress {
+  height: 6px;
+  background: rgba(0, 255, 213, 0.12);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 255, 213, 0.14);
+}
+
+/* 胶囊:电池式分段进度条。span 实色填充随进度伸缩,
+   父级 ::after 压全宽等距刻度线(不受填充宽度影响),两头直角不圆 */
+[data-theme='cyber'] .capsule__progress {
+  height: 6px;
+  border-radius: 0;
+  background: rgba(0, 255, 213, 0.12);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 255, 213, 0.14);
+  position: relative;
+}
+
+[data-theme='cyber'] .capsule__progress span {
+  background: var(--metric-accent, var(--capsule-accent));
+  box-shadow: 0 0 7px var(--metric-accent, var(--capsule-accent));
+}
+
+/* 横版 10 格刻度:每 10% 一道竖线,首尾压在两端 */
+[data-theme='cyber'] .capsule__progress::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 calc(10% - 1px),
+    rgba(0, 0, 0, 0.6) calc(10% - 1px) 10%
+  );
+}
+
+/* 竖版 5 格刻度覆盖(orb 更窄,5 格更清晰);data-theme 与 capsule--orb 不在同节点,用后代选择器 */
+[data-theme='cyber'] .capsule--orb .capsule__progress::after {
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 calc(20% - 1px),
+    rgba(0, 0, 0, 0.6) calc(20% - 1px) 20%
+  );
+}
+
+/* 竖版 orb:槽固定 30px 宽,额度 0% 时槽不随百分比文字收缩变短(同 inksong/greenhouse) */
+[data-theme='cyber'] .capsule--orb .capsule__metric-box .capsule__progress {
+  width: 30px;
+}
+
+/* 无固定宽的主题:竖版 orb 槽统一固定 35px,额度 0% 时不随百分比文字收缩变短 */
+[data-theme='midnight'] .capsule--orb .capsule__metric-box .capsule__progress,
+[data-theme='aurora'] .capsule--orb .capsule__metric-box .capsule__progress,
+[data-theme='titan'] .capsule--orb .capsule__metric-box .capsule__progress,
+[data-theme='poster'] .capsule--orb .capsule__metric-box .capsule__progress,
+[data-theme='swiss'] .capsule--orb .capsule__metric-box .capsule__progress {
+  width: 35px;
+}
+
+/* 面板:保留 10 格分段刻度 */
+[data-theme='cyber'] .quota-card__progress span {
+  background: var(--metric-accent, var(--capsule-accent));
+  box-shadow: 0 0 7px var(--metric-accent, var(--capsule-accent));
+  /* repeating-linear-gradient 模拟 10 格:亮段中间留 2px 间隙 */
+  -webkit-mask: repeating-linear-gradient(
+    90deg,
+    #000 0,
+    #000 calc(10% - 2px),
+    transparent calc(10% - 2px),
+    transparent 10%
+  );
+  mask: repeating-linear-gradient(
+    90deg,
+    #000 0,
+    #000 calc(10% - 2px),
+    transparent calc(10% - 2px),
+    transparent 10%
+  );
+}
+
+/* D 钛金:刻度线条,每 20% 一道竖线压在槽上 */
+[data-theme='titan'] .capsule__progress,
+[data-theme='titan'] .quota-card__progress {
+  height: 5px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #060608, #1a1a1f);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.8),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  position: relative;
+}
+
+[data-theme='titan'] .capsule__progress span,
+[data-theme='titan'] .quota-card__progress span {
+  background: linear-gradient(90deg, #8a6a2c, var(--capsule-accent) 60%, #f0cd82);
+  box-shadow: 0 0 8px rgba(217, 164, 65, 0.4);
+}
+
+[data-theme='titan'] .capsule__progress::after,
+[data-theme='titan'] .quota-card__progress::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 calc(20% - 1px),
+    rgba(0, 0, 0, 0.75) calc(20% - 1px) 20%
+  );
+  pointer-events: none;
+}
+
+/* =====================================================================
+   各主题强调色适配:percentage/weekly/credit/pick 文字色随主题
+   ===================================================================== */
+
+/* B 赛博:百分比/数值带霓虹辉光 */
+[data-theme='cyber'] .capsule__percent,
+[data-theme='cyber'] .capsule__weekly,
+[data-theme='cyber'] .capsule__stat-value {
+  text-shadow: 0 0 12px var(--metric-accent, var(--capsule-accent));
+}
+
+/* 百分比提亮但保留随额度变色:--metric-accent(随额度红→绿)与白色混合,各主题统一 */
+[data-theme] .capsule__percent,
+[data-theme] .quota-card__value {
+  color: color-mix(in srgb, var(--metric-accent, var(--capsule-accent)) 75%, white);
+}
+
+[data-theme='cyber'] .capsule__weekly {
+  color: #eafffb;
+  text-shadow: 0 0 10px rgba(0, 255, 213, 0.35);
+}
+
+[data-theme='cyber'] .capsule__stat-value {
+  color: #eafffb;
+}
+
+[data-theme='cyber'] .capsule__stat-label {
+  color: rgba(0, 255, 213, 0.5);
+}
+
+/* D 钛金:周重置大字用金属渐变文字 */
+[data-theme='titan'] .capsule__weekly,
+[data-theme='titan'] .panel__title {
+  background: linear-gradient(180deg, #f5f0e4, #c9cbd2);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+[data-theme='titan'] .capsule__percent {
+  text-shadow: 0 1px 8px rgba(217, 164, 65, 0.28);
+}

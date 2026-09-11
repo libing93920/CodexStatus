@@ -41,6 +41,8 @@ let resolveHidden
 let hiddenRevision
 let interactions = []
 let readyCount = 0
+let presentationRevision = 0
+let currentPresentation = { revision: 0, visible: false }
 const readyPromise = new Promise((resolveReady) => (ready = resolveReady))
 
 async function verifyIslandWindow() {
@@ -81,14 +83,13 @@ async function verifyIslandWindow() {
         "window.matchMedia('(prefers-reduced-motion: reduce)').matches"
       )
       assert.equal(reducedMotion, true)
-      window.webContents.send(CHANNELS.islandPresentation, { revision: 1, visible: true })
-      await delay(100)
-      assert.equal((await inspect(window)).mode, 'compact')
+      sendPresentation(window, true)
+      await retry(async () => assert.equal((await inspect(window)).mode, 'compact'))
       const hidden = waitForHidden()
       const startedAt = Date.now()
-      window.webContents.send(CHANNELS.islandPresentation, { revision: 2, visible: false })
+      const revision = sendPresentation(window, false)
       await hidden
-      assert.equal(hiddenRevision, 2)
+      assert.equal(hiddenRevision, revision)
       assert.ok(Date.now() - startedAt < 250)
       return
     }
@@ -102,7 +103,7 @@ async function verifyIslandWindow() {
       scrollable: false
     })
 
-    window.webContents.send(CHANNELS.islandPresentation, { revision: 1, visible: true })
+    sendPresentation(window, true)
     await retry(async () => assert.equal((await inspect(window)).mode, 'compact'))
     await delay(700)
     assert.deepEqual(targetLayout(await inspect(window)), {
@@ -233,8 +234,10 @@ async function verifyIslandWindow() {
     testLog('verify:interactions')
     await verifyAlertRules(window)
     testLog('verify:alerts')
-    await verifyRecreate(window)
-    testLog('verify:recreate')
+    for (let cycle = 0; cycle < 3; cycle++) {
+      await verifyRecreate(window)
+      testLog(`verify:recreate:${cycle + 1}`)
+    }
   } finally {
     window.destroy()
   }
@@ -242,33 +245,33 @@ async function verifyIslandWindow() {
 
 async function verifyExit(window) {
   const hidden = waitForHidden()
-  window.webContents.send(CHANNELS.islandPresentation, { revision: 2, visible: false })
+  const revision = sendPresentation(window, false)
   window.webContents.send(CHANNELS.islandUpdated, snapshot('running', 0))
   await delay(50)
   assert.equal((await inspect(window)).taskRows, 4)
   await hidden
-  assert.equal(hiddenRevision, 2)
+  assert.equal(hiddenRevision, revision)
 }
 
 async function verifyStaleAndRevive(window) {
   window.webContents.send(CHANNELS.islandUpdated, snapshot('running', 1))
-  window.webContents.send(CHANNELS.islandPresentation, { revision: 3, visible: true })
+  sendPresentation(window, true)
   await delay(700)
   assert.equal((await inspect(window)).mode, 'compact')
 
   const hidden = waitForHidden()
-  window.webContents.send(CHANNELS.islandPresentation, { revision: 4, visible: false })
+  const staleRevision = sendPresentation(window, false)
   await delay(100)
-  window.webContents.send(CHANNELS.islandPresentation, { revision: 5, visible: true })
+  sendPresentation(window, true)
   await delay(EXIT_TIMEOUT_MS)
   assert.equal((await inspect(window)).mode, 'compact')
-  assert.notEqual(hiddenRevision, 4)
+  assert.notEqual(hiddenRevision, staleRevision)
   clearHiddenWaiter(hidden)
 }
 
 async function verifyAlertRules(window) {
   testLog('alerts:start')
-  window.webContents.send(CHANNELS.islandPresentation, { revision: 6, visible: true })
+  sendPresentation(window, true)
   await delay(700)
   testLog('alerts:shown')
   window.webContents.send(CHANNELS.islandUpdated, snapshot('completed', 1, '-auto'))
@@ -308,7 +311,7 @@ async function verifyAlertRules(window) {
   testLog('alerts:failed-dismissed')
   assert.equal((await inspect(window)).mode, 'compact')
 
-  window.webContents.send(CHANNELS.islandPresentation, { revision: 7, visible: true })
+  sendPresentation(window, true)
   await delay(700)
   testLog('alerts:re-shown')
   window.webContents.send(CHANNELS.islandUpdated, snapshot('running'))
@@ -323,7 +326,7 @@ async function verifyAlertRules(window) {
   window.webContents.send(CHANNELS.islandUpdated, snapshot('running'))
   await delay(700)
   testLog('alerts:running-final')
-  window.webContents.send(CHANNELS.islandPresentation, { revision: 8, visible: false })
+  sendPresentation(window, false)
   await delay(500)
   testLog('alerts:end')
 }
@@ -336,8 +339,8 @@ async function verifyRecreate(window) {
   window.webContents.reload()
   await loaded
   await retry(() => assert.ok(readyCount > previousReadyCount))
-  await delay(700)
-  assert.equal((await inspect(window)).mode, 'compact')
+  sendPresentation(window, true)
+  await retry(async () => assert.equal((await inspect(window)).mode, 'compact'))
 }
 
 async function verifyStableCompactUpdates(window) {
@@ -437,26 +440,33 @@ function waitForHidden() {
   })
 }
 
+function sendPresentation(window, visible) {
+  const presentation = { revision: ++presentationRevision, visible }
+  currentPresentation = presentation
+  if (visible) {
+    if (!window.isVisible()) window.showInactive()
+    window.webContents.setBackgroundThrottling(false)
+  }
+  window.webContents.send(CHANNELS.islandPresentation, presentation)
+  return presentation.revision
+}
+
 function registerHandlers() {
-  let presentationRevision = 0
   ipcMain.handle(CHANNELS.bootstrap, () => ({
     settings: { island: { enabled: true } },
     island: snapshot('running')
   }))
-  ipcMain.handle(CHANNELS.islandReady, (event) => {
+  ipcMain.handle(CHANNELS.islandReady, () => {
     readyCount++
-    const target = BrowserWindow.fromWebContents(event.sender)
-    setImmediate(() =>
-      target?.webContents.send(CHANNELS.islandPresentation, {
-        revision: ++presentationRevision,
-        visible: true
-      })
-    )
     ready()
   })
-  ipcMain.handle(CHANNELS.islandHidden, (_event, revision) => {
+  ipcMain.handle(CHANNELS.islandHidden, (event, revision) => {
+    if (revision !== currentPresentation.revision || currentPresentation.visible) return
     hiddenRevision = revision
     resolveHidden?.(revision)
+    const target = BrowserWindow.fromWebContents(event.sender)
+    target?.webContents.setBackgroundThrottling(true)
+    target?.hide()
   })
   ipcMain.handle(CHANNELS.islandInteractive, (event, value) => {
     if (event.sender.id !== BrowserWindow.getAllWindows()[0]?.webContents.id) return

@@ -1,0 +1,985 @@
+/* =====================================================================
+   5. POSTER · 复古旅行海报 Sunset Dune
+   形态语言:奶油纸底 + 粗墨描边 + 硬偏移阴影(印刷套版感)
+           + 票根打孔 + 太阳射线徽章 + 斜纹进度条 + 按钮压印反馈
+   ===================================================================== */
+[data-theme='poster'] {
+  /* 胶囊:圆角不切角,让硬偏移阴影完整显示 */
+  --capsule-radius: 8px;
+  --capsule-orb-radius: 8px;
+  --capsule-clip: none;
+  /* 奶油纸底 + 粗墨描边(用 box-shadow inset 模拟印刷描边,不用 border 避免占布局) */
+  --capsule-text: #22333b;
+  --capsule-bg: #f3ecd8;
+  --capsule-orb-bg: #f3ecd8;
+  --capsule-edge: rgba(34, 51, 59, 0.92);
+  --capsule-edge-soft: rgba(34, 51, 59, 0.4);
+  /* 关掉毛玻璃,海报是不透明纸底 */
+  --capsule-filter: none;
+  --capsule-accent: #d95d18;
+  --capsule-font: Impact, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  /* panel:招贴画,粗墨外框 + 双线 outline + 硬偏移落影 */
+  --panel-radius: 4px;
+  --panel-clip: inset(0 round 4px);
+  --panel-border: 3px solid #22333b;
+  --panel-tint: none;
+  /* 纯色包成单色 gradient,与 aurora 同为 background-image 层,避免被 background 简写忽略 */
+  --panel-bg: linear-gradient(#f3ecd8, #f3ecd8);
+  --panel-shadow: 12px 12px 0 rgba(34, 51, 59, 0.22), 0 0 0 1.5px rgba(34, 51, 59, 0.92);
+  /* 色板:纸/墨/落日/芥末/锈红/松绿 */
+  --panel-card: #faf4e4;
+  --panel-card-2: #f3ecd8;
+  --panel-card-3: #fbe3c8;
+  --panel-inset: #e9dfc4;
+  --panel-text: #22333b;
+  --panel-text-2: #3d5059;
+  --panel-muted: #6b7a82;
+  --panel-accent: #d95d18;
+  --panel-accent-2: #2f6f62;
+  --panel-accent-soft: rgba(217, 93, 24, 0.12);
+  --panel-success: #2f6f62;
+  --panel-danger: #c0442c;
+  --panel-line: rgba(34, 51, 59, 0.28);
+  --panel-line-strong: rgba(34, 51, 59, 0.55);
+  --panel-icon-blue: #1f5c8a;
+  --panel-icon-violet: #7a4a9c;
+  --panel-icon-amber: #dfa32b;
+  --panel-icon-pink: #c0442c;
+  --panel-icon-green: #2f6f62;
+  /* panel 正文用清晰正文字体;大标题/数值显式用 Impact,小字在 Impact 下发虚 */
+  --panel-font: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+
+  /* 胶囊元素参数(横版/竖版共用;orb 专属覆盖见下文规则) */
+  --capsule-h-pad-y: 5px;
+  --capsule-h-pad-x: 5px;
+  --capsule-h-gap: 10px;
+  --capsule-v-pad-y: 6px;
+  --capsule-v-pad-x: 4px;
+  --capsule-v-gap: 4px;
+  --capsule-weekly-font: 19px;
+  --capsule-weekly-pad-y: 0px;
+  --capsule-weekly-pad-x: 0px;
+  --capsule-weekly-gap: 1px;
+  --capsule-percent-font: 18px;
+  --capsule-progress-h: 7px;
+  --capsule-progress-w: 100%;
+  --capsule-credit-font: 11px;
+  --capsule-credit-pad-y: 2px;
+  --capsule-credit-pad-x: 6px;
+  --capsule-pick-font: 11px;
+  --capsule-pick-pad-y: 2px;
+  --capsule-pick-pad-x: 5px;
+  --capsule-stat-label-font: 9px;
+  --capsule-stat-value-font: 14px;
+  --capsule-stat-pad-y: 0px;
+  --capsule-stat-pad-x: 0px;
+}
+
+/* main.css 的 .panel{} 自身重声明了一批 token(--panel-bg/--panel-card 等),
+   元素自身声明优先于父级 [data-theme] 继承,会压住主题色;
+   这里用 [data-theme='poster'] .panel (特异性 0,2,0) 在 .panel 元素上重新赋主题值 */
+[data-theme='poster'] .panel {
+  --panel-bg: linear-gradient(#f3ecd8, #f3ecd8);
+  --panel-card: #faf4e4;
+  --panel-card-2: #f3ecd8;
+  --panel-card-3: #fbe3c8;
+  --panel-surface: #faf4e4;
+  --panel-surface-2: #f3ecd8;
+  --panel-inset: #e9dfc4;
+  --panel-text: #22333b;
+  --panel-text-2: #3d5059;
+  --panel-muted: #6b7a82;
+  --panel-accent: #d95d18;
+  --panel-accent-2: #2f6f62;
+  --panel-accent-soft: rgba(217, 93, 24, 0.12);
+  --panel-success: #2f6f62;
+  --panel-danger: #c0442c;
+  --panel-line: rgba(34, 51, 59, 0.28);
+  --panel-line-strong: rgba(34, 51, 59, 0.55);
+  --panel-icon-blue: #1f5c8a;
+  --panel-icon-violet: #7a4a9c;
+  --panel-icon-amber: #dfa32b;
+  --panel-icon-pink: #c0442c;
+  --panel-icon-green: #2f6f62;
+}
+
+/* 半调网点:老印刷网点肌理,铺满胶囊与面板装饰层 */
+[data-theme='poster'] .capsule__deco,
+[data-theme='poster'] .panel__deco {
+  display: block;
+  background-image: radial-gradient(rgba(34, 51, 59, 0.16) 1px, transparent 1.4px);
+  background-size: 7px 7px;
+}
+
+/* 胶囊装饰层:网点 + 太阳射线徽章(右上角小太阳) */
+[data-theme='poster'] .capsule__deco {
+  mix-blend-mode: multiply;
+  opacity: 0.55;
+}
+
+[data-theme='poster'] .capsule--orb .capsule__deco {
+  opacity: 0.5;
+}
+
+/* panel 装饰层:网点更淡,铺满背景 */
+[data-theme='poster'] .panel__deco {
+  z-index: 0;
+  opacity: 0.4;
+  mix-blend-mode: multiply;
+}
+
+/* 胶囊粗墨描边:用 box-shadow 内描边替代 border,印刷套版感 */
+[data-theme='poster'] .capsule {
+  box-shadow:
+    inset 0 0 0 3px #22333b,
+    6px 6px 0 rgba(20, 28, 32, 0.5);
+}
+
+[data-theme='poster'] .capsule--orb {
+  box-shadow:
+    inset 0 0 0 3px #22333b,
+    5px 5px 0 rgba(20, 28, 32, 0.5);
+}
+
+/* 周重置倒计时大字:海报浓重字味,松绿色 */
+[data-theme='poster'] .capsule__weekly {
+  color: #22333b;
+  font-weight: 400;
+  letter-spacing: 0px;
+}
+
+[data-theme='poster'] .capsule__weekly svg {
+  color: #2f6f62;
+}
+
+/* 百分比:落日深橙色,海报数字味 */
+[data-theme='poster'] .capsule__percent {
+  color: #b23f0a;
+  font-weight: 400;
+  letter-spacing: 1px;
+}
+
+/* 进度条:纸底 + 粗墨槽 + 斜纹平涂填充 */
+[data-theme='poster'] .capsule__progress {
+  height: var(--capsule-progress-h);
+  border-radius: 0;
+  background: #e9dfc4;
+  box-shadow: inset 0 0 0 2px #22333b;
+}
+
+[data-theme='poster'] .capsule__progress span {
+  border-radius: 0;
+  background: repeating-linear-gradient(-45deg, #d95d18 0 7px, #b23f0a 7px 10px);
+}
+
+/* API 模式统计单元:纸底浅,文字改墨色避免白底白字;命中数值沿用落日橙 */
+[data-theme='poster'] .capsule__stat-label {
+  color: rgba(34, 51, 59, 0.7);
+}
+
+[data-theme='poster'] .capsule__stat-value {
+  color: #22333b;
+}
+
+[data-theme='poster'] .capsule__stat--metric .capsule__stat-value {
+  color: #b23f0a;
+}
+
+/* 横版缓存命中进度条:默认贴底,上提贴紧数值 */
+[data-theme='poster'] .capsule__layout--h .capsule__stat--metric .capsule__progress {
+  margin-top: -2px;
+}
+
+/* 重置卡:芥末黄票根 + 顶墨线 */
+[data-theme='poster'] .capsule__credit {
+  border-radius: 0;
+  background: #dfa32b;
+  color: #22333b;
+  box-shadow: inset 0 2px 0 #22333b;
+  font-size: var(--capsule-credit-font);
+  padding: var(--capsule-credit-pad-y) var(--capsule-credit-pad-x);
+  font-weight: 700;
+}
+
+/* 推荐模型:纸底 + 墨边小印章 */
+[data-theme='poster'] .capsule__pick {
+  border-radius: 0;
+  background: #faf4e4;
+  color: #22333b;
+  box-shadow: inset 0 0 0 1.5px #22333b;
+  font-size: var(--capsule-pick-font);
+  padding: var(--capsule-pick-pad-y) var(--capsule-pick-pad-x);
+  font-weight: 300;
+  letter-spacing: -0.5px;
+}
+
+/* 竖版 orb:各项更小、居中、整体变瘦(继承默认) */
+[data-theme='poster'] .capsule--orb .capsule__credit {
+  font-size: 9px;
+  padding: 2px 3px;
+}
+
+/* 竖版 orb:推荐模型印章同步收紧 */
+[data-theme='poster'] .capsule--orb .capsule__pick {
+  font-size: 11px;
+  padding: 2px 5px;
+}
+
+/* panel 招贴报头:标题用 Impact 浓重字 + 双线下划 */
+[data-theme='poster'] .panel__title {
+  font-family: Impact, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 400;
+  font-size: 26px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #22333b;
+}
+
+/* panel 眉标:粗墨小字 */
+[data-theme='poster'] .panel__eyebrow {
+  color: #c0442c;
+  font-weight: 800;
+  letter-spacing: 3px;
+}
+
+/* panel tabs:票务窗口选择牌,粗墨边框 + 落日 active */
+[data-theme='poster'] .panel__tabs {
+  border-radius: 0;
+  background: #22333b;
+  border: 3px solid #22333b;
+  box-shadow: none;
+  gap: 3px;
+  padding: 3px;
+}
+
+[data-theme='poster'] .panel__tab {
+  border-radius: 0;
+  color: #22333b;
+  background: #f3ecd8;
+  border: none;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+[data-theme='poster'] .panel__tab:hover:not(.is-active) {
+  background: #e9dfc4;
+  color: #22333b;
+}
+
+[data-theme='poster'] .panel__tab.is-active {
+  background: #d95d18;
+  color: #f3ecd8;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* quota-card:平涂色块门票,粗墨边 + 硬偏移阴影 + hover 上浮 */
+[data-theme='poster'] .quota-card,
+[data-theme='poster'] .usage-card {
+  border-radius: 0;
+  border: 3px solid #22333b;
+  background: #faf4e4;
+  box-shadow: 4px 4px 0 rgba(34, 51, 59, 0.28);
+}
+
+[data-theme='poster'] .quota-card.is-accent {
+  background: #fbe3c8;
+}
+
+[data-theme='poster'] .quota-card.is-accent::before {
+  display: none;
+}
+
+[data-theme='poster'] .quota-card:hover,
+[data-theme='poster'] .usage-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 rgba(34, 51, 59, 0.32);
+}
+
+[data-theme='poster'] .quota-card__label {
+  background: #22333b;
+  color: #f3ecd8;
+  padding: 2px 8px;
+  border-radius: 0;
+  font-weight: 900;
+  letter-spacing: 2px;
+}
+
+[data-theme='poster'] .quota-card.is-accent .quota-card__label {
+  background: #b23f0a;
+}
+
+[data-theme='poster'] .quota-card__value {
+  color: var(--metric-accent, #b23f0a);
+  font-family: Impact, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 400;
+  letter-spacing: 1px;
+}
+
+/* 额度进度条:粗墨槽 + 斜纹平涂填充 */
+[data-theme='poster'] .quota-card__progress {
+  height: 9px;
+  border-radius: 0;
+  background: #e9dfc4;
+  box-shadow: inset 0 0 0 2.5px #22333b;
+}
+
+[data-theme='poster'] .quota-card.is-accent .quota-card__progress {
+  height: 9px;
+}
+
+[data-theme='poster'] .quota-card__progress span {
+  border-radius: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--metric-accent, #d95d18) 0 8px,
+    color-mix(in srgb, var(--metric-accent, #d95d18) 72%, #000) 8px 11px
+  );
+}
+
+[data-theme='poster'] .quota-card__reset {
+  color: #3d5059;
+  font-weight: 600;
+}
+
+[data-theme='poster'] .quota-card__expiry {
+  color: #6b7a82;
+}
+
+/* 用量统计卡:野营告示牌标题 + 三角图标 */
+[data-theme='poster'] .usage-card__title {
+  color: #22333b;
+  font-weight: 900;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+[data-theme='poster'] .usage-card__title::before {
+  content: '▲ ';
+  color: #2f6f62;
+  font-size: 11px;
+}
+
+/* 用量汇总:虚线墨框纸底 */
+[data-theme='poster'] .usage-summary__item {
+  border-radius: 0;
+  background: #e9dfc4;
+  border: 2px dashed #22333b;
+}
+
+[data-theme='poster'] .usage-summary__value {
+  color: #22333b;
+  font-family: Impact, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 400;
+}
+
+[data-theme='poster'] .usage-summary__value--input {
+  color: #1f5c8a;
+}
+
+[data-theme='poster'] .usage-summary__value--output {
+  color: #7a4a9c;
+}
+
+[data-theme='poster'] .usage-summary__value--cached {
+  color: #2f6f62;
+}
+
+[data-theme='poster'] .usage-summary__value--cost {
+  color: #c0442c;
+}
+
+/* 柱状图:海报平涂柱 + 深色帽檐 + 斜纹分隔
+   position:relative 建立 ::before 定位上下文,避免帽檐相对 .usage-chart 横跨全宽 */
+[data-theme='poster'] .usage-chart__bar {
+  position: relative;
+  border-radius: 0;
+  background: #d95d18;
+  border: 2.5px solid #22333b;
+  border-bottom: none;
+  box-shadow: none;
+}
+
+[data-theme='poster'] .usage-chart__bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: #b23f0a;
+  border-bottom: 2.5px solid #22333b;
+}
+
+[data-theme='poster'] .usage-chart__bar--stack {
+  background: #e9dfc4;
+  border: 2.5px solid #22333b;
+}
+
+[data-theme='poster'] .usage-chart__bar-seg.is-cached {
+  background: repeating-linear-gradient(-45deg, rgba(192, 68, 44, 0.85) 0 5px, transparent 5px 9px);
+}
+
+[data-theme='poster'] .usage-chart__bar-seg.is-input {
+  background: #d95d18;
+}
+
+[data-theme='poster'] .usage-chart__bar-seg.is-output {
+  background: #7a4a9c;
+}
+
+[data-theme='poster'] .usage-chart__date {
+  color: #6b7a82;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+/* 明细行:导览清单,粗墨边 + 硬偏移阴影 + hover 平移 */
+[data-theme='poster'] .detail-row {
+  border-radius: 0;
+  border: 2.5px solid #22333b;
+  background: #faf4e4;
+  box-shadow: 3px 3px 0 rgba(34, 51, 59, 0.25);
+}
+
+[data-theme='poster'] .detail-row:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 rgba(34, 51, 59, 0.3);
+  border-color: #22333b;
+}
+
+[data-theme='poster'] .detail-row__icon {
+  border-radius: 0;
+  background: #e9dfc4;
+  border: 2.5px solid #22333b;
+  color: var(--icon-tone, #22333b);
+}
+
+[data-theme='poster'] .detail-row__label {
+  color: #22333b;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+[data-theme='poster'] .detail-row__link {
+  color: #c0442c;
+  font-weight: 700;
+}
+
+[data-theme='poster'] .detail-row__link:hover {
+  color: #b23f0a;
+  text-decoration: underline wavy;
+}
+
+[data-theme='poster'] .detail-row__value {
+  color: #22333b;
+  font-family: Impact, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 400;
+}
+
+/* 来源信息卡:纸底墨边 */
+[data-theme='poster'] .panel__meta {
+  border-radius: 0;
+  border: 2.5px solid #22333b;
+  background: #faf4e4;
+  box-shadow: 3px 3px 0 rgba(34, 51, 59, 0.2);
+}
+
+[data-theme='poster'] .panel__meta-row svg {
+  border-radius: 0;
+  background: #e9dfc4;
+  border: 2.5px solid #22333b;
+  box-shadow: none;
+}
+
+/* 团队排行榜行:行李牌 + 硬偏移阴影 */
+[data-theme='poster'] .team-row {
+  border-radius: 0;
+  border: 2.5px solid #22333b;
+  background: #faf4e4;
+  box-shadow: 3px 3px 0 rgba(34, 51, 59, 0.22);
+}
+
+[data-theme='poster'] .team-row:hover {
+  transform: translateX(3px);
+  box-shadow: 3px 3px 0 rgba(34, 51, 59, 0.3);
+}
+
+[data-theme='poster'] .team-row.is-self {
+  border-color: #c0442c;
+  background: #fbe3c8;
+}
+
+/* 排名:行李牌,前 3 用强调色 */
+[data-theme='poster'] .team-row__rank {
+  border-radius: 0;
+  background: #e9dfc4;
+  border: 2.5px solid #22333b;
+  color: #22333b;
+}
+
+[data-theme='poster'] .team-row.is-top-1 .team-row__rank {
+  background: #dfa32b;
+  color: #22333b;
+}
+
+[data-theme='poster'] .team-row.is-top-2 .team-row__rank {
+  background: #cfd6d4;
+  color: #22333b;
+}
+
+[data-theme='poster'] .team-row.is-top-3 .team-row__rank {
+  background: #e2a587;
+  color: #22333b;
+}
+
+[data-theme='poster'] .team-row__name {
+  color: #22333b;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+[data-theme='poster'] .team-row__value {
+  color: var(--metric-accent, #22333b);
+  font-family: Impact, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  font-weight: 400;
+}
+
+/* 团队行进度条:粗墨槽 + 斜纹平涂填充 */
+[data-theme='poster'] .team-row__bar,
+[data-theme='poster'] .team-row__window-bar {
+  border-radius: 0;
+  background: #e9dfc4;
+  box-shadow: inset 0 0 0 2px #22333b;
+}
+
+[data-theme='poster'] .team-row__bar-fill,
+[data-theme='poster'] .team-row__window-bar-fill {
+  border-radius: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--metric-accent, #d95d18) 0 5px,
+    color-mix(in srgb, var(--metric-accent, #d95d18) 72%, #000) 5px 8px
+  );
+}
+
+/* 重置卡:墨边小印章 */
+[data-theme='poster'] .team-row__credit {
+  color: #c0442c;
+  font-weight: 900;
+}
+
+/* 团队行 tooltip:纸底墨边浮层 */
+[data-theme='poster'] .team-row__tooltip {
+  border-radius: 0;
+  border: 2.5px solid #22333b;
+  background: #faf4e4;
+  box-shadow: 4px 4px 0 rgba(34, 51, 59, 0.3);
+}
+
+/* segmented:票务窗口选择牌,粗墨边 + 落日/芥末 active */
+[data-theme='poster'] .segmented {
+  border-radius: 0;
+  background: #22333b;
+  border: 3px solid #22333b;
+  box-shadow: none;
+  gap: 3px;
+  padding: 3px;
+}
+
+[data-theme='poster'] .segmented button {
+  border-radius: 0;
+  color: #22333b;
+  background: #f3ecd8;
+  border: none;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+[data-theme='poster'] .segmented button.is-active {
+  background: #dfa32b;
+  color: #22333b;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+[data-theme='poster'] .segmented button:hover:not(.is-active):not(:disabled) {
+  background: #e9dfc4;
+  color: #22333b;
+}
+
+/* toggle-switch:营地闸刀,粗墨边 + 芥末/松绿开态 */
+[data-theme='poster'] .toggle-switch__track {
+  border-radius: 0;
+  background: #e9dfc4;
+  box-shadow: inset 0 0 0 2.5px #22333b;
+}
+
+[data-theme='poster'] .toggle-switch.is-checked .toggle-switch__track {
+  background: #dfa32b;
+  box-shadow: inset 0 0 0 2.5px #22333b;
+}
+
+[data-theme='poster'] .toggle-switch__thumb {
+  border-radius: 0;
+  background: #c0442c;
+  box-shadow: inset 0 0 0 2px #22333b;
+}
+
+[data-theme='poster'] .toggle-switch.is-checked .toggle-switch__thumb {
+  background: #2f6f62;
+  transform: translateX(20px);
+}
+
+/* ghost-button:粗墨边 + 硬偏移阴影 + 按压回弹 */
+[data-theme='poster'] .ghost-button {
+  border-radius: 0;
+  border: 2.5px solid #22333b;
+  background: #dfa32b;
+  color: #22333b;
+  font-weight: 900;
+  letter-spacing: 2px;
+  box-shadow: 3px 3px 0 rgba(34, 51, 59, 0.5);
+}
+
+[data-theme='poster'] .ghost-button:hover {
+  transform: translate(-1px, -1px);
+  background: #dfa32b;
+  color: #22333b;
+  border-color: #22333b;
+  box-shadow: 4px 4px 0 rgba(34, 51, 59, 0.5);
+}
+
+[data-theme='poster'] .ghost-button:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 rgba(34, 51, 59, 0.5);
+}
+
+[data-theme='poster'] .ghost-button--accent {
+  background: #d95d18;
+  color: #f3ecd8;
+  border-color: #22333b;
+}
+
+[data-theme='poster'] .about-row__btn {
+  background: #faf4e4;
+  color: #c0442c;
+  border-color: #22333b;
+  box-shadow: 2.5px 2.5px 0 rgba(34, 51, 59, 0.45);
+}
+
+[data-theme='poster'] .about-row__btn:hover {
+  background: #fbe3c8;
+  box-shadow: 3px 3px 0 rgba(34, 51, 59, 0.45);
+}
+
+/* panel 底栏:双线墨边 */
+[data-theme='poster'] .panel__footer {
+  border-top: 3px double #22333b;
+  background: #f3ecd8;
+  margin-left: calc(-1 * var(--panel-space-page));
+  margin-right: calc(-1 * var(--panel-space-page));
+  padding-left: var(--panel-space-page);
+  padding-right: var(--panel-space-page);
+}
+/* 背景铺满到弹窗左右边:负 margin 拉出 panel 24px padding,内容用 padding 补回不贴边 */
+[data-theme='poster'] .panel__body {
+  overflow: visible;
+}
+
+[data-theme='poster'] .panel__footer-meta {
+  color: #6b7a82;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+/* 设置区:营地登记表,粗墨边 + 硬偏移阴影 */
+[data-theme='poster'] .settings-section {
+  border-radius: 0;
+  border: 3px solid #22333b;
+  background: #faf4e4;
+  box-shadow: 4px 4px 0 rgba(34, 51, 59, 0.2);
+}
+
+[data-theme='poster'] .settings-section__title {
+  color: #22333b;
+  font-weight: 900;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+[data-theme='poster'] .settings-section__title::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 9px;
+  background: #d95d18;
+  border: 2.5px solid #22333b;
+  vertical-align: middle;
+}
+
+[data-theme='poster'] .settings-section__title::after {
+  content: '';
+  flex: 1;
+  height: 2.5px;
+  margin-left: 9px;
+  background: repeating-linear-gradient(90deg, #3d5059 0 22px, transparent 22px 28px);
+}
+
+[data-theme='poster'] .setting-row {
+  border-radius: 0;
+  border: 2.5px solid #22333b;
+  background: #faf4e4;
+  box-shadow: 3px 3px 0 rgba(34, 51, 59, 0.2);
+}
+
+[data-theme='poster'] .setting-row:hover {
+  transform: translateX(2px);
+  background: #faf4e4;
+  border-color: #22333b;
+}
+
+[data-theme='poster'] .inline-input {
+  border-radius: 0;
+  border: 2.5px solid #22333b;
+  background: #fdf8ea;
+  box-shadow: inset 2px 2px 0 rgba(34, 51, 59, 0.15);
+}
+
+[data-theme='poster'] .inline-input:focus-within {
+  border-color: #d95d18;
+  box-shadow:
+    inset 2px 2px 0 rgba(34, 51, 59, 0.15),
+    3px 3px 0 rgba(217, 93, 24, 0.4);
+}
+
+/* 团队公告:图钉 + 纸底墨边,落日左边条换图钉顶饰 */
+[data-theme='poster'] .team-announcement {
+  border-radius: 0;
+  border: 3px solid #22333b;
+  background: #fdf8ea;
+  box-shadow: 4px 4px 0 rgba(34, 51, 59, 0.25);
+  background-image: none;
+}
+
+[data-theme='poster'] .team-announcement::before {
+  top: -9px;
+  left: 50%;
+  bottom: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 32%, #ff8d6e, #c0442c 70%);
+  border: 2.5px solid #22333b;
+  box-shadow: none;
+  transform: translateX(-50%);
+}
+
+[data-theme='poster'] .team-announcement__label {
+  background: #c0442c;
+  color: #fdf8ea;
+  border-radius: 0;
+  border: none;
+  font-weight: 900;
+  letter-spacing: 3px;
+}
+
+[data-theme='poster'] .team-announcement__meta {
+  color: #3d5059;
+  font-weight: 600;
+}
+
+[data-theme='poster'] .team-announcement__text {
+  color: #22333b;
+  font-weight: 500;
+}
+
+[data-theme='poster'] .team-announcement__acknowledge {
+  border-radius: 0;
+  border: 2.5px solid #22333b;
+  background: #f3ecd8;
+  color: #22333b;
+  font-weight: 900;
+  letter-spacing: 2px;
+  box-shadow: 2.5px 2.5px 0 rgba(34, 51, 59, 0.45);
+}
+
+[data-theme='poster'] .team-announcement__acknowledge:hover {
+  background: #fbe3c8;
+  border-color: #22333b;
+  color: #22333b;
+}
+
+/* 团队广播消息:明信片,纸底墨边 + 轻微旋转 */
+[data-theme='poster'] .team-broadcast__item {
+  border-radius: 0;
+  border: 2.5px solid #22333b;
+  background: #fdf8ea;
+  box-shadow: 3px 3px 0 rgba(34, 51, 59, 0.22);
+  transform: rotate(-0.6deg);
+}
+
+[data-theme='poster'] .team-broadcast__item:nth-child(even) {
+  transform: rotate(0.5deg);
+}
+
+[data-theme='poster'] .team-broadcast__name {
+  color: #c0442c;
+  font-weight: 900;
+}
+
+[data-theme='poster'] .team-broadcast__input {
+  border-radius: 0;
+  border: 2.5px solid #22333b;
+  background: #fdf8ea;
+  box-shadow: inset 2px 2px 0 rgba(34, 51, 59, 0.15);
+}
+
+[data-theme='poster'] .team-broadcast__input:focus {
+  border-color: #d95d18;
+  box-shadow:
+    inset 2px 2px 0 rgba(34, 51, 59, 0.15),
+    3px 3px 0 rgba(217, 93, 24, 0.4);
+}
+
+[data-theme='poster'] .team-broadcast__send {
+  border-radius: 0;
+  border: 2.5px solid #22333b;
+  background: #d95d18;
+  color: #fdf8ea;
+  font-weight: 900;
+  letter-spacing: 2px;
+  box-shadow: 3px 3px 0 rgba(34, 51, 59, 0.5);
+}
+
+/* 自定义时间面板:纸底墨边凹陷 */
+[data-theme='poster'] .usage-range-panel {
+  border-radius: 0;
+  border: 2.5px solid #22333b;
+  background: #e9dfc4;
+  box-shadow: inset 2px 2px 0 rgba(34, 51, 59, 0.12);
+}
+
+[data-theme='poster'] .usage-range-field input {
+  border-radius: 0;
+  border: 2px solid #22333b;
+  background: #fff;
+  color: #22333b;
+  color-scheme: light;
+}
+
+[data-theme='poster'] .usage-range-field input:focus-visible {
+  border-color: #d95d18;
+}
+
+[data-theme='poster'] .usage-range-apply {
+  border-radius: 0;
+  background: #d95d18;
+  color: #f3ecd8;
+  border: 2.5px solid #22333b;
+  box-shadow: 3px 3px 0 rgba(34, 51, 59, 0.4);
+  font-weight: 900;
+  letter-spacing: 2px;
+}
+
+/* 模型用量榜:纸底墨边轨道 + 斜纹填充 */
+[data-theme='poster'] .model-board__title {
+  color: #22333b;
+  font-weight: 900;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+[data-theme='poster'] .model-board__track {
+  border-radius: 0;
+  background: #e9dfc4;
+  box-shadow: inset 0 0 0 2px #22333b;
+}
+
+[data-theme='poster'] .model-board__fill {
+  border-radius: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--panel-accent) 0 5px,
+    color-mix(in srgb, var(--panel-accent) 72%, #000) 5px 8px
+  );
+}
+
+[data-theme='poster'] .model-board__name {
+  color: #6b7a82;
+}
+
+[data-theme='poster'] .model-board__meta {
+  color: #22333b;
+  font-weight: 700;
+}
+
+/* 浮层:纸底墨边 */
+[data-theme='poster'] .model-board__tooltip,
+[data-theme='poster'] .usage-tooltip {
+  border-radius: 0;
+  border: 2.5px solid #22333b;
+  background: #faf4e4;
+  box-shadow: 4px 4px 0 rgba(34, 51, 59, 0.3);
+}
+
+[data-theme='poster'] .usage-tooltip__date {
+  color: #22333b;
+  font-weight: 900;
+  letter-spacing: 2px;
+}
+
+[data-theme='poster'] .usage-tooltip__row {
+  color: #6b7a82;
+}
+
+[data-theme='poster'] .usage-tooltip__row span:last-child {
+  color: #22333b;
+}
+
+/* 空状态:虚线墨框 */
+[data-theme='poster'] .team-empty,
+[data-theme='poster'] .team-broadcast__empty {
+  border-radius: 0;
+  border: 2px dashed #3d5059;
+  color: #6b7a82;
+}
+
+/* 滚动条:墨色粗条 */
+[data-theme='poster'] .panel__content::-webkit-scrollbar,
+[data-theme='poster'] .team-broadcast__feed::-webkit-scrollbar {
+  width: 8px;
+}
+
+[data-theme='poster'] .panel__content::-webkit-scrollbar-track,
+[data-theme='poster'] .team-broadcast__feed::-webkit-scrollbar-track {
+  background: #e9dfc4;
+}
+
+[data-theme='poster'] .panel__content::-webkit-scrollbar-thumb,
+[data-theme='poster'] .team-broadcast__feed::-webkit-scrollbar-thumb {
+  border-radius: 0;
+  background: #22333b;
+}
+
+/* 入场:海报贴上墙,带轻微旋转 */
+@keyframes poster-rise {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.97) rotate(-1deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0);
+  }
+}
+
+[data-theme='poster'] .panel {
+  animation: poster-rise 0.5s cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+}
+
+/* 告急态:海报百分比变红 + 呼吸(继承默认 is-critical,色板已含红) */
+[data-theme='poster'] .capsule__percent.is-critical {
+  color: #c0442c;
+}

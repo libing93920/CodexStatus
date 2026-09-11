@@ -1,0 +1,1706 @@
+body {
+  background: transparent;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+.app-shell {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+
+.app-shell--capsule {
+  display: flex;
+}
+
+.app-shell--panel {
+  padding: 0;
+  display: flex;
+  align-items: flex-start;
+}
+
+.widget {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.ghost-button,
+.segmented button,
+.inline-input,
+.inline-input input,
+.panel__tab,
+.toggle-switch {
+  -webkit-app-region: no-drag;
+}
+
+.capsule {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  overflow: hidden;
+  color: var(--capsule-text, rgba(240, 245, 250, 0.94));
+  border: 0;
+  border-radius: var(--capsule-radius, 20px);
+  /* 圆角/切角外的半透黑残留由 clip-path 裁净;默认 inset(0 round 20px) 等同不裁 */
+  clip-path: var(--capsule-clip, none);
+  background: var(
+    --capsule-bg,
+    linear-gradient(168deg, rgba(38, 48, 62, 0.62) 0%, rgba(16, 22, 32, 0.64) 100%)
+  );
+  box-shadow:
+    inset 0 0 0 0.5px var(--capsule-edge, rgba(109, 180, 255, 0.34)),
+    inset 0 0 0 1px var(--capsule-edge-soft, rgba(255, 255, 255, 0.035));
+  backdrop-filter: var(--capsule-filter, saturate(1.4) blur(2px));
+  -webkit-backdrop-filter: var(--capsule-filter, saturate(1.4) blur(2px));
+  font-family: var(--capsule-font, inherit);
+  cursor: grab;
+  outline: none;
+  touch-action: none;
+  transition: transform 180ms ease;
+  --capsule-accent: rgba(88, 215, 131, 0.85);
+}
+
+.capsule:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--capsule-accent) 18%, transparent);
+}
+
+.capsule:active,
+.capsule.is-dragging {
+  cursor: grabbing;
+  transform: scale(0.982);
+}
+
+.capsule.has-update::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 未读公告角标(蓝):颜色只作辅助，胶囊 aria-label 同步说明目标。 */
+.capsule.has-announcement::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #58a6ff;
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 版本落后角标(黄):组内广播的最高版本高于本地,弱提示;与红点角标互斥不叠加 */
+.capsule.is-outdated::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e3b341;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 点赞特效:整个胶囊覆盖爱心动画数秒,pointer-events 穿透不挡拖拽/点击 */
+.heart-effect {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+  color: #ff7ba1;
+  --heart-rise-y: -72px;
+  --shoot-travel-x: 280px;
+  --shoot-travel-y: 0px;
+  --gift-rise-y: -28px;
+  --balloon-rise-y: -24px;
+}
+
+.capsule--orb .heart-effect {
+  --heart-rise-y: -190px;
+  --shoot-travel-x: 0px;
+  --shoot-travel-y: -200px;
+  --gift-rise-y: -58px;
+  --balloon-rise-y: -74px;
+}
+
+.heart-effect svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* 减少动态效果时只保留静态反馈,避免粒子位移引发不适 */
+.heart-effect__reduced {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  display: none;
+  color: #ff7ba1;
+  filter: drop-shadow(0 0 8px rgba(255, 92, 138, 0.72));
+  transform: translate(-50%, -50%);
+}
+
+/* 柔光铺底:粉色径向光,呼吸式淡入淡出 */
+.heart-effect__glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 60%, rgba(255, 123, 161, 0.3), transparent 70%);
+  animation: heart-glow 2.3s ease-in-out forwards;
+}
+
+@keyframes heart-glow {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 中央大爱心:各特效形态的发光主体 */
+.heart-effect__core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  color: #ff5c8a;
+  filter: drop-shadow(0 0 14px rgba(255, 92, 138, 0.85));
+}
+
+/* 绽放:放大→光晕脉冲→让位给碎裂小爱心 */
+.heart-effect--bloom .heart-effect__core {
+  animation: heart-bloom-core 2.2s ease-out forwards;
+}
+
+@keyframes heart-bloom-core {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  25% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.25);
+  }
+  38% {
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.5);
+  }
+}
+
+/* 环绕:中央爱心呼吸脉动 */
+.heart-effect--orbit .heart-effect__core {
+  width: 44px;
+  height: 44px;
+  animation: heart-orbit-core 2.2s ease-in-out forwards;
+}
+
+@keyframes heart-orbit-core {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7);
+  }
+  20%,
+  80% {
+    opacity: 1;
+  }
+  40% {
+    transform: translate(-50%, -50%) scale(1.18);
+  }
+  60% {
+    transform: translate(-50%, -50%) scale(0.92);
+  }
+}
+
+/* 光环:中央爱心呼吸脉动,配合向外扩散的光圈 */
+.heart-effect--wave .heart-effect__core {
+  width: 44px;
+  height: 44px;
+  animation: heart-wave-core 2.2s ease-in-out forwards;
+}
+
+@keyframes heart-wave-core {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+  25%,
+  75% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(0.92);
+  }
+}
+
+/* 心跳:两次不同力度的收缩,比持续呼吸更接近点赞反馈 */
+.heart-effect--heartbeat .heart-effect__core {
+  width: 50px;
+  height: 50px;
+  animation: heart-heartbeat-core 2.15s cubic-bezier(0.2, 0.78, 0.28, 1) forwards;
+}
+
+@keyframes heart-heartbeat-core {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.35);
+  }
+  16% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.12);
+  }
+  28% {
+    transform: translate(-50%, -50%) scale(0.82);
+  }
+  42% {
+    transform: translate(-50%, -50%) scale(1.25);
+  }
+  56% {
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+  76% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.72);
+  }
+}
+
+/* 烟花:中心闪光只负责起爆,随后让位给放射粒子 */
+.heart-effect--firework .heart-effect__core {
+  width: 38px;
+  height: 38px;
+  animation: heart-firework-core 1.05s ease-out forwards;
+}
+
+@keyframes heart-firework-core {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  28% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.25);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.55);
+  }
+}
+
+/* 拥抱:两颗小爱心相遇后,中央爱心接管视觉焦点 */
+.heart-effect--hug .heart-effect__core {
+  width: 48px;
+  height: 48px;
+  animation: heart-hug-core 2.1s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+
+@keyframes heart-hug-core {
+  0%,
+  38% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.35);
+  }
+  52% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.22);
+  }
+  66% {
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+  82% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.78);
+  }
+}
+
+/* 碎裂/爆开碎片:从中心向随机方向飞出 */
+.heart-effect__shard {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  opacity: 0;
+  color: #ff6b98;
+  animation: heart-shard 1.95s ease-out forwards;
+  --shard-motion-x: var(--shard-x, 0px);
+  --shard-motion-y: var(--shard-y, 0px);
+}
+
+.capsule--orb .heart-effect__shard {
+  --shard-motion-x: var(--shard-y, 0px);
+  --shard-motion-y: var(--shard-x, 0px);
+}
+
+@keyframes heart-shard {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2) rotate(0deg);
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--shard-motion-x)), calc(-50% + var(--shard-motion-y)))
+      scale(1) rotate(120deg);
+  }
+}
+
+/* 绽放碎片:大爱心放大后才碎裂散开 */
+.heart-effect--bloom .heart-effect__shard {
+  animation-name: heart-bloom-shard;
+}
+
+@keyframes heart-bloom-shard {
+  0%,
+  40% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.3);
+  }
+  52% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.9) rotate(20deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--shard-motion-x)), calc(-50% + var(--shard-motion-y)))
+      scale(0.7) rotate(140deg);
+  }
+}
+
+.heart-effect--firework .heart-effect__shard {
+  animation-name: heart-firework-shard;
+}
+
+@keyframes heart-firework-shard {
+  0%,
+  18% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  28% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.15);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--shard-motion-x)), calc(-50% + var(--shard-motion-y)))
+      scale(0.62) rotate(110deg);
+  }
+}
+
+.heart-effect--hug .heart-effect__shard {
+  animation: heart-hug-pair 1.55s cubic-bezier(0.2, 0.82, 0.3, 1) forwards;
+}
+
+@keyframes heart-hug-pair {
+  0% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--shard-motion-x)), calc(-50% + var(--shard-motion-y)))
+      scale(0.55);
+  }
+  14% {
+    opacity: 1;
+  }
+  58% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.22);
+  }
+  72% {
+    opacity: 0.75;
+    transform: translate(-50%, -50%) scale(0.78);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+}
+
+/* 环绕粒子:绕中央旋转一圈 */
+.heart-effect__orbit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  opacity: 0;
+  color: #ff7ba1;
+  animation: heart-orbit-capsule 1.8s linear forwards;
+  animation-delay: var(--orbit-delay, 0s);
+}
+
+.capsule--orb .heart-effect__orbit {
+  animation-name: heart-orbit-orb;
+}
+
+@keyframes heart-orbit-capsule {
+  0% {
+    opacity: 0;
+    transform: translate(calc(-50% + 88px), -50%) scale(0.6);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(calc(-50% + 62px), calc(-50% + 10px)) scale(0.74);
+  }
+  25% {
+    transform: translate(-50%, calc(-50% + 14px)) scale(0.82);
+  }
+  37% {
+    transform: translate(calc(-50% - 62px), calc(-50% + 10px)) scale(0.9);
+  }
+  50% {
+    transform: translate(calc(-50% - 88px), -50%) scale(1);
+  }
+  62% {
+    transform: translate(calc(-50% - 62px), calc(-50% - 10px)) scale(0.9);
+  }
+  75% {
+    transform: translate(-50%, calc(-50% - 14px)) scale(0.82);
+  }
+  88% {
+    opacity: 0.8;
+    transform: translate(calc(-50% + 62px), calc(-50% - 10px)) scale(0.74);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + 88px), -50%) scale(0.6);
+  }
+}
+
+@keyframes heart-orbit-orb {
+  0% {
+    opacity: 0;
+    transform: translate(calc(-50% + 14px), -50%) scale(0.6);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(calc(-50% + 10px), calc(-50% + 41px)) scale(0.74);
+  }
+  25% {
+    transform: translate(-50%, calc(-50% + 58px)) scale(0.82);
+  }
+  37% {
+    transform: translate(calc(-50% - 10px), calc(-50% + 41px)) scale(0.9);
+  }
+  50% {
+    transform: translate(calc(-50% - 14px), -50%) scale(1);
+  }
+  62% {
+    transform: translate(calc(-50% - 10px), calc(-50% - 41px)) scale(0.9);
+  }
+  75% {
+    transform: translate(-50%, calc(-50% - 58px)) scale(0.82);
+  }
+  88% {
+    opacity: 0.8;
+    transform: translate(calc(-50% + 10px), calc(-50% - 41px)) scale(0.74);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + 14px), -50%) scale(0.6);
+  }
+}
+
+/* 爱心雨:从底部升起向上飘散 */
+.heart-effect__rise {
+  position: absolute;
+  bottom: -24px;
+  animation: heart-rise ease-out forwards;
+}
+
+@keyframes heart-rise {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.4);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(0, 4px) scale(var(--heart-scale, 1));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--heart-drift, 0), var(--heart-rise-y)) scale(var(--heart-scale, 1));
+  }
+}
+
+/* 光环:三圈光圈依次向外扩散,像声波 */
+.heart-effect__wave {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 64px;
+  height: 64px;
+  border: 2px solid rgba(255, 123, 161, 0.75);
+  border-radius: 50%;
+  animation: heart-wave 1.7s ease-out forwards;
+  animation-delay: var(--wave-delay, 0s);
+}
+
+@keyframes heart-wave {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.25);
+  }
+  18% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(3.2);
+  }
+}
+
+.heart-effect--heartbeat .heart-effect__wave {
+  animation: heart-heartbeat-ring 1.2s ease-out forwards;
+  animation-delay: var(--wave-delay, 0s);
+}
+
+@keyframes heart-heartbeat-ring {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.35);
+  }
+  22% {
+    opacity: 0.72;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.55);
+  }
+}
+
+/* 流星:横版从左向右、竖版从下向上,爱心尖端与拖尾始终对齐飞行方向 */
+.heart-effect__shooting {
+  position: absolute;
+  left: var(--shoot-left, 0%);
+  top: var(--shoot-top, 0%);
+  opacity: 0;
+  color: #ff8fae;
+  animation: heart-shooting cubic-bezier(0.18, 0.72, 0.32, 1) forwards;
+}
+
+.capsule--orb .heart-effect--shooting .heart-effect__shooting {
+  left: var(--shoot-top, 0%);
+  top: calc(100% + 16px);
+}
+
+.heart-effect--shooting .heart-effect__shooting svg {
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+
+.capsule--orb .heart-effect--shooting .heart-effect__shooting svg {
+  transform: rotate(180deg);
+}
+
+.heart-effect--shooting .heart-effect__shooting::before {
+  content: '';
+  position: absolute;
+  right: 82%;
+  top: 50%;
+  width: 72px;
+  height: 2px;
+  transform: translateY(-50%);
+  background: linear-gradient(to left, rgba(255, 123, 161, 0.9), transparent);
+  border-radius: 999px;
+}
+
+.capsule--orb .heart-effect--shooting .heart-effect__shooting::before {
+  right: auto;
+  left: 50%;
+  top: 82%;
+  width: 2px;
+  height: 72px;
+  transform: translateX(-50%);
+  background: linear-gradient(to bottom, rgba(255, 123, 161, 0.9), transparent);
+}
+
+@keyframes heart-shooting {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.5);
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--shoot-travel-x), var(--shoot-travel-y)) scale(1);
+  }
+}
+
+/* 飘带:横版从右向左,竖版从下向上,方向与胶囊阅读轴一致 */
+.heart-effect--ribbon .heart-effect__shooting {
+  animation-name: heart-ribbon-capsule;
+}
+
+.heart-effect--ribbon .heart-effect__shooting::before {
+  display: none;
+}
+
+.capsule--orb .heart-effect--ribbon .heart-effect__shooting {
+  left: var(--shoot-top, 50%);
+  top: var(--shoot-left, 102%);
+  animation-name: heart-ribbon-orb;
+}
+
+@keyframes heart-ribbon-capsule {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(-8deg) scale(0.55);
+  }
+  12% {
+    opacity: 1;
+  }
+  42% {
+    transform: translate3d(-105px, var(--ribbon-wave), 0) rotate(5deg) scale(1);
+  }
+  74% {
+    opacity: 0.9;
+    transform: translate3d(-205px, 0, 0) rotate(-4deg) scale(0.86);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-285px, 0, 0) rotate(7deg) scale(0.62);
+  }
+}
+
+@keyframes heart-ribbon-orb {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(-8deg) scale(0.55);
+  }
+  12% {
+    opacity: 1;
+  }
+  42% {
+    transform: translate3d(var(--ribbon-wave), -70px, 0) rotate(5deg) scale(1);
+  }
+  74% {
+    opacity: 0.9;
+    transform: translate3d(0, -135px, 0) rotate(-4deg) scale(0.86);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, -190px, 0) rotate(7deg) scale(0.62);
+  }
+}
+
+/* 礼物盒:先落稳再开盖,爱心从盒内弹出,表达收到心意 */
+.heart-effect__gift {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 42px;
+  transform: translate(-50%, -50%);
+}
+
+.heart-effect__gift-box,
+.heart-effect__gift-lid {
+  position: absolute;
+  left: 50%;
+  border-radius: 4px;
+  background: linear-gradient(145deg, #ff8cab, #e94f7b);
+  box-shadow: 0 4px 12px rgba(233, 79, 123, 0.36);
+}
+
+.heart-effect__gift-box {
+  bottom: 1px;
+  width: 32px;
+  height: 22px;
+  animation: heart-gift-box 2.1s cubic-bezier(0.2, 0.78, 0.3, 1) forwards;
+}
+
+.heart-effect__gift-box::before,
+.heart-effect__gift-lid::before {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  content: '';
+  background: linear-gradient(180deg, #ffe09a, #f5aa42);
+  transform: translateX(-50%);
+}
+
+.heart-effect__gift-lid {
+  bottom: 20px;
+  width: 38px;
+  height: 8px;
+  animation: heart-gift-lid 2.1s cubic-bezier(0.2, 0.78, 0.3, 1) forwards;
+  transform-origin: 12% 100%;
+}
+
+.heart-effect__gift-heart {
+  position: absolute;
+  left: 50%;
+  bottom: 13px;
+  width: 26px;
+  height: 26px;
+  z-index: 2;
+  color: #ff5c8a;
+  filter: drop-shadow(0 0 10px rgba(255, 92, 138, 0.82));
+  animation: heart-gift-rise 1.65s 360ms cubic-bezier(0.18, 0.86, 0.28, 1) both;
+}
+
+@keyframes heart-gift-box {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.45);
+  }
+  16% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.12);
+  }
+  28%,
+  78% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.88);
+  }
+}
+
+@keyframes heart-gift-lid {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.45);
+  }
+  16% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.08);
+  }
+  30% {
+    opacity: 1;
+    transform: translateX(-50%) rotate(0deg);
+  }
+  46%,
+  78% {
+    opacity: 1;
+    transform: translate(-58%, -10px) rotate(-14deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-58%, -10px) rotate(-14deg);
+  }
+}
+
+@keyframes heart-gift-rise {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 8px) scale(0.25) rotate(-8deg);
+  }
+  28% {
+    opacity: 1;
+    transform: translate(-50%, -2px) scale(1.16) rotate(5deg);
+  }
+  48% {
+    transform: translate(-50%, var(--gift-rise-y)) scale(0.94) rotate(-3deg);
+  }
+  78% {
+    opacity: 1;
+    transform: translate(-50%, var(--gift-rise-y)) scale(1.05) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, var(--gift-rise-y)) scale(0.78);
+  }
+}
+
+/* 丘比特箭:粉色单箭头先入场,命中心时爱心弹震,表达俏皮喜欢 */
+.heart-effect__cupid {
+  position: absolute;
+  inset: 0;
+}
+
+.heart-effect__cupid-heart {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  color: #ff5c8a;
+  filter: drop-shadow(0 0 12px rgba(255, 92, 138, 0.82));
+  animation: heart-cupid-impact 2.1s cubic-bezier(0.18, 0.82, 0.3, 1) forwards;
+}
+
+.heart-effect__cupid-arrow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 92px;
+  height: 3px;
+  z-index: 2;
+  opacity: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 218, 231, 0.7), #ff91b3 58%, #ff6f9d);
+  box-shadow: 0 0 8px rgba(255, 111, 157, 0.58);
+  animation: heart-cupid-arrow-capsule 1.65s 180ms cubic-bezier(0.18, 0.78, 0.28, 1) both;
+}
+
+.heart-effect__cupid-arrow::before {
+  position: absolute;
+  right: -2px;
+  top: 50%;
+  width: 0;
+  height: 0;
+  content: '';
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 9px solid #ff7ca5;
+  transform: translateY(-50%);
+}
+
+.capsule--orb .heart-effect__cupid-arrow {
+  width: 3px;
+  height: 92px;
+  background: linear-gradient(0deg, rgba(255, 218, 231, 0.7), #ff91b3 58%, #ff6f9d);
+  animation-name: heart-cupid-arrow-orb;
+}
+
+.capsule--orb .heart-effect__cupid-arrow::before {
+  right: auto;
+  top: -2px;
+  left: 50%;
+  border: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 9px solid #ff7ca5;
+  transform: translateX(-50%);
+}
+
+@keyframes heart-cupid-impact {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.35);
+  }
+  18%,
+  36% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  46% {
+    transform: translate(-50%, -50%) scale(1.24) rotate(7deg);
+  }
+  58% {
+    transform: translate(-50%, -50%) scale(0.9) rotate(-4deg);
+  }
+  76% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.76);
+  }
+}
+
+@keyframes heart-cupid-arrow-capsule {
+  0% {
+    opacity: 0;
+    transform: translate(-220%, -50%);
+  }
+  15% {
+    opacity: 1;
+  }
+  45% {
+    opacity: 1;
+    transform: translate(-100%, -50%);
+  }
+  68% {
+    opacity: 1;
+    transform: translate(-76%, -50%);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-62%, -50%);
+  }
+}
+
+@keyframes heart-cupid-arrow-orb {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 160%);
+  }
+  15% {
+    opacity: 1;
+  }
+  45% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  68% {
+    opacity: 1;
+    transform: translate(-50%, -18%);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -34%);
+  }
+}
+
+/* 爱心气球:先充盈再缓慢升起,表达轻盈和被鼓励后的开心 */
+.heart-effect__balloon {
+  position: absolute;
+  left: 50%;
+  bottom: -28px;
+  width: 46px;
+  height: 78px;
+  transform-origin: 50% 20%;
+  animation: heart-balloon-rise 2.2s cubic-bezier(0.2, 0.78, 0.3, 1) forwards;
+}
+
+.capsule--orb .heart-effect__balloon {
+  bottom: 10px;
+}
+
+.heart-effect__balloon-heart {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 44px;
+  height: 44px;
+  z-index: 1;
+  color: #ff6b98;
+  filter: drop-shadow(0 0 12px rgba(255, 107, 152, 0.76));
+  transform: translateX(-50%);
+  transform-origin: 50% 88%;
+  animation: heart-balloon-wobble 2.05s ease-in-out forwards;
+}
+
+.heart-effect__balloon-string {
+  position: absolute;
+  left: 50%;
+  top: 39px;
+  width: 13px;
+  height: 32px;
+  border-left: 1px solid rgba(255, 224, 234, 0.72);
+  border-radius: 50%;
+  transform: translateX(-1px) rotate(-7deg);
+}
+
+@keyframes heart-balloon-rise {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 14px) scale(0.42);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.1);
+  }
+  34% {
+    transform: translate(-50%, 0) scale(0.96);
+  }
+  74% {
+    opacity: 1;
+    transform: translate(-50%, var(--balloon-rise-y)) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, var(--balloon-rise-y)) scale(0.88);
+  }
+}
+
+@keyframes heart-balloon-wobble {
+  0%,
+  22% {
+    transform: translateX(-50%) rotate(0deg);
+  }
+  42% {
+    transform: translateX(-50%) rotate(6deg);
+  }
+  62% {
+    transform: translateX(-50%) rotate(-5deg);
+  }
+  82%,
+  100% {
+    transform: translateX(-50%) rotate(2deg);
+  }
+}
+
+/* 超级赞:暖金圆形软章轻弹授予,中央爱心弹出,表达高于普通点赞的认可 */
+.heart-effect__superlike {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 58px;
+  transform: translate(-50%, -50%);
+}
+
+.heart-effect__superlike-star {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #fff8df 0%, #ffe2a8 42%, #f2b85f 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.34),
+    0 0 13px rgba(255, 157, 190, 0.34);
+  animation: heart-superlike-star 1.9s cubic-bezier(0.18, 0.84, 0.3, 1) forwards;
+}
+
+.heart-effect__superlike-star::before {
+  position: absolute;
+  inset: 7px;
+  content: '';
+  border: 1px solid rgba(255, 255, 255, 0.52);
+  border-radius: 50%;
+}
+
+.heart-effect__superlike-heart {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 29px;
+  height: 29px;
+  z-index: 1;
+  color: #ff4f82;
+  filter: drop-shadow(0 0 7px rgba(255, 79, 130, 0.78));
+  animation: heart-superlike-heart 1.7s 180ms cubic-bezier(0.18, 0.86, 0.28, 1) both;
+}
+
+@keyframes heart-superlike-star {
+  0% {
+    opacity: 0;
+    transform: rotate(-8deg) scale(0.2);
+  }
+  24% {
+    opacity: 1;
+    transform: rotate(4deg) scale(1.12);
+  }
+  40%,
+  76% {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(6deg) scale(0.8);
+  }
+}
+
+@keyframes heart-superlike-heart {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  24% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.3);
+  }
+  42% {
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  62%,
+  78% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.76);
+  }
+}
+
+/* 顶部 +1:淡入放大后上飘消失 */
+.heart-effect__plus {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 8px rgba(255, 92, 138, 0.95);
+  animation: heart-plus 2.2s ease-out forwards;
+}
+
+@keyframes heart-plus {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.6);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.12);
+  }
+  70% {
+    opacity: 0.9;
+    transform: translate(-50%, -6px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -12px) scale(0.9);
+  }
+}
+
+.capsule.is-manual-refreshing {
+  animation: capsule-manual-refresh 680ms ease-out;
+}
+
+.capsule.is-manual-refreshing::before {
+  position: absolute;
+  inset: -35%;
+  z-index: 0;
+  content: '';
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 28%,
+    color-mix(in srgb, var(--capsule-accent) 40%, transparent) 44%,
+    rgba(255, 255, 255, 0.32) 50%,
+    color-mix(in srgb, var(--capsule-accent) 32%, transparent) 56%,
+    transparent 72%
+  );
+  transform: translateX(-72%) skewX(-14deg);
+  animation: capsule-refresh-sheen 680ms cubic-bezier(0.18, 0.86, 0.32, 1);
+}
+
+.capsule--orb.is-manual-refreshing::before {
+  background: linear-gradient(
+    180deg,
+    transparent 26%,
+    color-mix(in srgb, var(--capsule-accent) 34%, transparent) 45%,
+    rgba(255, 255, 255, 0.24) 50%,
+    color-mix(in srgb, var(--capsule-accent) 26%, transparent) 56%,
+    transparent 74%
+  );
+  transform: translateY(-72%);
+  animation-name: capsule-refresh-sheen-y;
+}
+
+.capsule.is-manual-refreshing .capsule__progress span {
+  filter: brightness(1.45);
+  animation: capsule-progress-flash 680ms ease-out;
+}
+
+.capsule--orb {
+  grid-template-columns: 1fr;
+  border-radius: var(--capsule-orb-radius, 17px);
+  background: var(
+    --capsule-orb-bg,
+    linear-gradient(180deg, rgba(28, 38, 52, 0.62) 0%, rgba(14, 20, 30, 0.66) 100%)
+  );
+}
+
+/* 胶囊固定分区布局:横版三列(左=周重置大字,中=百分比+进度条,右=重置卡+推荐模型),竖版五行垂直 */
+.capsule__layout {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.capsule__layout--h {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  padding: var(--capsule-h-pad-y, 5px) var(--capsule-h-pad-x, 8px);
+  gap: var(--capsule-h-gap, 10px);
+}
+
+.capsule__layout--v {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--capsule-v-gap, 4px);
+  padding: var(--capsule-v-pad-y, 6px) var(--capsule-v-pad-x, 4px);
+}
+
+/* API 模式横版:三列按内容宽度居中排列,不设 1fr 拉伸列,避免 token 值短时中列被拉宽产生大片空白 */
+.capsule__layout--h-api {
+  grid-template-columns: auto auto auto;
+  justify-content: center;
+}
+
+/* API 模式竖版:三块居中紧凑排列,间距固定;不用 space-evenly 以免内容短时块间空隙过大 */
+.capsule__layout--v-api {
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 4px;
+}
+
+.capsule--minimal {
+  border-radius: 50%;
+  clip-path: circle(50% at 50% 50%);
+  background: var(--capsule-minimal-bg, var(--capsule-bg));
+  box-shadow:
+    inset 0 0 0 0.5px var(--capsule-minimal-edge, var(--capsule-edge)),
+    inset 0 0 0 1px var(--capsule-minimal-edge-soft, var(--capsule-edge-soft));
+}
+
+.capsule--minimal .capsule__deco {
+  display: none !important;
+}
+
+.capsule--minimal::before {
+  clip-path: circle(50% at 50% 50%);
+}
+
+.capsule__minimal {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  animation: capsule-minimal-in 220ms cubic-bezier(0.34, 1.4, 0.44, 1) backwards;
+}
+
+.capsule__minimal-deco {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.capsule__minimal-value {
+  position: relative;
+  z-index: 1;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.capsule--minimal.is-minimal-leaving .capsule__minimal {
+  animation: capsule-minimal-out 120ms ease-in forwards;
+}
+
+.capsule.is-collapsing .capsule__layout,
+.capsule.is-collapsing .capsule__message {
+  animation: capsule-collapse-out 200ms ease-in forwards;
+  transform-origin: center;
+}
+
+.capsule.is-revealing .capsule__layout {
+  animation: capsule-reveal-in 220ms cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+  transform-origin: center;
+}
+
+.capsule--minimal.has-update::after,
+.capsule--minimal.has-announcement::after,
+.capsule--minimal.is-outdated::after {
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+}
+
+@keyframes capsule-minimal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes capsule-minimal-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+
+@keyframes capsule-collapse-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+
+@keyframes capsule-reveal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 广播消息态:整窗跑马灯覆盖额度布局;横版从右往左,竖版从下往上。
+   双副本轨道移动一份副本尺寸,循环交界保持连续 */
+.capsule__message {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.capsule__message-track {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  height: 100%;
+  white-space: nowrap;
+}
+
+/* 仅文本溢出胶囊时才滚动,放得下则静态显示全文(不空跑) */
+.capsule__message-track.is-marquee {
+  animation: capsule-marquee-x var(--capsule-marquee-duration) linear infinite;
+  will-change: transform;
+}
+
+.capsule__message--capsule.is-marquee {
+  justify-content: flex-start;
+}
+
+.capsule__message-copy {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: rgba(240, 245, 250, 0.96);
+}
+
+/* 副本间距只在跑马灯态启用,静态文本才能严格居中且按真实尺寸判断溢出 */
+.capsule__message--capsule .capsule__message-track.is-marquee .capsule__message-copy {
+  padding-right: 28px;
+}
+
+/* 竖版 orb:轨道改纵向、文字竖排;静态居中显示,滚动时从下往上 */
+.capsule__message--orb {
+  align-items: center;
+}
+
+.capsule__message--orb .capsule__message-track {
+  flex-direction: column;
+  align-items: center;
+  width: max-content;
+  height: max-content;
+}
+
+.capsule__message--orb.is-marquee {
+  align-items: flex-start;
+}
+
+.capsule__message--orb .capsule__message-track.is-marquee {
+  animation-name: capsule-marquee-y;
+}
+
+.capsule__message--orb .capsule__message-copy {
+  writing-mode: vertical-rl;
+}
+
+.capsule__message--orb .capsule__message-track.is-marquee .capsule__message-copy {
+  padding-bottom: 14px;
+}
+
+/* 横版:双副本轨道左移一份,内容从右往左连续滚动(副本相同无缝衔接) */
+@keyframes capsule-marquee-x {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* 竖版:双副本轨道上移一份,内容从下往上连续滚动 */
+@keyframes capsule-marquee-y {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-50%);
+  }
+}
+
+.capsule__col {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+/* 左列:周重置倒计时(图标+数字横排),垂直水平居中 */
+.capsule__col--weekly {
+  align-items: center;
+  justify-content: center;
+}
+
+/* 中列:百分比+进度条上下排,metric-box 按百分比文本宽(不拉伸) */
+.capsule__col--metric {
+  gap: 3px;
+  align-items: center;
+}
+
+.capsule__col--right {
+  gap: 4px;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+/* 周重置倒计时:大字,D/H/M/S 单位,沙漏图标+数字横排;字号比百分比大 */
+/* 文字加深色描边/阴影,在浅色壁纸上保证对比度(底板保持通透) */
+.capsule__weekly {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--capsule-weekly-gap, 4px);
+  padding: var(--capsule-weekly-pad-y, 0px) var(--capsule-weekly-pad-x, 0px);
+  color: rgba(220, 230, 242, 0.96);
+  font-size: var(--capsule-weekly-font, 22px);
+  font-weight: 760;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.capsule__weekly svg {
+  width: 14px;
+  height: 14px;
+  color: rgba(205, 218, 232, 0.9);
+}
+
+/* API Key 模式胶囊统计单元:小标签 + 自适应字号数值 + 可选进度条 */
+.capsule__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  padding: var(--capsule-stat-pad-y, 0px) var(--capsule-stat-pad-x, 0px);
+}
+
+.capsule__stat-label {
+  color: rgba(205, 218, 232, 0.72);
+  font-size: var(--capsule-stat-label-font, 9px);
+  font-weight: 520;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.capsule__stat-value {
+  color: rgba(220, 230, 242, 0.96);
+  font-size: var(--capsule-stat-value-font, 14px);
+  font-weight: 760;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 中间指标单元(缓存命中):数值用 --metric-accent 着色,进度条固定宽居中(不撑满整列) */
+.capsule__stat--metric .capsule__stat-value {
+  color: var(--metric-accent, rgba(151, 163, 176, 0.74));
+}
+
+.capsule__layout--h .capsule__stat--metric .capsule__progress {
+  width: 48px;
+  margin-top: 3px;
+}
+
+/* 竖版 orb 更窄:进度条收到 40px */
+.capsule--orb .capsule__stat--metric .capsule__progress {
+  width: 40px;
+}
+
+/* 竖版统计单元纵向稍松 */
+.capsule--orb .capsule__stat {
+  gap: 3px;
+}
+
+/* 剩余额度百分比:按 tone 变色(tone class 加在 layout/col 上,百分比和进度条共用 --metric-accent);字号小于周重置 */
+.capsule__percent {
+  color: var(--metric-accent, rgba(151, 163, 176, 0.74));
+  font-size: var(--capsule-percent-font, 20px);
+  font-weight: 740;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 百分比进度条:横版在中列底部满宽,竖版最末且缩短至与百分比数字同宽 */
+.capsule__progress {
+  height: var(--capsule-progress-h, 3px);
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(230, 238, 246, 0.16);
+}
+
+.capsule__layout--h .capsule__progress {
+  width: var(--capsule-progress-w, 100%);
+  margin-top: 2px;
+}
+
+/* 竖版:百分比与进度条包在 inline-block 盒里,进度条宽度跟随百分比文本宽,整体更瘦 */
+.capsule__metric-box {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* 横版:metric-box 宽度固定等于槽宽,百分比文字居中其上;
+   不再按百分比文字收缩,避免 0% 时槽比 100% 时窄 */
+.capsule__layout--h .capsule__metric-box {
+  width: var(--capsule-progress-w, 100%);
+}
+
+.capsule__metric-box .capsule__progress {
+  width: 100%;
+}
+
+.capsule__progress span {
+  width: var(--metric-progress);
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--metric-accent, rgba(151, 163, 176, 0.74)) 72%, transparent) 0%,
+    var(--metric-accent, rgba(151, 163, 176, 0.74)) 100%
+  );
+  transition: width 400ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 点击刷新完成:百分比数字弹跳一下,感知新数据到达 */
+.capsule__percent.is-just-refreshed {
+  animation: capsule-percent-pop 680ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 告急:剩余额度低于阈值时,百分比数字变红 + 透明度呼吸(进度条太短看不出,改用数字本身提示) */
+.capsule__percent.is-critical {
+  color: var(--red, #de7265);
+  animation: capsule-critical-pulse 1.6s ease-in-out infinite;
+}
+
+/* 重置卡倒计时:静态放进列内(不再绝对定位);半透黑底+文字提亮 */
+.capsule__credit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--capsule-credit-pad-y, 2px) var(--capsule-credit-pad-x, 6px);
+  border-radius: 8px;
+  color: rgba(238, 218, 132, 1);
+  background: rgba(0, 0, 0, 0.4);
+  font-size: var(--capsule-credit-font, 10px);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.capsule__credit svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* 窗口标签(5h/1周):复用 pick 类名以继承各主题的专属覆盖样式;默认主题下亮白前景靠 .capsule 继承 */
+.capsule__pick {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--capsule-pick-pad-y, 2px) var(--capsule-pick-pad-x, 6px);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  font-size: var(--capsule-pick-font, 9.5px);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 竖版 orb:各项更小、居中、整体变瘦;周重置图标+数字横排,字号比百分比大 */
+.capsule--orb .capsule__weekly {
+  font-size: 18px;
+  font-weight: 740;
+}
+
+.capsule--orb .capsule__weekly svg {
+  width: 12px;
+  height: 12px;
+}
+
+.capsule--orb .capsule__percent {
+  font-size: 16px;
+}
+
+.capsule--orb .capsule__credit {
+  font-size: 9px;
+  padding: 2px 5px;
+}
+
+.capsule--orb .capsule__credit svg {
+  width: 10px;
+  height: 10px;
+}
+
+.capsule--orb .capsule__pick {
+  font-size: 9px;
+  padding: 2px 5px;
+}
