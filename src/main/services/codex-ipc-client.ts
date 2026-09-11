@@ -11,9 +11,11 @@ interface ConversationVersion {
   state: Record<string, unknown>
 }
 
+type PathSegment = string | number
+
 interface StatePatch {
   op: 'add' | 'replace' | 'remove'
-  path: string[]
+  path: PathSegment[]
   value?: unknown
 }
 
@@ -291,32 +293,38 @@ function applyStatePatch(target: Record<string, unknown>, patch: StatePatch): vo
   if (patch.path.length === 0) throw new Error('Root patch unsupported')
   let parent: unknown = target
   for (const segment of patch.path.slice(0, -1)) parent = getPatchChild(parent, segment)
-  const key = patch.path.at(-1) as string
+  const key = patch.path.at(-1) as PathSegment
   if (Array.isArray(parent)) applyArrayPatch(parent, key, patch)
   else if (getRecord(parent)) applyObjectPatch(parent as Record<string, unknown>, key, patch)
   else throw new Error('Invalid patch path')
 }
 
-function getPatchChild(parent: unknown, segment: string): unknown {
+function getPatchChild(parent: unknown, segment: PathSegment): unknown {
   if (Array.isArray(parent)) {
     const index = parseArrayIndex(segment, parent.length)
     return parent[index]
   }
   const record = getRecord(parent)
-  if (!record || !(segment in record)) throw new Error('Invalid patch path')
-  return record[segment]
+  const key = String(segment)
+  if (!record || !(key in record)) throw new Error('Invalid patch path')
+  return record[key]
 }
 
-function applyArrayPatch(parent: unknown[], key: string, patch: StatePatch): void {
+function applyArrayPatch(parent: unknown[], key: PathSegment, patch: StatePatch): void {
   const index = key === '-' ? parent.length : parseArrayIndex(key, parent.length)
   if (patch.op === 'add') parent.splice(index, 0, patch.value)
   else if (patch.op === 'replace') parent[index] = patch.value
   else if (patch.op === 'remove') parent.splice(index, 1)
 }
 
-function applyObjectPatch(parent: Record<string, unknown>, key: string, patch: StatePatch): void {
-  if (patch.op === 'remove') delete parent[key]
-  else parent[key] = patch.value
+function applyObjectPatch(
+  parent: Record<string, unknown>,
+  key: PathSegment,
+  patch: StatePatch
+): void {
+  const name = String(key)
+  if (patch.op === 'remove') delete parent[name]
+  else parent[name] = patch.value
 }
 
 export function projectConversationState(
@@ -454,14 +462,18 @@ function parsePatches(value: unknown): StatePatch[] {
     const patch = getRecord(item)
     if (!patch || !['add', 'replace', 'remove'].includes(String(patch.op)))
       throw new Error('Invalid patch')
-    if (!Array.isArray(patch.path) || !patch.path.every((part) => typeof part === 'string')) {
+    if (!Array.isArray(patch.path) || !patch.path.every(isPathSegment)) {
       throw new Error('Invalid patch path')
     }
     return { op: patch.op as StatePatch['op'], path: patch.path, value: patch.value }
   })
 }
 
-function parseArrayIndex(value: string, length: number): number {
+function isPathSegment(value: unknown): value is PathSegment {
+  return typeof value === 'string' || (typeof value === 'number' && Number.isInteger(value))
+}
+
+function parseArrayIndex(value: PathSegment, length: number): number {
   const index = Number(value)
   if (!Number.isInteger(index) || index < 0 || index > length)
     throw new Error('Invalid array index')

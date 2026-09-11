@@ -40,6 +40,24 @@ test('应用连续 revision 路径补丁且不修改原快照', () => {
   assert.equal(result.requests.length, 1)
 })
 
+test('数字下标补丁路径可正常应用', () => {
+  const source = {
+    turnHistory: {
+      history: {
+        items: [
+          { turnId: 'turn-1', status: 'inProgress' },
+          { turnId: 'turn-2', status: 'completed' }
+        ]
+      }
+    }
+  }
+  const result = applyStatePatches(source, [
+    { op: 'replace', path: ['turnHistory', 'history', 'items', 1, 'status'], value: 'failed' }
+  ])
+  assert.deepEqual(source.turnHistory.history.items[1].status, 'completed')
+  assert.equal(result.turnHistory.history.items[1].status, 'failed')
+})
+
 test('快照只投影任务必要字段并以审批优先', () => {
   const state = {
     title: '修复状态',
