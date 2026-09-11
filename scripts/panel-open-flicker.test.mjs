@@ -28,7 +28,7 @@ test('每次页面命令都触发新的 ready 提交', () => {
   assert.match(appSource, /\[ready, windowRole, panelRevealRequest\]/)
 })
 
-test('隐藏 Panel 更新前开启绘制，显示后恢复后台节流', () => {
+test('隐藏 Panel 更新前开启绘制，显示期间保持绘制', () => {
   const openStart = mainSource.indexOf('function openPanelWindow(')
   const openEnd = mainSource.indexOf('\nfunction ', openStart + 1)
   const openPanelWindow = mainSource.slice(openStart, openEnd)
@@ -41,7 +41,7 @@ test('隐藏 Panel 更新前开启绘制，显示后恢复后台节流', () => {
   const readyStart = mainSource.indexOf('ipcMain.handle(CHANNELS.panelReady')
   const readyEnd = mainSource.indexOf('ipcMain.handle(CHANNELS.showPanel', readyStart)
   const panelReadyHandler = mainSource.slice(readyStart, readyEnd)
-  assert.match(panelReadyHandler, /setBackgroundThrottling\(true\)/)
+  assert.match(panelReadyHandler, /setBackgroundThrottling\(false\)/)
 })
 
 test('隐藏 Panel 透明显示预热后再发送页面命令', () => {

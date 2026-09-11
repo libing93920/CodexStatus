@@ -85,6 +85,7 @@ import {
   createEmptyIslandSnapshot,
   getDisplayStatus,
   ISLAND_ALERT_DURATION_MS,
+  type IslandPresentation,
   type IslandSnapshot
 } from '../shared/island'
 import { CodexActivityService } from './services/codex-activity'
@@ -129,6 +130,8 @@ const CHANNELS = {
   reaction: 'codex-status:reaction',
   islandUpdated: 'codex-status:island-updated',
   islandReady: 'codex-status:island-ready',
+  islandPresentation: 'codex-status:island-presentation',
+  islandHidden: 'codex-status:island-hidden',
   islandInteractive: 'codex-status:island-interactive',
   islandOpenTask: 'codex-status:island-open-task',
   islandDismissTask: 'codex-status:island-dismiss-task'
@@ -158,6 +161,9 @@ let windowKeeper: WindowKeeper | undefined
 let codexActivity: CodexActivityService | undefined
 let fullscreenMonitor: WindowsFullscreenMonitor | undefined
 let islandSyncPromise = Promise.resolve()
+let islandPresentationRevision = 0
+let islandRendererReady = false
+let islandPresentationVisible = false
 let fullscreenState: FullscreenState | undefined
 let fullscreenAlertUntil = 0
 let fullscreenAlertTimer: NodeJS.Timeout | undefined
@@ -331,12 +337,23 @@ function createPanelWindow(): BrowserWindow {
 
 function ensureIslandWindow(): BrowserWindow {
   if (islandWindow && !islandWindow.isDestroyed()) return islandWindow
+  islandRendererReady = false
+  islandPresentationVisible = false
   const window = createIslandWindow({
     preloadPath: join(__dirname, '../preload/index.js'),
     loadRenderer: (target) => loadRenderer(target, 'island')
   })
   window.on('closed', () => {
-    if (islandWindow === window) islandWindow = null
+    if (islandWindow !== window) return
+    islandWindow = null
+    islandRendererReady = false
+    islandPresentationVisible = false
+  })
+  window.webContents.on('render-process-gone', () => {
+    islandRendererReady = false
+    islandPresentationVisible = false
+    window.setIgnoreMouseEvents(true, { forward: true })
+    window.hide()
   })
   islandWindow = window
   return window
@@ -628,7 +645,9 @@ function registerIpcHandlers(): void {
       panelWindow.show()
     }
     panelWindow.setOpacity(1)
-    panelWindow.webContents.setBackgroundThrottling(true)
+    // panel 可见期间保持绘制:透明窗口在失焦 + 后台节流下会停止重绘,
+    // 原生表面仍拦截鼠标,表现为"界面消失但下面点不动"。hide() 后再恢复节流。
+    panelWindow.webContents.setBackgroundThrottling(false)
     panelWindow.focus()
     panelRevealPending = false
   })
@@ -781,13 +800,22 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(CHANNELS.islandReady, async (event) => {
-    if (resolveRendererRole(event.sender.id) === 'island') syncIslandWindowVisibility()
+    if (event.sender.id !== islandWindow?.webContents.id) return
+    islandRendererReady = true
+    setIslandPresentation(shouldShowIsland(), true)
+  })
+
+  ipcMain.handle(CHANNELS.islandHidden, async (event, revision: unknown) => {
+    if (event.sender.id !== islandWindow?.webContents.id || typeof revision !== 'number') return
+    if (revision !== islandPresentationRevision || islandPresentationVisible) return
+    islandWindow.webContents.setBackgroundThrottling(true)
+    islandWindow.hide()
   })
 
   ipcMain.handle(CHANNELS.islandInteractive, async (event, interactive: unknown) => {
-    if (resolveRendererRole(event.sender.id) !== 'island' || typeof interactive !== 'boolean')
-      return
-    islandWindow?.setIgnoreMouseEvents(!interactive, { forward: true })
+    if (event.sender.id !== islandWindow?.webContents.id || typeof interactive !== 'boolean') return
+    if (!islandPresentationVisible) return
+    islandWindow.setIgnoreMouseEvents(!interactive, { forward: true })
   })
 
   ipcMain.handle(CHANNELS.islandOpenTask, async (event, threadId: unknown) => {
@@ -1008,6 +1036,8 @@ function openTeamFromTray(): void {
 
 function prepareToQuit(): void {
   isQuitting = true
+  islandRendererReady = false
+  islandPresentationVisible = false
   clearRefreshTimer()
   clearCodexAuthWatcher()
   stopRadarTimer()
@@ -1354,7 +1384,7 @@ function queueSyncIslandService(): void {
     stopFullscreenMonitor()
     currentIslandSnapshot = createEmptyIslandSnapshot()
     broadcastIslandSnapshot()
-    islandWindow?.hide()
+    hideIslandImmediately()
   })
 }
 
@@ -1364,7 +1394,7 @@ async function syncIslandService(): Promise<void> {
     codexActivity = undefined
     currentIslandSnapshot = createEmptyIslandSnapshot()
     broadcastIslandSnapshot()
-    islandWindow?.hide()
+    hideIslandImmediately()
     stopFullscreenMonitor()
     await uninstallCodexHooks(getDefaultCodexHooksPath(), join(app.getPath('userData'), 'hooks'))
     return
@@ -1387,8 +1417,13 @@ async function syncIslandService(): Promise<void> {
     onSnapshot: (snapshot) => {
       currentIslandSnapshot = snapshot
       updateFullscreenAlertWindow(snapshot)
-      broadcastIslandSnapshot()
-      syncIslandWindowVisibility()
+      if (shouldShowIsland()) {
+        broadcastIslandSnapshot()
+        syncIslandWindowVisibility()
+      } else {
+        syncIslandWindowVisibility()
+        broadcastIslandSnapshot()
+      }
     }
   })
   await codexActivity.start()
@@ -1438,17 +1473,52 @@ function createIslandRendererSnapshot(): IslandSnapshot {
 
 function syncIslandWindowVisibility(): void {
   if (!islandWindow || islandWindow.isDestroyed()) return
+  setIslandPresentation(shouldShowIsland())
+}
+
+function shouldShowIsland(): boolean {
   const fullscreenSuppressed = isSelectedDisplayFullscreen() && Date.now() >= fullscreenAlertUntil
-  const shouldShow =
+  return (
     persistedState.settings.island.enabled &&
     currentIslandSnapshot.tasks.length > 0 &&
     !fullscreenSuppressed
-  if (!shouldShow) {
-    islandWindow.hide()
+  )
+}
+
+function setIslandPresentation(visible: boolean, force = false): void {
+  const window = islandWindow
+  if (!window || window.isDestroyed()) return
+  if (visible && !islandRendererReady) return
+  if (!force && visible && islandPresentationVisible && window.isVisible()) return
+  if (!force && !visible && !islandPresentationVisible) return
+
+  const revision = ++islandPresentationRevision
+  const presentation: IslandPresentation = { revision, visible }
+  if (!visible) {
+    window.setIgnoreMouseEvents(true, { forward: true })
+    islandPresentationVisible = false
+    window.webContents.send(CHANNELS.islandPresentation, presentation)
     return
   }
-  positionIslandWindow(islandWindow)
-  if (!islandWindow.isVisible()) islandWindow.showInactive()
+
+  positionIslandWindow(window)
+  if (!window.isVisible()) window.showInactive()
+  window.setIgnoreMouseEvents(true, { forward: true })
+  window.webContents.setBackgroundThrottling(false)
+  islandPresentationVisible = true
+  window.webContents.send(CHANNELS.islandPresentation, presentation)
+}
+
+function hideIslandImmediately(): void {
+  const revision = ++islandPresentationRevision
+  islandPresentationVisible = false
+  islandWindow?.webContents.send(CHANNELS.islandPresentation, {
+    revision,
+    visible: false
+  } satisfies IslandPresentation)
+  islandWindow?.setIgnoreMouseEvents(true, { forward: true })
+  islandWindow?.webContents.setBackgroundThrottling(true)
+  islandWindow?.hide()
 }
 
 function ensureFullscreenMonitor(): void {

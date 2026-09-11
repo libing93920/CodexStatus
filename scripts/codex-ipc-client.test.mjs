@@ -9,6 +9,26 @@ import {
 } from '../src/main/services/codex-ipc-client.ts'
 import { getDisplayStatus } from '../src/shared/island.ts'
 
+test('其他客户端发现的新任务只补充一次本地订阅', () => {
+  const visibleThreads = []
+  const followed = []
+  const client = new CodexIpcClient({
+    threadIds: ['known-thread'],
+    onTasks: () => undefined,
+    onVisibleThread: (threadId) => visibleThreads.push(threadId),
+    onConnection: () => undefined
+  })
+  client.sendFollowing = (threadId, following) => followed.push({ threadId, following })
+
+  client.handleFollowing?.({ conversationId: 'new-thread', following: true }, 'codex-ui')
+  client.handleFollowing?.({ conversationId: 'new-thread', following: true }, 'codex-ui')
+  client.handleFollowing?.({ conversationId: 'new-thread', following: false }, 'codex-ui')
+
+  assert.deepEqual(followed, [{ threadId: 'new-thread', following: true }])
+  assert.equal(client.threadIds?.has('new-thread'), true)
+  assert.deepEqual(visibleThreads, ['new-thread', 'new-thread', undefined])
+})
+
 test('应用连续 revision 路径补丁且不修改原快照', () => {
   const source = { status: { type: 'active', flags: [] }, requests: [] }
   const result = applyStatePatches(source, [

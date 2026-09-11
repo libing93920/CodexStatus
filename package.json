@@ -1,6 +1,6 @@
 {
   "name": "codex-status",
-  "version": "1.3.11",
+  "version": "1.3.12",
   "description": "CodexStatus - Codex 额度悬浮监控",
   "main": "./out/main/index.js",
   "author": "codex-status",
@@ -13,7 +13,7 @@
     "test:quota": "node --experimental-strip-types --test scripts/quota-recheck.test.mjs",
     "test:panel-open": "node --test scripts/panel-open-flicker.test.mjs",
     "test:cockpit": "electron scripts/cockpit-animation.test.mjs",
-    "test:island": "npm run build && electron scripts/island-window.test.mjs",
+    "test:island": "npm run build && node scripts/run-island-window-tests.mjs",
     "test:fullscreen": "node --experimental-strip-types scripts/windows-fullscreen-smoke.mjs",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",

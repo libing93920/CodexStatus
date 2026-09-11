@@ -1,6 +1,7 @@
 import { BrowserWindow, screen, type Rectangle } from 'electron'
+import { resolveIslandWindowBounds } from '../../shared/island'
 
-export const ISLAND_WINDOW_SIZE = { width: 424, height: 360 } as const
+export const ISLAND_WINDOW_SIZE = { width: 464, height: 416 } as const
 
 export interface IslandWindowOptions {
   preloadPath: string
@@ -24,7 +25,11 @@ export function createIslandWindow(options: IslandWindowOptions): BrowserWindow 
     skipTaskbar: true,
     autoHideMenuBar: true,
     focusable: true,
-    webPreferences: { preload: options.preloadPath, sandbox: false }
+    webPreferences: {
+      preload: options.preloadPath,
+      sandbox: false,
+      backgroundThrottling: false
+    }
   })
   window.setAlwaysOnTop(true, 'screen-saver')
   window.setIgnoreMouseEvents(true, { forward: true })
@@ -38,9 +43,5 @@ export function positionIslandWindow(window: BrowserWindow): void {
 
 function resolveIslandBounds(): Rectangle {
   const display = screen.getPrimaryDisplay()
-  return {
-    x: display.bounds.x + Math.round((display.bounds.width - ISLAND_WINDOW_SIZE.width) / 2),
-    y: display.bounds.y,
-    ...ISLAND_WINDOW_SIZE
-  }
+  return resolveIslandWindowBounds(display.bounds, ISLAND_WINDOW_SIZE)
 }

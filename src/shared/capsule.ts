@@ -1,6 +1,7 @@
 import {
   DEFAULT_ISLAND_PREFERENCES,
   normalizeIslandPreferences,
+  type IslandPresentation,
   type IslandPreferences,
   type IslandSnapshot
 } from './island'
@@ -406,7 +407,9 @@ export interface CodexStatusApi {
   /** 订阅收到同组点赞事件(含自己回显,由 senderPeerId 区分) */
   onReaction: (listener: (reaction: ReactionMessage) => void) => () => void
   onIslandUpdated: (listener: (snapshot: IslandSnapshot) => void) => () => void
+  onIslandPresentation: (listener: (presentation: IslandPresentation) => void) => () => void
   notifyIslandReady: () => Promise<void>
+  notifyIslandHidden: (revision: number) => Promise<void>
   setIslandInteractive: (interactive: boolean) => Promise<void>
   openIslandTask: (threadId: string) => Promise<boolean>
   dismissIslandTask: (threadId: string) => Promise<boolean>

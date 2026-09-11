@@ -126,6 +126,7 @@ export class CodexIpcClient {
     if (sourceClientId === this.clientId) return
     const threadId = getString(params?.conversationId)
     const following = params?.following === true
+    if (threadId && following) this.followThread(threadId)
     if (threadId) this.options.onVisibleThread(following ? threadId : undefined)
   }
 

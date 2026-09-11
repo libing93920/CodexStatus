@@ -44,11 +44,35 @@ export interface IslandSnapshot {
   viewedEventIds: string[]
 }
 
+export interface IslandPresentation {
+  revision: number
+  visible: boolean
+}
+
+export interface IslandWindowBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export const DEFAULT_ISLAND_PREFERENCES: IslandPreferences = {
   enabled: false
 }
 
 export const ISLAND_ALERT_DURATION_MS = 5_000
+
+export function resolveIslandWindowBounds(
+  display: IslandWindowBounds,
+  size: Pick<IslandWindowBounds, 'width' | 'height'>
+): IslandWindowBounds {
+  return {
+    x: display.x + Math.round((display.width - size.width) / 2),
+    y: display.y,
+    width: size.width,
+    height: size.height
+  }
+}
 
 export function createEmptyIslandSnapshot(): IslandSnapshot {
   return {

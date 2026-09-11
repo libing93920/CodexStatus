@@ -20,6 +20,8 @@ export class CodexActivityService {
   private readonly ingress: CodexHookIngress
   private ipcTaskKeys = new Set<string>()
   private readonly hookTaskKeys = new Set<string>()
+  private readonly hookTurnIds = new Map<string, string>()
+  private readonly finishedHookTurnIds = new Set<string>()
   private readonly finishedThreadIds = new Set<string>()
   private ipc?: CodexIpcClient
   private stopped = false
@@ -69,6 +71,8 @@ export class CodexActivityService {
     this.ipc = undefined
     this.ipcTaskKeys.clear()
     this.hookTaskKeys.clear()
+    this.hookTurnIds.clear()
+    this.finishedHookTurnIds.clear()
     this.finishedThreadIds.clear()
     await this.ingress.stop()
     this.state.setConnection({ hooks: false, ipc: false })
@@ -101,17 +105,43 @@ export class CodexActivityService {
 
   private handleHookPayload(payload: CodexHookPayload, receivedAt = Date.now()): void {
     this.state.noteHookEvent(receivedAt)
-    const event = mapCodexHookEvent(payload, receivedAt)
+    this.ipc?.followThread(payload.session_id)
+    const normalizedPayload = this.resolveHookTurn(payload, receivedAt)
+    if (!normalizedPayload) return this.emit()
+    const event = mapCodexHookEvent(normalizedPayload, receivedAt)
     if (!event) return this.emit()
     const key = createTaskKey(event.hostId, event.threadId)
+    if (!this.state.apply(event)) return this.emit()
+    this.hookTurnIds.set(payload.session_id, event.turnId)
     this.hookTaskKeys.add(key)
     this.ipcTaskKeys.delete(key)
-    this.ipc?.followThread(payload.session_id)
     if (event.kind === 'turn-started') this.finishedThreadIds.delete(event.threadId)
-    if (event.kind === 'turn-finished') this.finishedThreadIds.add(event.threadId)
-    if (!this.state.apply(event)) return
+    if (event.kind === 'turn-finished') {
+      this.finishedHookTurnIds.add(createTaskKey(payload.session_id, event.turnId))
+      this.finishedThreadIds.add(event.threadId)
+    }
     this.emit()
     if (event.kind === 'turn-finished') this.scheduleFinishedTask(event.hostId, event.threadId)
+  }
+
+  private resolveHookTurn(
+    payload: CodexHookPayload,
+    receivedAt: number
+  ): CodexHookPayload | undefined {
+    const currentTurnId = this.hookTurnIds.get(payload.session_id)
+    if (payload.hook_event_name === 'UserPromptSubmit') {
+      const turnId = payload.turn_id ?? `hook:${payload.session_id}:${receivedAt}`
+      if (this.finishedHookTurnIds.has(createTaskKey(payload.session_id, turnId))) return undefined
+      return { ...payload, turn_id: turnId }
+    }
+    if (payload.turn_id) {
+      if (this.finishedHookTurnIds.has(createTaskKey(payload.session_id, payload.turn_id))) {
+        return undefined
+      }
+      if (currentTurnId && payload.turn_id !== currentTurnId) return undefined
+      return payload
+    }
+    return currentTurnId ? { ...payload, turn_id: currentTurnId } : payload
   }
 
   private updateIpcTasks(tasks: IslandTask[]): void {
