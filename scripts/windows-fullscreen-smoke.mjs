@@ -24,5 +24,7 @@ const state = await new Promise((resolve, reject) => {
 })
 
 assert.equal(typeof state.fullscreen, 'boolean')
+assert.equal(typeof state.windowClass, 'string')
+assert.ok(state.windowClass.length > 0)
 assert.ok(state.monitor.width > 0)
 assert.ok(state.monitor.height > 0)
