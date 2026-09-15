@@ -827,10 +827,10 @@
   text-shadow: 0 0 12px var(--metric-accent, var(--capsule-accent));
 }
 
-/* 百分比提亮但保留随额度变色:--metric-accent(随额度红→绿)与白色混合,各主题统一 */
+/* 百分比与额度卡使用统一的分段额度色,主题只负责浅/深调色板 */
 [data-theme] .capsule__percent,
 [data-theme] .quota-card__value {
-  color: color-mix(in srgb, var(--metric-accent, var(--capsule-accent)) 75%, white);
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
 }
 
 [data-theme='cyber'] .capsule__weekly {

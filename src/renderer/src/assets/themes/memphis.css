@@ -163,10 +163,10 @@
   gap: 0px;
 }
 
-/* 百分比:heavy 字 + 粉色 + 墨描边(贴纸数字味) */
+/* 百分比:heavy 字 + 分段额度色 + 墨描边(贴纸数字味) */
 [data-theme='memphis'] .capsule__percent {
   font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
-  color: #ff5c8a;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   font-size: var(--capsule-percent-font);
   font-weight: 900;
   letter-spacing: -1.5px;
@@ -213,7 +213,7 @@
 }
 
 [data-theme='memphis'] .capsule__stat--metric .capsule__stat-value {
-  color: #ff5c8a;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
 }
 
 /* API 横版统计单元进度条:10px + 3px 描边在横版有限高度内会出框,压到 7px 贴合横版胶囊 */
@@ -398,7 +398,7 @@
 }
 
 [data-theme='memphis'] .quota-card__value {
-  color: var(--metric-accent, #ff5c8a);
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   font-family: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
   font-size: 33px;
   font-weight: 900;
@@ -1413,8 +1413,8 @@
   animation: memphis-drop-in 0.5s cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
 }
 
-/* 告急态:百分比变红 + 描边 */
+/* 告急态:百分比呼吸 + 描边 */
 [data-theme='memphis'] .capsule__percent.is-critical {
-  color: #ff6b35;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   -webkit-text-stroke: 1px #1c1a17;
 }

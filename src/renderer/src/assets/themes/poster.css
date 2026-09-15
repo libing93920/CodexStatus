@@ -152,9 +152,9 @@
   color: #2f6f62;
 }
 
-/* 百分比:落日深橙色,海报数字味 */
+/* 百分比:分段额度色,海报数字味 */
 [data-theme='poster'] .capsule__percent {
-  color: #b23f0a;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   font-weight: 400;
   letter-spacing: 1px;
 }
@@ -182,7 +182,7 @@
 }
 
 [data-theme='poster'] .capsule__stat--metric .capsule__stat-value {
-  color: #b23f0a;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
 }
 
 /* 横版缓存命中进度条:默认贴底,上提贴紧数值 */
@@ -310,7 +310,7 @@
 }
 
 [data-theme='poster'] .quota-card__value {
-  color: var(--metric-accent, #b23f0a);
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   font-family: Impact, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
   font-weight: 400;
   letter-spacing: 1px;
@@ -979,7 +979,7 @@
   animation: poster-rise 0.5s cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
 }
 
-/* 告急态:海报百分比变红 + 呼吸(继承默认 is-critical,色板已含红) */
+/* 告急态:海报百分比呼吸(颜色仍由额度分段决定) */
 [data-theme='poster'] .capsule__percent.is-critical {
-  color: #c0442c;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
 }

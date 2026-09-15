@@ -36,16 +36,13 @@ const themes = [
 ] as const
 
 const previewCases = [
-  ...themes.map((theme) => ({
-    theme,
-    state: '100',
-    valueText: '100%',
-    progress: 100,
-    isApiMode: false
-  })),
+  ...themes.flatMap((theme) => [
+    { theme, state: '100', valueText: '100%', progress: 100, isApiMode: false },
+    { theme, state: '0', valueText: '0%', progress: 0, isApiMode: false }
+  ]),
   { theme: 'midnight', state: '72', valueText: '72%', progress: 72, isApiMode: false },
   { theme: 'poster', state: '5', valueText: '5%', progress: 5, isApiMode: false },
-  { theme: 'memphis', state: '0', valueText: '0%', progress: 0, isApiMode: false },
+  { theme: 'memphis', state: '50', valueText: '50%', progress: 50, isApiMode: false },
   { theme: 'inksong', state: 'empty', valueText: '--', progress: undefined, isApiMode: false },
   {
     theme: 'cyber',

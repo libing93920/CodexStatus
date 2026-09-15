@@ -1,11 +1,14 @@
 import type { CSSProperties } from 'react'
-import type { LocaleCode, PercentageMode } from '../../shared/capsule'
+import type { LocaleCode, PercentageMode, ThemeId } from '../../shared/capsule'
 import {
   MAX_REFRESH_INTERVAL_SECONDS,
   MIN_REFRESH_INTERVAL_SECONDS,
   REFRESH_INTERVAL_OPTIONS
 } from '../../shared/capsule'
 import { COPY } from './copy'
+import { resolveMetricColor } from './minimal-quota'
+
+export { resolveMetricColor } from './minimal-quota'
 
 // 窗口天数多时只标首/末与每 5 天,避免拥挤
 export function shouldShowDateLabel(count: number, index: number): boolean {
@@ -82,25 +85,6 @@ export function formatUsd(value: number): string {
   return `$${value.toFixed(value < 0.01 ? 4 : 2)}`
 }
 
-// 额度色:按 goodScore(remaining=显示值,used=100-显示值)从柔粉红(0%)到系统绿(100%)线性插值
-// 100% 剩余→系统绿 #56d36c,0% 剩余→柔粉红 #f87171,中间渐变;无数据返回灰色
-// 危险端用柔粉红替代高饱和橙红,与深青蓝冷调背景协调,不堆霓虹
-export function resolveMetricColor(
-  displayPercent: number | undefined,
-  percentageMode: PercentageMode
-): string {
-  if (displayPercent === undefined || !Number.isFinite(displayPercent)) {
-    return 'rgba(158, 168, 179, 0.74)'
-  }
-  const goodScore = percentageMode === 'remaining' ? displayPercent : 100 - displayPercent
-  const t = Math.min(100, Math.max(0, goodScore)) / 100
-  // 柔粉红 (248,113,113) -> 系统绿 (86,211,108)
-  const r = Math.round(248 + (86 - 248) * t)
-  const g = Math.round(113 + (211 - 113) * t)
-  const b = Math.round(113 + (108 - 113) * t)
-  return `rgb(${r}, ${g}, ${b})`
-}
-
 // 推荐模型品牌色:按模型名关键词上色
 // Sol=#eab308, Terra=#3b82f6, Luna=#c7d2e0, GPT-5.5=#00e5ff, 兜底灰蓝
 export function resolveModelColor(label: string | undefined): string {
@@ -116,7 +100,8 @@ export function resolveModelColor(label: string | undefined): string {
 
 export function createMetricProgressStyle(
   displayPercent: number | undefined,
-  percentageMode: PercentageMode
+  percentageMode: PercentageMode,
+  theme: ThemeId
 ): CSSProperties {
   const progress =
     displayPercent === undefined || !Number.isFinite(displayPercent)
@@ -125,7 +110,7 @@ export function createMetricProgressStyle(
 
   return {
     '--metric-progress': `${progress}%`,
-    '--metric-accent': resolveMetricColor(displayPercent, percentageMode)
+    '--metric-accent': resolveMetricColor(displayPercent, percentageMode, theme)
   } as CSSProperties
 }
 

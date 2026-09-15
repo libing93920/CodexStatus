@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react'
 import type React from 'react'
-import type { AgentId, LocaleCode, PanelView } from '../../../shared/capsule'
+import type { AgentId, LocaleCode, PanelView, ThemeId } from '../../../shared/capsule'
 import { formatCompactTokens, resolveMetricColor } from '../formatters'
 import { TEAM_ROW_STAGGER_MAX_INDEX, TEAM_ROW_STAGGER_MS } from '../ui-constants'
 import { HeartIcon, TicketIcon } from './icons'
@@ -95,7 +95,8 @@ export function TeamRow({
   longWindow,
   resetCreditCount,
   appVersion,
-  isLatestVersion
+  isLatestVersion,
+  theme
 }: {
   isSelf: boolean
   rank: number
@@ -106,12 +107,13 @@ export function TeamRow({
   resetCreditCount?: number
   appVersion?: string
   isLatestVersion?: boolean
+  theme: ThemeId
 }): React.JSX.Element {
   const percent =
     remainingPercent === undefined || !Number.isFinite(remainingPercent)
       ? undefined
       : Math.min(100, Math.max(0, remainingPercent))
-  const accent = resolveMetricColor(percent, 'remaining')
+  const accent = resolveMetricColor(percent, 'remaining', theme)
   const rankClass =
     rank === 1 ? ' is-top-1' : rank === 2 ? ' is-top-2' : rank === 3 ? ' is-top-3' : ''
   const hasBoth = shortWindow !== undefined && longWindow !== undefined
@@ -139,8 +141,16 @@ export function TeamRow({
       </span>
       {hasBoth ? (
         <div className="team-row__windows">
-          <WindowLine label={shortWindow.label} percent={shortWindow.remainingPercent} />
-          <WindowLine label={longWindow.label} percent={longWindow.remainingPercent} />
+          <WindowLine
+            label={shortWindow.label}
+            percent={shortWindow.remainingPercent}
+            theme={theme}
+          />
+          <WindowLine
+            label={longWindow.label}
+            percent={longWindow.remainingPercent}
+            theme={theme}
+          />
         </div>
       ) : (
         <span className="team-row__bar">
@@ -286,16 +296,18 @@ export function TokenRow({
 
 export function WindowLine({
   label,
-  percent
+  percent,
+  theme
 }: {
   label: string
   percent?: number
+  theme: ThemeId
 }): React.JSX.Element {
   const safePercent =
     percent === undefined || !Number.isFinite(percent)
       ? undefined
       : Math.min(100, Math.max(0, percent))
-  const accent = resolveMetricColor(safePercent, 'remaining')
+  const accent = resolveMetricColor(safePercent, 'remaining', theme)
   return (
     <span className="team-row__window" style={{ '--metric-accent': accent } as CSSProperties}>
       <span className="team-row__window-label">{label}</span>

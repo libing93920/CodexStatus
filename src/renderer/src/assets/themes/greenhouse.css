@@ -205,9 +205,9 @@
     center / contain no-repeat;
 }
 
-/* 百分比:Georgia 斜体茎绿 */
+/* 百分比:Georgia 斜体与分段额度色 */
 [data-theme='greenhouse'] .capsule__percent {
-  color: var(--gh-stem);
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   font-family: Georgia, 'Times New Roman', serif;
   font-style: italic;
   font-weight: 700;
@@ -315,7 +315,7 @@
 }
 
 [data-theme='greenhouse'] .capsule__stat--metric .capsule__stat-value {
-  color: var(--gh-stem);
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
 }
 
 /* 广播跑马灯文字:木底上改深木色(默认冷白在原木上不可读) */
@@ -323,9 +323,9 @@
   color: #43301d;
 }
 
-/* 告急态:陶土红 + 呼吸(需压过本主题 0,2,0 的茎绿基础色) */
+/* 告急态:百分比呼吸(需压过本主题 0,2,0 的基础覆盖) */
 [data-theme='greenhouse'] .capsule__percent.is-critical {
-  color: #c0442c;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   animation: capsule-critical-pulse 1.6s ease-in-out infinite;
 }
 
@@ -651,7 +651,7 @@
 
 /* 额度数值:Georgia 斜体大字,颜色跟随额度动态色 */
 [data-theme='greenhouse'] .quota-card__value {
-  color: var(--metric-accent, var(--gh-stem));
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   font-family: Georgia, 'Times New Roman', serif;
   font-style: italic;
   font-size: 29px;

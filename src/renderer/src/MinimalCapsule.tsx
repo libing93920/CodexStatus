@@ -5,6 +5,9 @@ const MINIMAL_RING_CIRCUMFERENCE = 2 * Math.PI * MINIMAL_RING_RADIUS
 const MINIMAL_RING_INNER_RADIUS = MINIMAL_RING_RADIUS - 1.1
 const MINIMAL_RING_TEXT_RADIUS = MINIMAL_RING_INNER_RADIUS - 1.1
 const MINIMAL_TEXT_PADDING = 0.9
+const MINIMAL_QUOTA_FONT_SCALE = 1.05
+const MINIMAL_QUOTA_MIN_FONT_SIZE = 10.5
+const MINIMAL_QUOTA_MAX_FONT_SIZE = 14.7
 
 export interface MinimalCapsuleProps {
   theme: string
@@ -43,7 +46,13 @@ function resolveMeasuredFontSize(
     safeWidth / widthPerFontSize,
     safeHeight / heightPerFontSize
   )
-  return Math.max(10, Math.floor(fittedFontSize * 10) / 10)
+  const adjustedFontSize = isApiMode
+    ? fittedFontSize
+    : Math.min(
+        MINIMAL_QUOTA_MAX_FONT_SIZE,
+        Math.max(MINIMAL_QUOTA_MIN_FONT_SIZE, fittedFontSize * MINIMAL_QUOTA_FONT_SCALE)
+      )
+  return Math.max(10, Math.floor(adjustedFontSize * 10) / 10)
 }
 
 function MinimalQuotaRing({ progress }: { progress: number | undefined }): JSX.Element {
@@ -64,7 +73,7 @@ function MinimalQuotaRing({ progress }: { progress: number | undefined }): JSX.E
         cy="20"
         r={MINIMAL_RING_RADIUS}
         fill="none"
-        stroke="currentColor"
+        stroke="var(--capsule-minimal-track)"
         strokeWidth="2.2"
       />
       <circle

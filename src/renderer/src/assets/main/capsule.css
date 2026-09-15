@@ -1325,7 +1325,7 @@ body {
 }
 
 .capsule__minimal-ring-track {
-  opacity: 0.22;
+  opacity: 1;
 }
 
 .capsule__minimal-ring-progress {
@@ -1657,9 +1657,9 @@ body {
   animation: capsule-percent-pop 680ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* 告急:剩余额度低于阈值时,百分比数字变红 + 透明度呼吸(进度条太短看不出,改用数字本身提示) */
+/* 告急:低额度区间百分比数字呼吸提示(进度条太短看不出,改用数字本身提示) */
 .capsule__percent.is-critical {
-  color: var(--red, #de7265);
+  color: var(--metric-accent, rgba(151, 163, 176, 0.74));
   animation: capsule-critical-pulse 1.6s ease-in-out infinite;
 }
 

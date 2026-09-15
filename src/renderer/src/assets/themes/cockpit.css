@@ -184,10 +184,10 @@
   color: #dfe3d2;
 }
 
-/* 百分比:Nixie 辉光数码管,琥珀色 + 双层 glow + flicker 闪烁 */
+/* 百分比:Nixie 辉光数码管,分段额度色 + 双层 glow + flicker 闪烁 */
 [data-theme='cockpit'] .capsule__percent {
   font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
-  color: #ffaa00;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   font-weight: 400;
   letter-spacing: 0.5px;
   text-shadow:
@@ -290,7 +290,7 @@
 }
 
 [data-theme='cockpit'] .capsule__stat--metric .capsule__stat-value {
-  color: #ffaa00;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
 }
 
 /* 竖版 orb:各项尺寸沿用默认,铆钉/能量条语言一致;进度条缩窄贴合竖窗 */
@@ -486,12 +486,12 @@
   color: #97a08b;
 }
 
-/* quota-card 数值:Nixie 琥珀辉光 */
+/* quota-card 数值:Nixie 分段额度色辉光 */
 [data-theme='cockpit'] .quota-card__value {
   font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
   font-size: 26px;
   font-weight: 400;
-  color: #ffaa00;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   text-shadow:
     0 0 8px rgba(255, 170, 0, 0.6),
     0 0 20px rgba(255, 170, 0, 0.22);
@@ -775,7 +775,7 @@
 }
 
 [data-theme='cockpit'] .team-row__value {
-  color: #ffaa00;
+  color: var(--metric-accent, #ffaa00);
   font-family: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
   font-size: 18px;
   text-shadow: 0 0 6px rgba(255, 170, 0, 0.4);
@@ -1468,9 +1468,9 @@
   animation: capsule-percent-pop 680ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* 告急态:百分比变红 + 呼吸(指针红) */
+/* 告急态:百分比呼吸(颜色仍由额度分段决定) */
 [data-theme='cockpit'] .capsule__percent.is-critical {
-  color: #ff3b2f;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   text-shadow:
     0 0 7px rgba(255, 59, 47, 0.7),
     0 0 18px rgba(255, 59, 47, 0.3);

@@ -7,6 +7,7 @@ import type {
   PercentageMode,
   RateLimitWindowSnapshot,
   SpendUsage,
+  ThemeId,
   TokenUsageDay,
   TokenUsageOverview,
   UsageWindow,
@@ -35,7 +36,8 @@ export function QuotaCard({
   modeLabel,
   percentageMode,
   windowState,
-  resetExpiryLabel
+  resetExpiryLabel,
+  theme
 }: {
   isAccent?: boolean
   locale: LocaleCode
@@ -43,10 +45,11 @@ export function QuotaCard({
   percentageMode: PercentageMode
   windowState: RateLimitWindowSnapshot
   resetExpiryLabel: string
+  theme: ThemeId
 }): React.JSX.Element {
   const displayPercent =
     percentageMode === 'used' ? windowState?.usedPercent : windowState?.remainingPercent
-  const progressStyle = createMetricProgressStyle(displayPercent, percentageMode)
+  const progressStyle = createMetricProgressStyle(displayPercent, percentageMode, theme)
   const resetTimeText = formatCapsuleResetTime(windowState?.resetsAt, locale)
 
   return (

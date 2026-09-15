@@ -3,12 +3,14 @@
   --capsule-minimal-radius: 50%;
   --capsule-minimal-bg: linear-gradient(168deg, rgba(38, 48, 62, 0.78), rgba(16, 22, 32, 0.86));
   --capsule-minimal-edge: rgba(109, 180, 255, 0.48);
+  --capsule-minimal-track: rgba(89, 113, 137, 0.55);
 }
 [data-theme='aurora'] {
   --capsule-minimal-size: 40px;
   --capsule-minimal-radius: 50%;
   --capsule-minimal-bg: linear-gradient(145deg, rgba(38, 58, 72, 0.82), rgba(12, 24, 34, 0.9));
   --capsule-minimal-edge: rgba(88, 232, 177, 0.58);
+  --capsule-minimal-track: rgba(71, 119, 116, 0.55);
 }
 [data-theme='cyber'] {
   --capsule-minimal-size: 40px;
@@ -16,48 +18,64 @@
   --capsule-minimal-clip: circle(50% at 50% 50%);
   --capsule-minimal-bg: linear-gradient(145deg, #172538, #07121e);
   --capsule-minimal-edge: #22d3ee;
+  --capsule-minimal-track: rgba(65, 99, 123, 0.6);
 }
 [data-theme='titan'] {
   --capsule-minimal-size: 40px;
   --capsule-minimal-radius: 50%;
   --capsule-minimal-bg: linear-gradient(145deg, #4a4b4d, #17191d);
   --capsule-minimal-edge: rgba(230, 190, 88, 0.7);
+  --capsule-minimal-track: rgba(147, 149, 151, 0.55);
 }
 [data-theme='poster'] {
   --capsule-minimal-size: 40px;
   --capsule-minimal-radius: 50%;
   --capsule-minimal-bg: #f2e7cf;
   --capsule-minimal-edge: #d74b43;
+  --capsule-minimal-track: rgba(75, 84, 88, 0.45);
 }
 [data-theme='memphis'] {
   --capsule-minimal-size: 40px;
   --capsule-minimal-radius: 50%;
-  --capsule-minimal-bg: linear-gradient(145deg, #f6c85f, #ef8f55);
+  --capsule-minimal-bg:
+    radial-gradient(
+      circle at center,
+      #fffdf7 0 48%,
+      rgba(255, 253, 247, 0.96) 60%,
+      rgba(255, 253, 247, 0.35) 72%,
+      transparent 86%
+    ),
+    linear-gradient(145deg, #ffc93c, #ff6b35);
   --capsule-minimal-edge: #26243a;
+  --capsule-minimal-track: rgba(73, 58, 67, 0.48);
 }
 [data-theme='cockpit'] {
   --capsule-minimal-size: 40px;
   --capsule-minimal-radius: 50%;
   --capsule-minimal-bg: radial-gradient(circle, #1c3540, #071317);
   --capsule-minimal-edge: rgba(120, 255, 214, 0.7);
+  --capsule-minimal-track: rgba(61, 94, 99, 0.5);
 }
 [data-theme='inksong'] {
   --capsule-minimal-size: 40px;
   --capsule-minimal-radius: 50%;
   --capsule-minimal-bg: linear-gradient(145deg, #f1e8d2, #dcd0b5);
   --capsule-minimal-edge: rgba(157, 61, 48, 0.82);
+  --capsule-minimal-track: rgba(107, 99, 84, 0.45);
 }
 [data-theme='greenhouse'] {
   --capsule-minimal-size: 40px;
   --capsule-minimal-radius: 50%;
   --capsule-minimal-bg: linear-gradient(145deg, #f2e7cf, #dcc9a2);
   --capsule-minimal-edge: rgba(77, 139, 90, 0.72);
+  --capsule-minimal-track: rgba(91, 106, 79, 0.42);
 }
 [data-theme='swiss'] {
   --capsule-minimal-size: 40px;
   --capsule-minimal-radius: 50%;
   --capsule-minimal-bg: #f2f0e9;
   --capsule-minimal-edge: #202326;
+  --capsule-minimal-track: rgba(83, 87, 92, 0.42);
 }
 
 /* 海报完整胶囊使用硬偏移落影和 Impact;极简球需要清晰的小字号,不继承这两项。 */
@@ -98,4 +116,16 @@
 
 [data-theme] .capsule--minimal:focus-visible {
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--capsule-accent) 42%, transparent);
+}
+
+/* 孟菲斯极简球保留粗墨描边,避免浅色中心抹平贴纸识别度。 */
+[data-theme='memphis'] .capsule--minimal {
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px #1c1a17;
+}
+
+[data-theme='memphis'] .capsule--minimal:focus-visible {
+  box-shadow: inset 0 0 0 2px #1c1a17;
+  outline: 2px solid color-mix(in srgb, var(--capsule-accent) 42%, transparent);
+  outline-offset: 2px;
 }

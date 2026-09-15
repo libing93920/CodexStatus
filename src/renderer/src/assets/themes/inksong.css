@@ -162,15 +162,15 @@
   height: 12px;
 }
 
-/* 百分比:楷体朱砂(横版);竖版 orb 换赭金并收紧字号 */
+/* 百分比:楷体与分段额度色(横版);竖版 orb 收紧字号 */
 [data-theme='inksong'] .capsule__percent {
-  color: #b3402f;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
   font-weight: 700;
 }
 
 [data-theme='inksong'] .capsule--orb .capsule__percent {
-  color: #8a5a1e;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   font-size: 15px;
 }
 
@@ -264,7 +264,7 @@
 }
 
 [data-theme='inksong'] .capsule__stat--metric .capsule__stat-value {
-  color: #b3402f;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
 }
 
 /* 竖版 orb:两枚小签同步收紧 */
@@ -283,9 +283,9 @@
   color: #37301f;
 }
 
-/* 告急态:深朱砂 + 呼吸(必须高于本主题 0,2,0 的基础覆盖) */
+/* 告急态:百分比呼吸(必须高于本主题 0,2,0 的基础覆盖) */
 [data-theme='inksong'] .capsule__percent.is-critical {
-  color: #9e3223;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   animation: capsule-critical-pulse 1.6s ease-in-out infinite;
 }
 
@@ -486,7 +486,7 @@
 
 /* 额度数值:楷体大字,颜色跟随额度动态色 */
 [data-theme='inksong'] .quota-card__value {
-  color: var(--metric-accent, #b3402f);
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   font-family: KaiTi, 'Kaiti SC', STKaiti, 'Microsoft YaHei UI', serif;
   font-size: 29px;
   font-weight: 700;

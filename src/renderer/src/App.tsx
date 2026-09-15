@@ -491,7 +491,8 @@ function App(): React.JSX.Element {
     capsuleDisplayPercent === undefined ? '--' : `${Math.round(capsuleDisplayPercent)}%`
   const capsuleProgressStyle = createMetricProgressStyle(
     capsuleDisplayPercent,
-    isApiMode ? 'remaining' : settings.percentageMode
+    isApiMode ? 'remaining' : settings.percentageMode,
+    settings.theme
   )
   const capsuleResetAt = displayedRateLimit?.resetsAt
   const capsuleResetText = formatCountdownCapsule(capsuleResetAt, nowTick)
@@ -1612,6 +1613,7 @@ function App(): React.JSX.Element {
                       modeLabel={settings.percentageMode === 'used' ? copy.used : copy.remaining}
                       percentageMode={settings.percentageMode}
                       resetExpiryLabel={copy.resetExpiry}
+                      theme={settings.theme}
                       windowState={windowState}
                     />
                   ))}
@@ -1794,6 +1796,7 @@ function App(): React.JSX.Element {
                       longWindow={peer.longWindow}
                       resetCreditCount={peer.resetCreditCount}
                       appVersion={peer.appVersion}
+                      theme={settings.theme}
                       isLatestVersion={
                         peer.appVersion !== undefined && maxAppVersion !== undefined
                           ? compareSemver(peer.appVersion, maxAppVersion) === 0

@@ -149,10 +149,10 @@
   color: #d02a24;
 }
 
-/* 百分比:瑞士红 heavy 大字(参考稿 slab-pct 27px Helvetica 800) */
+/* 百分比:分段额度色 heavy 大字(参考稿 slab-pct 27px Helvetica 800) */
 [data-theme='swiss'] .capsule__percent {
   font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
-  color: #d02a24;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   font-weight: 800;
   letter-spacing: -1px;
   line-height: 1;
@@ -202,7 +202,7 @@
 }
 
 [data-theme='swiss'] .capsule__stat--metric .capsule__stat-value {
-  color: var(--metric-accent, #d02a24);
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
 }
 
 /* 横版缓存命中进度条:默认贴底,上提贴紧数值 */
@@ -259,9 +259,9 @@
   letter-spacing: 1px;
 }
 
-/* 告急态:瑞士红变深 + 呼吸(继承默认 is-critical,色板已含红) */
+/* 告急态:百分比呼吸(颜色仍由额度分段决定) */
 [data-theme='swiss'] .capsule__percent.is-critical {
-  color: #a81f1a;
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
 }
 
 /* ---------- panel:日报画报刊面 ---------- */
@@ -415,7 +415,7 @@
 
 /* 额度数值:巨型无衬线数字(参考稿 qcard__value 52px 800) */
 [data-theme='swiss'] .quota-card__value {
-  color: var(--metric-accent, #d02a24);
+  color: var(--metric-accent, rgba(158, 168, 179, 0.74));
   font-family: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
   font-weight: 800;
   letter-spacing: -2px;

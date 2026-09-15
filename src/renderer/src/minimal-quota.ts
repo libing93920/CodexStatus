@@ -1,4 +1,26 @@
-const LIGHT_MINIMAL_THEMES = new Set(['poster', 'memphis', 'inksong', 'greenhouse', 'swiss'])
+import type { PercentageMode, ThemeId } from '../../shared/capsule'
+
+const LIGHT_THEME_IDS: ReadonlySet<ThemeId> = new Set([
+  'poster',
+  'memphis',
+  'inksong',
+  'greenhouse',
+  'swiss'
+])
+
+const LIGHT_METRIC_COLORS = {
+  green: '#15803D',
+  yellow: '#A16207',
+  orange: '#C2410C',
+  red: '#B91C1C'
+} as const
+
+const DARK_METRIC_COLORS = {
+  green: '#4ADE80',
+  yellow: '#FACC15',
+  orange: '#FB923C',
+  red: '#F87171'
+} as const
 
 export function clampProgressPercent(value: number | undefined): number | undefined {
   if (value === undefined || !Number.isFinite(value)) {
@@ -7,23 +29,45 @@ export function clampProgressPercent(value: number | undefined): number | undefi
   return Math.min(100, Math.max(0, value))
 }
 
-// 浅色主题用深色额度色,避免原有粉绿渐变在纸色/橙色底上失去对比度。
-export function resolveMinimalMetricColor(
-  remainingPercent: number | undefined,
-  theme: string
-): string {
-  const progress = clampProgressPercent(remainingPercent)
-  const lightTheme = LIGHT_MINIMAL_THEMES.has(theme)
+export function isLightTheme(theme: ThemeId): boolean {
+  return LIGHT_THEME_IDS.has(theme)
+}
 
-  if (progress === undefined) {
-    return lightTheme ? '#1f2937' : 'rgba(158, 168, 179, 0.86)'
+export function resolveMetricColor(
+  displayPercent: number | undefined,
+  percentageMode: PercentageMode,
+  theme: ThemeId
+): string {
+  if (displayPercent === undefined || !Number.isFinite(displayPercent)) {
+    return 'rgba(158, 168, 179, 0.74)'
   }
 
-  const start = lightTheme ? [104, 21, 29] : theme === 'titan' ? [255, 190, 190] : [248, 113, 113]
-  const end = lightTheme ? [8, 59, 32] : theme === 'titan' ? [143, 230, 157] : [86, 211, 108]
-  const t = progress / 100
-  const r = Math.round(start[0] + (end[0] - start[0]) * t)
-  const g = Math.round(start[1] + (end[1] - start[1]) * t)
-  const b = Math.round(start[2] + (end[2] - start[2]) * t)
-  return `rgb(${r}, ${g}, ${b})`
+  const goodScore = percentageMode === 'remaining' ? displayPercent : 100 - displayPercent
+  const clampedScore = Math.min(100, Math.max(0, goodScore))
+  const colors = isLightTheme(theme) ? LIGHT_METRIC_COLORS : DARK_METRIC_COLORS
+
+  if (clampedScore > 50) {
+    return colors.green
+  }
+  if (clampedScore >= 25) {
+    return colors.yellow
+  }
+  if (clampedScore >= 10) {
+    return colors.orange
+  }
+  return colors.red
+}
+
+// 极简球与完整额度组件共享分段额度色；浅色主题使用深色调色板。
+export function resolveMinimalMetricColor(
+  remainingPercent: number | undefined,
+  theme: ThemeId
+): string {
+  const progress = clampProgressPercent(remainingPercent)
+
+  if (progress === undefined) {
+    return isLightTheme(theme) ? '#1f2937' : 'rgba(158, 168, 179, 0.86)'
+  }
+
+  return resolveMetricColor(progress, 'remaining', theme)
 }

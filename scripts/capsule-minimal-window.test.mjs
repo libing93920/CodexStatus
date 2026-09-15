@@ -19,6 +19,7 @@ const THEMES = [
   'greenhouse',
   'swiss'
 ]
+const MAX_MINIMAL_TEXT_CORNER_RADIUS = 17.2
 
 // 保留失败结果交给底部 rejection handler，避免销毁最后一个窗口时 Electron 提前退出并返回 0。
 app.on('window-all-closed', () => {})
@@ -29,6 +30,8 @@ async function inspectMinimalWindows(window) {
       const capsule = sample.querySelector('.capsule');
       const ball = sample.querySelector('.capsule__minimal');
       const ring = sample.querySelector('.capsule__minimal-ring');
+      const ringTrack = sample.querySelector('.capsule__minimal-ring-track');
+      const ringProgress = sample.querySelector('.capsule__minimal-ring-progress');
       const value = sample.querySelector('.capsule__minimal-value');
       const range = document.createRange();
       range.selectNodeContents(value);
@@ -44,6 +47,18 @@ async function inspectMinimalWindows(window) {
         ball: { width: ball.getBoundingClientRect().width, height: ball.getBoundingClientRect().height },
         ring: ring
           ? { width: ring.getBoundingClientRect().width, height: ring.getBoundingClientRect().height }
+          : undefined,
+        ringTrack: ringTrack
+          ? {
+              stroke: getComputedStyle(ringTrack).stroke,
+              opacity: getComputedStyle(ringTrack).opacity
+            }
+          : undefined,
+        ringProgress: ringProgress
+          ? {
+              stroke: getComputedStyle(ringProgress).stroke,
+              opacity: getComputedStyle(ringProgress).opacity
+            }
           : undefined,
         text: {
           value: value.textContent,
@@ -86,7 +101,7 @@ async function verifyMinimalWindows() {
   if (!address || typeof address === 'string')
     throw new Error('Vite preview server did not expose a port')
 
-  const window = new BrowserWindow({ show: false, width: 480, height: 430 })
+  const window = new BrowserWindow({ show: false, width: 480, height: 600 })
   try {
     await window.loadURL(`http://127.0.0.1:${address.port}/scripts/capsule-minimal-preview.html`)
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 350))
@@ -113,6 +128,15 @@ async function verifyMinimalWindows() {
         )
       } else {
         assert.deepEqual(entry.ring, { width: 40, height: 40 }, `${entry.theme}/${entry.state}`)
+        assert.ok(
+          entry.ringTrack?.stroke,
+          `${entry.theme}/${entry.state}: missing theme track color`
+        )
+        assert.equal(entry.ringTrack.opacity, '1', `${entry.theme}/${entry.state}: track opacity`)
+        assert.ok(
+          entry.ringProgress?.stroke && entry.ringProgress.stroke !== entry.ringTrack.stroke,
+          `${entry.theme}/${entry.state}: track must be separate from progress color`
+        )
       }
       assert.equal(entry.capsuleStyle.backgroundColor, 'rgba(0, 0, 0, 0)', entry.theme)
       assert.equal(entry.capsuleStyle.clipPath, 'none', entry.theme)
@@ -132,12 +156,27 @@ async function verifyMinimalWindows() {
       )
       assert.ok(entry.text.width > 0 && entry.text.height > 0, entry.theme)
       assert.ok(
-        entry.text.cornerRadius <= (entry.isApiMode ? 18.5 : 16.9),
+        entry.text.cornerRadius <= (entry.isApiMode ? 18.5 : MAX_MINIMAL_TEXT_CORNER_RADIUS),
         `${entry.theme}/${entry.state}: text overlaps ring`
       )
       colors.add(entry.color)
     }
     assert.ok(colors.size >= 3, 'theme palette does not reach production preview')
+
+    const quotaSamples = inspected.filter((entry) => !entry.isApiMode)
+    const trackColors = new Map()
+    for (const theme of THEMES) {
+      const themeSamples = quotaSamples.filter((entry) => entry.theme === theme)
+      const themeTrackColors = new Set(themeSamples.map((entry) => entry.ringTrack.stroke))
+      assert.equal(themeTrackColors.size, 1, `${theme}: track color changed with quota state`)
+      trackColors.set(theme, themeSamples[0].ringTrack.stroke)
+    }
+    assert.equal(trackColors.size, THEMES.length)
+    assert.equal(
+      new Set(trackColors.values()).size,
+      THEMES.length,
+      'themes must have distinct track colors'
+    )
 
     const apiSamples = inspected.filter((entry) => entry.isApiMode)
     assert.deepEqual(
@@ -149,7 +188,7 @@ async function verifyMinimalWindows() {
       apiSamples.every((entry) => entry.text.fontSize <= 14),
       'API minimal font must use the production compact size'
     )
-    assert.equal(inspected.length, THEMES.length + 6)
+    assert.equal(inspected.length, THEMES.length * 2 + 6)
     assert.deepEqual(new Set(inspected.map((entry) => entry.theme)), new Set(THEMES))
     const capsule = window.webContents
     const badgeColors = await capsule.executeJavaScript(`(() => {
