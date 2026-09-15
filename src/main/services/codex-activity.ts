@@ -4,6 +4,10 @@ import { mapCodexHookEvent, type CodexHookPayload } from './codex-hook-events.ts
 import { CodexHookIngress } from './codex-hook-ingress.ts'
 import { CodexIpcClient } from './codex-ipc-client.ts'
 import { listCodexThreadIds } from './codex-thread-catalog.ts'
+import { recordPerf } from './diag-log.ts'
+
+// 只在服务层合并执行态更新，避免服务和窗口广播两层等待叠加。
+const EMIT_DEBOUNCE_MS = 100
 
 export interface CodexActivityOptions {
   executable?: string
@@ -12,6 +16,8 @@ export interface CodexActivityOptions {
   onSnapshot: (snapshot: IslandSnapshot) => void
   viewedEventIds?: readonly string[]
   onViewedEventsChange?: (eventIds: string[]) => void
+  /** emit 合并窗口(毫秒);0 = 同步发出(测试用),默认 100 */
+  emitDebounceMs?: number
 }
 
 export class CodexActivityService {
@@ -28,6 +34,7 @@ export class CodexActivityService {
 
   constructor(options: CodexActivityOptions) {
     this.options = options
+    this.emitDebounceMs = options.emitDebounceMs ?? EMIT_DEBOUNCE_MS
     this.state = new IslandState(options.viewedEventIds)
     this.ingress = new CodexHookIngress({
       descriptorPath: options.descriptorPath,
@@ -39,7 +46,7 @@ export class CodexActivityService {
     this.stopped = false
     await this.ingress.start()
     this.state.setConnection({ hooks: true })
-    this.emit()
+    this.emitNow()
     let threadIds: string[] = []
     try {
       if (this.options.executable) {
@@ -59,7 +66,7 @@ export class CodexActivityService {
       },
       onConnection: (connected) => {
         this.state.setConnection({ ipc: connected })
-        this.emit()
+        if (!this.stopped) this.emitNow()
       }
     })
     this.ipc.start()
@@ -67,6 +74,8 @@ export class CodexActivityService {
 
   async stop(): Promise<void> {
     this.stopped = true
+    if (this.emitTimer) clearTimeout(this.emitTimer)
+    this.emitTimer = undefined
     this.ipc?.stop()
     this.ipc = undefined
     this.ipcTaskKeys.clear()
@@ -76,7 +85,7 @@ export class CodexActivityService {
     this.finishedThreadIds.clear()
     await this.ingress.stop()
     this.state.setConnection({ hooks: false, ipc: false })
-    this.emit()
+    this.emitNow()
   }
 
   getSnapshot(): IslandSnapshot {
@@ -104,6 +113,7 @@ export class CodexActivityService {
   }
 
   private handleHookPayload(payload: CodexHookPayload, receivedAt = Date.now()): void {
+    recordPerf('island:hookEvent')
     this.state.noteHookEvent(receivedAt)
     this.ipc?.followThread(payload.session_id)
     const normalizedPayload = this.resolveHookTurn(payload, receivedAt)
@@ -119,9 +129,12 @@ export class CodexActivityService {
     if (event.kind === 'turn-finished') {
       this.finishedHookTurnIds.add(createTaskKey(payload.session_id, event.turnId))
       this.finishedThreadIds.add(event.threadId)
+      // 终态立即广播:完成/停止是用户关心的提醒点,不走 debounce
+      this.emitNow()
+      this.scheduleFinishedTask(event.hostId, event.threadId)
+      return
     }
     this.emit()
-    if (event.kind === 'turn-finished') this.scheduleFinishedTask(event.hostId, event.threadId)
   }
 
   private resolveHookTurn(
@@ -145,6 +158,7 @@ export class CodexActivityService {
   }
 
   private updateIpcTasks(tasks: IslandTask[]): void {
+    recordPerf('island:ipcUpdate')
     this.supplementHookTasks(tasks)
     const ipcTasks = tasks.filter(
       (task) => !this.hookTaskKeys.has(createTaskKey(task.hostId, task.threadId))
@@ -212,8 +226,47 @@ export class CodexActivityService {
     }
   }
 
+  // emit 合并:streaming 期 IPC patch 高频到达,逐条全量快照+排序+派发是主进程热点;
+  // 100ms 窗口合并 + 状态变化检测(空闲心跳不重发)。终态事件立即 flush 保证及时性
+  private readonly emitDebounceMs: number
+  private emitTimer: NodeJS.Timeout | undefined
+  private lastEmittedSignature: string | undefined
+  private lastCriticalSignature = '[]'
+
   private emit(): void {
-    this.options.onSnapshot(this.state.getSnapshot())
+    if (this.stopped) return
+    const critical = criticalSignature(this.state.getSnapshot())
+    if (critical !== this.lastCriticalSignature) {
+      this.emitNow()
+      return
+    }
+    if (this.emitTimer) return
+    if (this.emitDebounceMs <= 0) {
+      this.flushEmit()
+      return
+    }
+    this.emitTimer = setTimeout(() => {
+      this.emitTimer = undefined
+      this.flushEmit()
+    }, this.emitDebounceMs)
+  }
+
+  /** 关键事件(终态/审批/连接变化)立即发出,跳过 debounce */
+  private emitNow(): void {
+    if (this.emitTimer) {
+      clearTimeout(this.emitTimer)
+      this.emitTimer = undefined
+    }
+    this.flushEmit()
+  }
+
+  private flushEmit(): void {
+    const snapshot = this.state.getSnapshot()
+    this.lastCriticalSignature = criticalSignature(snapshot)
+    const signature = JSON.stringify(snapshot)
+    if (signature === this.lastEmittedSignature) return
+    this.lastEmittedSignature = signature
+    this.options.onSnapshot(snapshot)
   }
 
   private scheduleFinishedTask(hostId: string, threadId: string): void {
@@ -230,4 +283,21 @@ export class CodexActivityService {
 
 function createTaskKey(hostId: string, threadId: string): string {
   return `${hostId}\u0000${threadId}`
+}
+
+function criticalSignature(snapshot: IslandSnapshot): string {
+  return JSON.stringify(
+    snapshot.tasks
+      .filter((task) => getDisplayStatus(task) !== 'running')
+      .map((task) =>
+        JSON.stringify([
+          task.hostId,
+          task.threadId,
+          task.turnId,
+          task.phase,
+          task.requests.map((request) => [request.id, request.kind])
+        ])
+      )
+      .sort()
+  )
 }

@@ -4,11 +4,11 @@ import os from 'node:os'
 import path from 'node:path'
 
 const MANAGED_STATUS = 'CodexStatus task activity'
+// 保留 PreToolUse 用于清除审批状态;PostToolUse 每次工具完成都 spawn 进程,由 IPC 状态流兜底
 const HOOK_EVENTS = [
   'SessionStart',
   'UserPromptSubmit',
   'PreToolUse',
-  'PostToolUse',
   'PermissionRequest',
   'Stop',
   'Interrupt'
@@ -57,7 +57,9 @@ export async function installCodexHooks(options: InstallCodexHooksOptions): Prom
     'utf8'
   )
   const current = await readHooksFile(options.hooksPath)
-  const merged = mergeCodexHooks(current, quoteCommand(launcherPath))
+  // 先清后装:移除旧版本写入的全部 managed 组(含 PreToolUse/PostToolUse 等已缩事件),
+  // 再按当前事件表安装 —— 修复存量用户升级后旧事件组永不清理的问题
+  const merged = mergeCodexHooks(removeCodexHooks(current), quoteCommand(launcherPath))
   await writeJsonAtomic(options.hooksPath, merged)
 }
 
@@ -89,9 +91,21 @@ export function mergeCodexHooks(current: HooksFile, command: string): HooksFile 
   return { ...current, hooks }
 }
 
+// 历史版本曾注册的事件(含工具级事件):卸载/迁移时需一并清理,
+// 否则缩减事件表后,旧版本写入的 managed 组会残留在用户 hooks.json
+const LEGACY_MANAGED_EVENTS = [
+  'SessionStart',
+  'UserPromptSubmit',
+  'PreToolUse',
+  'PostToolUse',
+  'PermissionRequest',
+  'Stop',
+  'Interrupt'
+] as const
+
 export function removeCodexHooks(current: HooksFile): HooksFile {
   const hooks = { ...(current.hooks ?? {}) }
-  for (const eventName of HOOK_EVENTS) {
+  for (const eventName of LEGACY_MANAGED_EVENTS) {
     const remaining = (hooks[eventName] ?? []).filter((group) => !isManagedGroup(group))
     if (remaining.length > 0) hooks[eventName] = remaining
     else delete hooks[eventName]
@@ -113,7 +127,7 @@ function createManagedGroup(eventName: string, command: string): HookGroup {
 
 function getMatcher(eventName: string): string | undefined {
   if (eventName === 'SessionStart') return 'startup|resume|clear|compact'
-  if (['PreToolUse', 'PostToolUse', 'PermissionRequest'].includes(eventName)) return '*'
+  if (eventName === 'PreToolUse' || eventName === 'PermissionRequest') return '*'
   return undefined
 }
 

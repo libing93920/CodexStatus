@@ -12,8 +12,9 @@ import { AGENT_PROVIDERS, listClaudeFiles, parseClaudeFile, type UsageEvent } fr
 import { computeCost, normalizeModel } from './rate.ts'
 import {
   dedupParsedFiles,
-  parseSessionFile,
+  parseSessionFileIncremental,
   type ParsedFile,
+  type SessionParserState,
   type TokenDelta
 } from './codex-session-parser.ts'
 
@@ -32,7 +33,12 @@ type DayMap = Map<string, Accum>
 
 /** 单个文件的上次解析产物:codex 存 ParsedFile(父子去重要用),claude 存独立事件 */
 type FileState =
-  | { kind: 'codex'; mtimeMs: number; parsed: ParsedFile }
+  | {
+      kind: 'codex'
+      mtimeMs: number
+      size: number
+      parser: SessionParserState
+    }
   | { kind: 'claude'; mtimeMs: number; events: UsageEvent[] }
 
 interface CacheEntry {
@@ -283,7 +289,8 @@ export function dedupClaudeEvents(events: UsageEvent[]): UsageEvent[] {
 // 第一遍解析每个 session 文件(session_meta 父子关系 + turn_context 模型 + token_count 差值),
 // 第二遍带 parent 的子会话与父会话做 token 签名匹配,跳过重放前缀,只累计各自的新工作。
 // 背景:Codex 子代理线程会重放父会话的累计上下文,直接求和会把同一份 token 重复计入(实测最高 9.5 倍)。
-// 增量:按 mtime diff 只重扫变化/新增文件,未变化文件复用上次 ParsedFile;去重仍在完整集合上重跑。
+// 增量:未变化文件复用解析状态,变化文件只从上次字节偏移读取追加内容;
+// 截断/替换由 parser 回退全量解析;去重仍在完整集合上重跑。
 async function incrementalScanCodex(
   prevFiles: Map<string, FileState> | undefined
 ): Promise<IncrementalScanResult> {
@@ -292,18 +299,31 @@ async function incrementalScanCodex(
   const parsed: Array<{ threadId: string | undefined; file: ParsedFile }> = []
   for (const entry of entries) {
     const prev = prevFiles?.get(entry.filePath)
-    if (prev?.kind === 'codex' && prev.mtimeMs === entry.mtimeMs) {
+    const unchanged =
+      prev?.kind === 'codex' &&
+      prev.mtimeMs === entry.mtimeMs &&
+      (entry.size === undefined || prev.size === entry.size)
+    if (unchanged) {
       files.set(entry.filePath, prev)
-      parsed.push({ threadId: threadIdFromFilename(entry.filePath), file: prev.parsed })
+      parsed.push({ threadId: threadIdFromFilename(entry.filePath), file: prev.parser.parsed })
       continue
     }
     const threadId = threadIdFromFilename(entry.filePath)
-    const file = await parseSessionFile(entry.filePath, threadId)
-    if (!file || file.events.length === 0) {
+    const result = await parseSessionFileIncremental(
+      entry.filePath,
+      threadId,
+      prev?.kind === 'codex' ? prev.parser : undefined
+    )
+    if (!result) {
       continue
     }
-    files.set(entry.filePath, { kind: 'codex', mtimeMs: entry.mtimeMs, parsed: file })
-    parsed.push({ threadId, file })
+    files.set(entry.filePath, {
+      kind: 'codex',
+      mtimeMs: entry.mtimeMs,
+      size: result.state.byteOffset,
+      parser: result.state
+    })
+    parsed.push({ threadId, file: result.state.parsed })
   }
   const events = dedupParsedFiles(parsed)
   return { days: aggregateDays(events), events, files }

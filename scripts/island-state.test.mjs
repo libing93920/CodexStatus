@@ -118,6 +118,7 @@ test('IPC 活动列表移除任务时清理已取消的执行态', () => {
   const service = new CodexActivityService({
     cwd: '.',
     descriptorPath: 'unused',
+    emitDebounceMs: 0,
     onSnapshot: (snapshot) => {
       latest = snapshot
     }
@@ -161,6 +162,7 @@ test('IPC 终态后的模糊 active 快照不复活已结束任务', () => {
   const service = new CodexActivityService({
     cwd: '.',
     descriptorPath: 'unused',
+    emitDebounceMs: 0,
     onSnapshot: (snapshot) => {
       latest = snapshot
     }
@@ -185,6 +187,7 @@ test('已查看的 IPC 完成任务不会被后续快照重新加入', () => {
   const service = new CodexActivityService({
     cwd: '.',
     descriptorPath: 'unused',
+    emitDebounceMs: 0,
     onSnapshot: (snapshot) => {
       latest = snapshot
     }
@@ -438,7 +441,13 @@ function authoritativeTask(phase, turnId) {
 }
 
 function activityService(onSnapshot) {
-  return new CodexActivityService({ cwd: '.', descriptorPath: 'unused', onSnapshot })
+  return new CodexActivityService({
+    cwd: '.',
+    descriptorPath: 'unused',
+    onSnapshot,
+    // 测试断言同步读取最新快照,关闭 emit debounce
+    emitDebounceMs: 0
+  })
 }
 
 function hookPayload(hookEventName) {

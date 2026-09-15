@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import net, { type Socket } from 'node:net'
 import type { IslandRequest, IslandTask, IslandTaskPhase } from '../../shared/island.ts'
+import { recordPerf } from './diag-log.ts'
 
 const PIPE_PATH = '\\\\.\\pipe\\codex-ipc'
 const INITIAL_CLIENT_ID = 'initializing-client'
@@ -33,6 +34,12 @@ export class CodexIpcClient {
   private readonly conversations = new Map<string, ConversationVersion>()
   private readonly activeConversationKeys = new Set<string>()
   private readonly terminalTasks = new Map<string, IslandTask>()
+  // 每会话投影缓存:key → {revision, task};emitTasks 每条 state change 都对
+  // 全部会话重投影,但每条 patch 只改一个会话 —— 其余直接复用缓存
+  private readonly projectedTaskCache = new Map<
+    string,
+    { revision: number; task: IslandTask | undefined }
+  >()
   private socket?: Socket
   private clientId = INITIAL_CLIENT_ID
   private buffer = Buffer.alloc(0)
@@ -64,6 +71,7 @@ export class CodexIpcClient {
     if (this.retryTimer) clearTimeout(this.retryTimer)
     this.retryTimer = undefined
     this.conversations.clear()
+    this.projectedTaskCache.clear()
     this.options.onConnection(false)
   }
 
@@ -133,6 +141,7 @@ export class CodexIpcClient {
   }
 
   private handleStateChange(params: Record<string, unknown> | undefined): void {
+    const startedAt = performance.now()
     const threadId = getString(params?.conversationId)
     const hostId = getString(params?.hostId) ?? 'local'
     const change = getRecord(params?.change)
@@ -140,9 +149,7 @@ export class CodexIpcClient {
     const key = conversationKey(hostId, threadId)
     const previous = this.conversations.get(key)
     const previousState = previous?.state
-    const wasActive = previous
-      ? isActiveTask(projectConversationState(hostId, threadId, previous.state))
-      : false
+    const wasActive = this.activeConversationKeys.has(key)
     if (change.type === 'snapshot') this.applySnapshot(hostId, threadId, change)
     else if (change.type === 'patches') this.applyIncrement(hostId, threadId, change)
     else throw new Error('Unsupported state change')
@@ -151,9 +158,7 @@ export class CodexIpcClient {
       previousState && current
         ? projectTerminalTransition(hostId, threadId, previousState, current.state)
         : undefined
-    const task =
-      terminalTask ??
-      (current ? projectConversationState(hostId, threadId, current.state) : undefined)
+    const task = terminalTask ?? (current ? this.projectTask(key, current) : undefined)
     if (isActiveTask(task)) {
       this.activeConversationKeys.add(key)
     } else {
@@ -163,6 +168,7 @@ export class CodexIpcClient {
     }
     this.emitTasks()
     this.terminalTasks.clear()
+    recordPerf('ipc:stateChange', performance.now() - startedAt)
   }
 
   private applySnapshot(hostId: string, threadId: string, change: Record<string, unknown>): void {
@@ -170,6 +176,7 @@ export class CodexIpcClient {
     const state = getRecord(change.conversationState)
     if (revision === undefined || !state) throw new Error('Invalid snapshot')
     this.conversations.set(conversationKey(hostId, threadId), { revision, state })
+    this.projectedTaskCache.delete(conversationKey(hostId, threadId))
   }
 
   private applyIncrement(hostId: string, threadId: string, change: Record<string, unknown>): void {
@@ -187,16 +194,23 @@ export class CodexIpcClient {
 
   private emitTasks(): void {
     const tasks: IslandTask[] = []
-    for (const [key, conversation] of this.conversations) {
-      const [hostId, threadId] = key.split('\u0000')
-      const task =
-        this.terminalTasks.get(key) ??
-        projectConversationState(hostId, threadId, conversation.state)
-      if (task && (this.activeConversationKeys.has(key) || this.terminalTasks.has(key))) {
-        tasks.push(task)
-      }
+    const keys = new Set([...this.activeConversationKeys, ...this.terminalTasks.keys()])
+    for (const key of keys) {
+      const conversation = this.conversations.get(key)
+      if (!conversation) continue
+      const task = this.terminalTasks.get(key) ?? this.projectTask(key, conversation)
+      if (task) tasks.push(task)
     }
     this.options.onTasks(tasks)
+  }
+
+  private projectTask(key: string, conversation: ConversationVersion): IslandTask | undefined {
+    const cached = this.projectedTaskCache.get(key)
+    if (cached?.revision === conversation.revision) return cached.task
+    const [hostId, threadId] = key.split('\u0000')
+    const task = projectConversationState(hostId, threadId, conversation.state)
+    this.projectedTaskCache.set(key, { revision: conversation.revision, task })
+    return task
   }
 
   private setFollowing(following: boolean): void {
@@ -230,6 +244,7 @@ export class CodexIpcClient {
     this.conversations.clear()
     this.activeConversationKeys.clear()
     this.terminalTasks.clear()
+    this.projectedTaskCache.clear()
     this.options.onConnection(false)
     if (!this.stopped && !this.retryTimer) {
       this.clientId = INITIAL_CLIENT_ID
@@ -284,8 +299,21 @@ export function applyStatePatches(
   source: Record<string, unknown>,
   patches: readonly StatePatch[]
 ): Record<string, unknown> {
-  const result = structuredClone(source)
-  for (const patch of patches) applyStatePatch(result, patch)
+  const result = { ...source }
+  for (const patch of patches) {
+    // 只复制将被写入的祖先；旧快照仍用于判断终态，失败时也不能污染它。
+    let parent: unknown = result
+    for (const segment of patch.path.slice(0, -1)) {
+      const child = getPatchChild(parent, segment)
+      const record = getRecord(child)
+      const copy = Array.isArray(child) ? [...child] : record ? { ...record } : undefined
+      if (!copy) throw new Error('Invalid patch path')
+      if (Array.isArray(parent)) parent[parseArrayIndex(segment, parent.length)] = copy
+      else (parent as Record<string, unknown>)[String(segment)] = copy
+      parent = copy
+    }
+    applyStatePatch(result, patch)
+  }
   return result
 }
 
@@ -405,24 +433,27 @@ function syntheticRequest(
   }
 }
 
+const latestTurnCache = new WeakMap<object, Record<string, unknown> | undefined>()
+
 function getLatestTurn(value: unknown, activeOnly: boolean): Record<string, unknown> | undefined {
   const history = getRecord(getRecord(value)?.history)
   const entities = getRecord(history?.entitiesByKey)
   if (!entities) return undefined
-  return Object.values(entities)
-    .map(getRecord)
-    .filter(
-      (turn): turn is Record<string, unknown> =>
-        turn !== undefined &&
-        getString(turn.turnId) !== undefined &&
-        getNumber(turn.turnStartedAtMs) !== undefined &&
-        resolvePhase(turn.status) !== undefined &&
-        (!activeOnly || turn.status === 'inProgress')
-    )
-    .sort(
-      (left, right) =>
-        (getNumber(right.turnStartedAtMs) ?? 0) - (getNumber(left.turnStartedAtMs) ?? 0)
-    )[0]
+  if (!activeOnly && latestTurnCache.has(entities)) return latestTurnCache.get(entities)
+  let latest: Record<string, unknown> | undefined
+  let startedAt = -Infinity
+  for (const value of Object.values(entities)) {
+    const turn = getRecord(value)
+    const time = getNumber(turn?.turnStartedAtMs)
+    if (!turn || time === undefined || !getString(turn.turnId)) continue
+    if (!resolvePhase(turn.status) || (activeOnly && turn.status !== 'inProgress')) continue
+    if (time > startedAt) {
+      latest = turn
+      startedAt = time
+    }
+  }
+  if (!activeOnly) latestTurnCache.set(entities, latest)
+  return latest
 }
 
 function resolvePhase(turnStatus: unknown): IslandTaskPhase | undefined {

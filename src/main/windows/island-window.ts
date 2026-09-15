@@ -32,7 +32,7 @@ export function createIslandWindow(options: IslandWindowOptions): BrowserWindow 
     }
   })
   window.setAlwaysOnTop(true, 'screen-saver')
-  window.setIgnoreMouseEvents(true, { forward: true })
+  window.setIgnoreMouseEvents(true)
   options.loadRenderer(window)
   return window
 }

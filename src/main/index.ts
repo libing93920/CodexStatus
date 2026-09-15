@@ -90,6 +90,14 @@ import {
 } from '../shared/island'
 import { CodexActivityService } from './services/codex-activity'
 import {
+  logDiag,
+  perfEnd,
+  perfStart,
+  recordPerf,
+  setDiagDirectory,
+  startPerfReport
+} from './services/diag-log'
+import {
   getDefaultCodexHooksPath,
   installCodexHooks,
   uninstallCodexHooks
@@ -352,8 +360,9 @@ function ensureIslandWindow(): BrowserWindow {
   window.webContents.on('render-process-gone', () => {
     islandRendererReady = false
     islandPresentationVisible = false
-    window.setIgnoreMouseEvents(true, { forward: true })
+    window.setIgnoreMouseEvents(true)
     window.hide()
+    logDiag('island renderer gone: forward released and hidden')
   })
   islandWindow = window
   return window
@@ -421,6 +430,10 @@ if (hasSingleInstanceLock) {
     }
 
     registerIpcHandlers()
+    // 诊断日志:周期性汇总性能计数,写入 userData/diag/diag.log(测试版保留)
+    setDiagDirectory(app.getPath('userData'))
+    startPerfReport()
+    logDiag(`app ready version=${app.getVersion()} platform=${process.platform}`)
     // autoUpdater 初始化并注册进度转发:把更新事件推给渲染层
     setUpdaterProgressListener((payload) => {
       sendToRenderers(CHANNELS.updateProgress, payload)
@@ -597,7 +610,11 @@ function registerIpcHandlers(): void {
       invalidateQuotaCaches()
       void refreshRadarNow(persistedState.settings.iqThreshold)
       void refreshStatus({ forceCredentialCheck: true })
-    } else if (persistedState.settings.refreshMode === 'auto' && canRefreshStatus()) {
+    } else if (
+      patch.island === undefined &&
+      persistedState.settings.refreshMode === 'auto' &&
+      canRefreshStatus()
+    ) {
       void refreshStatus()
     }
 
@@ -809,7 +826,11 @@ function registerIpcHandlers(): void {
     if (event.sender.id !== islandWindow?.webContents.id || typeof revision !== 'number') return
     if (revision !== islandPresentationRevision || islandPresentationVisible) return
     islandWindow.webContents.setBackgroundThrottling(true)
+    // 隐藏后解除鼠标转发:Windows 上 forward:true 挂全局 WH_MOUSE_LL 钩子,
+    // 不释放会在主进程忙碌时放大成全系统输入延迟(灵动岛隐藏期间本就无交互)
+    islandWindow.setIgnoreMouseEvents(true)
     islandWindow.hide()
+    logDiag(`island hidden revision=${revision} forward released`)
   })
 
   ipcMain.handle(CHANNELS.islandInteractive, async (event, interactive: unknown) => {
@@ -1262,6 +1283,7 @@ async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): 
   refreshTrayMenu()
 
   refreshPromise = (async () => {
+    perfStart('refresh:collect')
     try {
       const agentId = persistedState.settings.agentId
       const collected =
@@ -1271,8 +1293,11 @@ async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): 
               bestModelPick: currentSnapshot.bestModelPick
             })
           : createApiModeSnapshot()
+      perfEnd('refresh:collect')
       // 预热三窗口 token 汇总,供本机排行榜与 LAN 广播同步读取
+      perfStart('refresh:warm')
       await warmAllAgentTokenTotals()
+      perfEnd('refresh:warm')
       // collect 期间 radar 回调可能已更新 bestModelPick;优先取最新值,旧值仅作兜底
       setCurrentSnapshot({
         ...collected,
@@ -1286,6 +1311,8 @@ async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): 
       // 本机数据变化,广播给已连 peer
       lanService.broadcastSnapshot()
     } catch (error) {
+      perfEnd('refresh:collect')
+      perfEnd('refresh:warm')
       const message = error instanceof Error ? error.message : String(error)
       setCurrentSnapshot({
         ...currentSnapshot,
@@ -1396,6 +1423,12 @@ async function syncIslandService(): Promise<void> {
     broadcastIslandSnapshot()
     hideIslandImmediately()
     stopFullscreenMonitor()
+    // 关闭灵动岛即销毁窗口:确保全局鼠标钩子随窗口销毁彻底释放,不留到进程退出
+    islandWindow?.destroy()
+    islandWindow = null
+    islandRendererReady = false
+    islandPresentationVisible = false
+    logDiag('island disabled: window destroyed')
     await uninstallCodexHooks(getDefaultCodexHooksPath(), join(app.getPath('userData'), 'hooks'))
     return
   }
@@ -1454,8 +1487,16 @@ function tryResolveCodexExecutable(): string | undefined {
   }
 }
 
+// 执行态已在活动服务中合并；这里立即发送并去重，避免关键事件再次排队。
+let lastIslandBroadcastPayload: string | undefined
+
 function broadcastIslandSnapshot(): void {
+  recordPerf('island:broadcastRequest')
   const snapshot = createIslandRendererSnapshot()
+  const payload = JSON.stringify(snapshot)
+  if (payload === lastIslandBroadcastPayload) return
+  lastIslandBroadcastPayload = payload
+  recordPerf('island:broadcastSent')
   islandWindow?.webContents.send(CHANNELS.islandUpdated, snapshot)
   panelWindow?.webContents.send(CHANNELS.islandUpdated, snapshot)
 }
@@ -1495,7 +1536,8 @@ function setIslandPresentation(visible: boolean, force = false): void {
   const revision = ++islandPresentationRevision
   const presentation: IslandPresentation = { revision, visible }
   if (!visible) {
-    window.setIgnoreMouseEvents(true, { forward: true })
+    // 隐藏即释放全局鼠标钩子(不带 forward),不再保留到窗口销毁
+    window.setIgnoreMouseEvents(true)
     islandPresentationVisible = false
     window.webContents.send(CHANNELS.islandPresentation, presentation)
     return
@@ -1507,6 +1549,7 @@ function setIslandPresentation(visible: boolean, force = false): void {
   window.webContents.setBackgroundThrottling(false)
   islandPresentationVisible = true
   window.webContents.send(CHANNELS.islandPresentation, presentation)
+  logDiag(`island shown revision=${revision} forward armed`)
 }
 
 function hideIslandImmediately(): void {
@@ -1516,7 +1559,7 @@ function hideIslandImmediately(): void {
     revision,
     visible: false
   } satisfies IslandPresentation)
-  islandWindow?.setIgnoreMouseEvents(true, { forward: true })
+  islandWindow?.setIgnoreMouseEvents(true)
   islandWindow?.webContents.setBackgroundThrottling(true)
   islandWindow?.hide()
 }
@@ -1525,6 +1568,7 @@ function ensureFullscreenMonitor(): void {
   if (fullscreenMonitor) return
   fullscreenMonitor = new WindowsFullscreenMonitor(
     (state) => {
+      recordPerf('fullscreen:change')
       fullscreenState = state
       syncIslandWindowVisibility()
       broadcastIslandSnapshot()
@@ -1536,6 +1580,7 @@ function ensureFullscreenMonitor(): void {
     }
   )
   fullscreenMonitor.start()
+  logDiag('fullscreen monitor started')
 }
 
 function stopFullscreenMonitor(): void {

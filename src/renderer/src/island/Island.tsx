@@ -57,6 +57,7 @@ export default function Island(): React.JSX.Element {
   const pauseReminderRef = useRef<() => void>(() => undefined)
   const resumeReminderRef = useRef<() => void>(() => undefined)
   const presentationHandlerRef = useRef<(next: IslandPresentation) => void>(() => undefined)
+  const cancelInteractiveFrameRef = useRef<() => void>(() => undefined)
   const alertEvent = alertTask ? alertEventId(alertTask) : undefined
 
   useEffect(() => {
@@ -178,12 +179,24 @@ export default function Island(): React.JSX.Element {
   useEffect(() => {
     if (!presentation.visible) return
     let interactive = false
+    // rAF 节流:forward 转发的鼠标移动每秒可达数百次,命中检测每帧至多一次
+    let pendingEvent: MouseEvent | undefined
+    let frameId: number | undefined
     const updateInteractive = (next: boolean): void => {
       if (next === interactive) return
       interactive = next
       setIslandInteractive(next)
     }
-    const handlePointerMove = (event: MouseEvent): void => {
+    const cancelPendingHitTest = (): void => {
+      if (frameId !== undefined) cancelAnimationFrame(frameId)
+      frameId = undefined
+      pendingEvent = undefined
+    }
+    const runHitTest = (): void => {
+      frameId = undefined
+      const event = pendingEvent
+      pendingEvent = undefined
+      if (!event) return
       updateInteractive(
         isPointInIsland(
           event.clientX,
@@ -194,14 +207,25 @@ export default function Island(): React.JSX.Element {
         )
       )
     }
-    const handleMouseLeave = (): void => updateInteractive(false)
+    const handlePointerMove = (event: MouseEvent): void => {
+      pendingEvent = event
+      if (frameId === undefined) frameId = requestAnimationFrame(runHitTest)
+    }
+    const handleMouseLeave = (): void => {
+      cancelPendingHitTest()
+      updateInteractive(false)
+    }
+    cancelInteractiveFrameRef.current = cancelPendingHitTest
+    // pointermove/mousemove 在 Chromium 同源派发,双注册只会双倍命中检测,留 pointermove
     document.addEventListener('pointermove', handlePointerMove)
-    document.addEventListener('mousemove', handlePointerMove)
     document.addEventListener('mouseleave', handleMouseLeave)
     return () => {
       document.removeEventListener('pointermove', handlePointerMove)
-      document.removeEventListener('mousemove', handlePointerMove)
       document.removeEventListener('mouseleave', handleMouseLeave)
+      cancelPendingHitTest()
+      if (cancelInteractiveFrameRef.current === cancelPendingHitTest) {
+        cancelInteractiveFrameRef.current = () => undefined
+      }
       updateInteractive(false)
     }
   }, [expandedHeight, mode, presentation.visible, satelliteStatus])
@@ -262,6 +286,7 @@ export default function Island(): React.JSX.Element {
 
   function handlePointerLeave(): void {
     hovering.current = false
+    cancelInteractiveFrameRef.current()
     setIslandInteractive(false)
     if (modeRef.current === 'alert') resumeReminder()
     if (modeRef.current === 'expanded' && !focused.current) setMode('compact')

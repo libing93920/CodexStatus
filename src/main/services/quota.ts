@@ -20,6 +20,7 @@ interface RateLimitSnapshot {
 export interface JsonlFileEntry {
   filePath: string
   mtimeMs: number
+  size?: number
 }
 
 // 凭据判别式:chatgpt=订阅 OAuth,api=API Key,none=未识别/缺失
@@ -83,7 +84,7 @@ export async function collectUsageSnapshot(
   let latestLocalSnapshot: RateLimitSnapshot | undefined
 
   for (const entry of limitedFiles) {
-    const snapshot = await readLatestRateLimitSnapshot(entry.filePath)
+    const snapshot = await readCachedRateLimitSnapshot(entry)
     if (snapshot && (!latestLocalSnapshot || snapshot.timestamp > latestLocalSnapshot.timestamp)) {
       latestLocalSnapshot = snapshot
     }
@@ -621,50 +622,112 @@ async function collectJsonlFilesInto(
 
     try {
       const stat = await fs.stat(fullPath)
-      entries.push({ filePath: fullPath, mtimeMs: stat.mtimeMs })
+      entries.push({ filePath: fullPath, mtimeMs: stat.mtimeMs, size: stat.size })
     } catch {
       continue
     }
   }
 }
 
-async function readLatestRateLimitSnapshot(
+// —— 额度快照读取:尾部优先 + 指纹缓存 ——
+// 原实现每轮刷新(默认 30s)对 top-80 文件全量 readFile + 全行 JSON.parse,
+// 为减少主进程解析与分配开销,采用两个降本手段:
+// 1) 尾部读:token_count 快照通常出现在会话最近事件中,只读末尾 TAIL_READ_BYTES;
+//    尾部无完整有效快照时回退全量读。单文件始终取最后一条有效记录,不取最大时间戳。
+// 2) 指纹缓存:(mtimeMs, size) 未变的文件直接复用上次结果,零 IO
+interface RateLimitSnapshotCacheEntry {
+  mtimeMs: number
+  size: number
+  snapshot: RateLimitSnapshot | undefined
+}
+
+const rateLimitSnapshotCache = new Map<string, RateLimitSnapshotCacheEntry>()
+// 4MB 是读取预算,不是单行长度上限；超长行可能需要一次尾读后再全读。
+const TAIL_READ_BYTES = 4 * 1024 * 1024
+
+async function readCachedRateLimitSnapshot(entry: JsonlFileEntry): Promise<
+  RateLimitSnapshot | undefined
+> {
+  const cached = rateLimitSnapshotCache.get(entry.filePath)
+  if (cached && cached.mtimeMs === entry.mtimeMs && cached.size === entry.size) {
+    return cached.snapshot
+  }
+  // 未命中/指纹变化:读文件(内部会回填缓存);旧调用方无 size 时 mtime 相同也放行读
+  rateLimitSnapshotCache.delete(entry.filePath)
+  return readLatestRateLimitSnapshot(entry.filePath)
+}
+
+export async function readLatestRateLimitSnapshot(
   filePath: string
 ): Promise<RateLimitSnapshot | undefined> {
   try {
-    const content = await fs.readFile(filePath, 'utf8')
-    const lines = content.split(/\r?\n/).filter((line) => line.trim().length > 0)
-    let latestSnapshot: RateLimitSnapshot | undefined
-
-    for (const rawLine of lines) {
-      const parsed = parseJsonObject(rawLine)
-      if (!parsed) {
-        continue
-      }
-
-      const entryType = getString(parsed.type)
-      const payload = getRecord(parsed.payload)
-      if (entryType !== 'event_msg' || !payload || getString(payload.type) !== 'token_count') {
-        continue
-      }
-
-      const rateLimits = getRecord(payload.rate_limits)
-      const timestamp = parseTimestamp(parsed)
-      if (!rateLimits || !timestamp) {
-        continue
-      }
-
-      latestSnapshot = {
-        timestamp,
-        primary: normalizeRateLimit(getRecord(rateLimits.primary)),
-        secondary: normalizeRateLimit(getRecord(rateLimits.secondary))
-      }
+    const stat = await fs.stat(filePath)
+    const content =
+      stat.size > TAIL_READ_BYTES
+        ? await readTail(filePath, stat.size)
+        : await fs.readFile(filePath, 'utf8')
+    let snapshot = extractLatestRateLimitSnapshot(content)
+    // 尾部没有完整有效快照(可能位于前段或跨越读取边界),全读保留原有语义。
+    if (!snapshot && stat.size > TAIL_READ_BYTES) {
+      snapshot = extractLatestRateLimitSnapshot(await fs.readFile(filePath, 'utf8'))
     }
-
-    return latestSnapshot
+    rateLimitSnapshotCache.set(filePath, {
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+      snapshot
+    })
+    return snapshot
   } catch {
     return undefined
   }
+}
+
+async function readTail(filePath: string, fileSize: number): Promise<string> {
+  const handle = await fs.open(filePath, 'r')
+  try {
+    const length = Math.min(TAIL_READ_BYTES, fileSize)
+    const buffer = Buffer.alloc(length)
+    await handle.read(buffer, 0, length, fileSize - length)
+    // 从首个换行截起,避免行首半行被当独立 JSON 解析
+    const text = buffer.toString('utf8')
+    const firstNewline = text.indexOf('\n')
+    return firstNewline >= 0 ? text.slice(firstNewline + 1) : text
+  } finally {
+    await handle.close()
+  }
+}
+
+// 与原全读实现一致：按文件顺序取最后一条有效记录，时间戳只用于跨文件比较。
+export function extractLatestRateLimitSnapshot(content: string): RateLimitSnapshot | undefined {
+  const lines = content.split(/\r?\n/).filter((line) => line.trim().length > 0)
+  let latestSnapshot: RateLimitSnapshot | undefined
+
+  for (const rawLine of lines) {
+    const parsed = parseJsonObject(rawLine)
+    if (!parsed) {
+      continue
+    }
+
+    const entryType = getString(parsed.type)
+    const payload = getRecord(parsed.payload)
+    if (entryType !== 'event_msg' || !payload || getString(payload.type) !== 'token_count') {
+      continue
+    }
+
+    const rateLimits = getRecord(payload.rate_limits)
+    const timestamp = parseTimestamp(parsed)
+    if (!rateLimits || !timestamp) {
+      continue
+    }
+
+    latestSnapshot = {
+      timestamp,
+      primary: normalizeRateLimit(getRecord(rateLimits.primary)),
+      secondary: normalizeRateLimit(getRecord(rateLimits.secondary))
+    }
+  }
+
+  return latestSnapshot
 }
 
 function normalizeRateLimit(record: Record<string, unknown> | undefined): RawRateLimit | undefined {

@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import readline from 'node:readline'
+import { recordPerf } from './diag-log.ts'
 
 export interface NativeBounds {
   x: number
@@ -42,6 +43,7 @@ export class WindowsFullscreenMonitor {
       stderr = `${stderr}${String(chunk)}`.slice(-1_000)
     })
     lines.on('line', (line) => {
+      recordPerf('fullscreen:probe')
       const state = parseFullscreenState(line.replaceAll('\0', ''))
       if (state) this.onChange(state)
     })
@@ -165,6 +167,6 @@ $last = ''
 while ($true) {
   $json = [CodexStatusWindowProbe]::GetState()
   if ($json -and $json -ne $last) { [Console]::Out.WriteLine($json); [Console]::Out.Flush(); $last = $json }
-  Start-Sleep -Milliseconds 500
+  Start-Sleep -Milliseconds 1500
 }
 `
