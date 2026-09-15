@@ -39,6 +39,7 @@ import {
   TicketIcon
 } from './components/icons'
 import { HeartEffect } from './components/HeartEffect'
+import { MinimalCapsule } from './MinimalCapsule'
 import { PANEL_TAB_MOTION_CLEAR_MS } from './ui-constants'
 import { ApiCapsuleStat, QuotaCard, UsageCard, WindowKeeperStatusCard } from './components/usage'
 import {
@@ -63,9 +64,9 @@ import {
   isFixedRefreshInterval,
   localDayKey,
   normalizeCustomRefreshInterval,
-  resolveMetricColor,
   resolveModelColor
 } from './formatters'
+import { clampProgressPercent, resolveMinimalMetricColor } from './minimal-quota'
 
 const DEFAULT_CUSTOM_REFRESH_INTERVAL_SECONDS = 40
 const CAPSULE_CLICK_DRAG_DISTANCE = 5
@@ -740,12 +741,17 @@ function App(): React.JSX.Element {
     capsuleMessage === null &&
     minimalStage === 'full' &&
     !pointerInsideCapsule
-  const minimalValueText = isApiMode ? apiTokenText : capsulePercentText
+  const minimalRemainingPercent = isApiMode
+    ? undefined
+    : clampProgressPercent(displayedRateLimit?.remainingPercent)
+  const minimalValueText = isApiMode
+    ? apiTokenText
+    : minimalRemainingPercent === undefined
+      ? '--'
+      : `${Math.round(minimalRemainingPercent)}%`
   const minimalValueColor = isApiMode
     ? undefined
-    : capsuleDisplayPercent === undefined
-      ? undefined
-      : resolveMetricColor(capsuleDisplayPercent, settings.percentageMode)
+    : resolveMinimalMetricColor(minimalRemainingPercent, settings.theme)
   const minimalValueFont = fitFontSize(
     minimalValueText,
     Math.max(10, Math.round(minimalBallSize * 0.36)),
@@ -753,6 +759,16 @@ function App(): React.JSX.Element {
   )
   const adjustedMinimalValueFont =
     settings.theme === 'memphis' && !isApiMode ? Math.min(minimalValueFont, 12) : minimalValueFont
+  const capsuleAriaLabel =
+    showMinimalBall && !isApiMode && capsuleAlert === 'default'
+      ? `${copy.remaining} ${minimalValueText}${capsuleWindowBadge ? `, ${capsuleWindowBadge}` : ''}`
+      : capsuleAlert === 'red' || capsuleAlert === 'yellow'
+        ? copy.checkUpdate
+        : capsuleAlert === 'blue'
+          ? copy.announcementUnread
+          : capsuleAlert === 'message'
+            ? copy.capsuleMessageAria
+            : copy.details
   const capsuleClassName = [
     'capsule',
     `capsule--${capsuleViewMode}`,
@@ -1417,15 +1433,7 @@ function App(): React.JSX.Element {
         <main className="widget">
           <section
             ref={capsuleRef}
-            aria-label={
-              capsuleAlert === 'red' || capsuleAlert === 'yellow'
-                ? copy.checkUpdate
-                : capsuleAlert === 'blue'
-                  ? copy.announcementUnread
-                  : capsuleAlert === 'message'
-                    ? copy.capsuleMessageAria
-                    : copy.details
-            }
+            aria-label={capsuleAriaLabel}
             className={capsuleClassName}
             style={capsuleProgressStyle}
             onKeyDown={handleCapsuleKeyDown}
@@ -1440,18 +1448,14 @@ function App(): React.JSX.Element {
           >
             <span className="capsule__deco" aria-hidden="true" />
             {showMinimalBall ? (
-              <div className="capsule__minimal" aria-hidden="true">
-                <span className="capsule__minimal-deco" />
-                <span
-                  className="capsule__minimal-value"
-                  style={{
-                    color: minimalValueColor,
-                    fontSize: `${adjustedMinimalValueFont}px`
-                  }}
-                >
-                  {minimalValueText}
-                </span>
-              </div>
+              <MinimalCapsule
+                theme={settings.theme}
+                valueText={minimalValueText}
+                valueColor={minimalValueColor}
+                valueFontSize={adjustedMinimalValueFont}
+                progress={minimalRemainingPercent}
+                isApiMode={isApiMode}
+              />
             ) : (
               <>
                 {heartEffect ? <HeartEffect key={heartEffect.id} kind={heartEffect.kind} /> : null}

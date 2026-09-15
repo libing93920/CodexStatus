@@ -1293,11 +1293,17 @@ body {
 
 .capsule__minimal {
   position: absolute;
-  inset: 0;
+  inset: calc((100% - var(--capsule-minimal-size, 40px)) / 2);
   z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 50%;
+  clip-path: circle(50% at 50% 50%);
+  background: var(--capsule-minimal-bg, var(--capsule-bg));
+  box-shadow:
+    inset 0 0 0 0.5px var(--capsule-minimal-edge, var(--capsule-edge)),
+    inset 0 0 0 1px var(--capsule-minimal-edge-soft, var(--capsule-edge-soft));
   pointer-events: none;
   animation: capsule-minimal-in 220ms cubic-bezier(0.34, 1.4, 0.44, 1) backwards;
 }
@@ -1307,6 +1313,23 @@ body {
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
+}
+
+.capsule__minimal-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.capsule__minimal-ring-track {
+  opacity: 0.22;
+}
+
+.capsule__minimal-ring-progress {
+  opacity: 0.98;
 }
 
 .capsule__minimal-value {
@@ -1336,8 +1359,8 @@ body {
 .capsule--minimal.has-update::after,
 .capsule--minimal.has-announcement::after,
 .capsule--minimal.is-outdated::after {
-  top: 3px;
-  right: 3px;
+  top: 1px;
+  right: 1px;
   width: 6px;
   height: 6px;
 }

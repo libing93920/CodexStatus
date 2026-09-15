@@ -74,3 +74,28 @@
   filter: none;
   mix-blend-mode: normal;
 }
+
+/* 极简球使用无裁剪透明承载层,40px 球体负责主题背景与圆形裁剪;角标留在裁剪层外。 */
+[data-theme] .capsule--minimal {
+  background: transparent;
+  box-shadow: none;
+  clip-path: none !important;
+  overflow: visible;
+  border-radius: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+[data-theme] .capsule--minimal::before {
+  clip-path: none;
+}
+
+[data-theme] .capsule--minimal.is-manual-refreshing::before {
+  inset: calc((100% - var(--capsule-minimal-size, 40px)) / 2);
+  border-radius: 50%;
+  clip-path: circle(50% at 50% 50%);
+}
+
+[data-theme] .capsule--minimal:focus-visible {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--capsule-accent) 42%, transparent);
+}

@@ -1,0 +1,39 @@
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  background: #10151d;
+}
+
+.minimal-preview {
+  display: grid;
+  grid-template-columns: repeat(5, 72px);
+  gap: 28px 14px;
+  padding: 24px;
+}
+
+.minimal-preview__sample {
+  position: relative;
+  width: 72px;
+  height: 60px;
+}
+
+.minimal-preview__sample .capsule {
+  width: 40px;
+  height: 40px;
+}
+
+.minimal-preview__label {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  width: 72px;
+  color: #a7b6c8;
+  font:
+    10px 'Segoe UI',
+    'Microsoft YaHei UI',
+    sans-serif;
+  text-align: left;
+}
