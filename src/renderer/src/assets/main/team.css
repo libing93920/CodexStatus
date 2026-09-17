@@ -780,6 +780,14 @@
   flex-shrink: 0;
 }
 
+/* 日志入口顶到右侧按钮组左沿,复用 about-row 中间空隙 */
+.about-row__log-btn {
+  margin-left: auto;
+  padding: 6px 14px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
 .about-row__btn:disabled {
   opacity: 0.6;
   cursor: default;

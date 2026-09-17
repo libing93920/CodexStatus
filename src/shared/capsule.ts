@@ -399,6 +399,8 @@ export interface CodexStatusApi {
   ) => Promise<void>
   openIslandTask: (threadId: string) => Promise<boolean>
   dismissIslandTask: (threadId: string) => Promise<boolean>
+  /** 在资源管理器中打开诊断日志目录,便于用户直接拷贝日志文件 */
+  openDiagLogFolder: () => Promise<void>
 }
 
 /** 检查更新的结果;available=false 表示已是最新或不可用(如 dev 环境) */

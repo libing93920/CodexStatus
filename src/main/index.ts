@@ -13,6 +13,7 @@ import {
 } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { watchFile, unwatchFile } from 'node:fs'
+import { mkdir } from 'node:fs/promises'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
@@ -96,6 +97,7 @@ import {
   perfStart,
   recordPerf,
   resolveDiagEnabled,
+  resolveDiagLogDirectory,
   setDiagDirectory,
   startPerfReport
 } from './services/diag-log'
@@ -150,7 +152,8 @@ const CHANNELS = {
   islandInteractive: 'codex-status:island-interactive',
   islandDiagnostic: 'codex-status:island-diagnostic',
   islandOpenTask: 'codex-status:island-open-task',
-  islandDismissTask: 'codex-status:island-dismiss-task'
+  islandDismissTask: 'codex-status:island-dismiss-task',
+  openDiagLogFolder: 'codex-status:open-diag-log-folder'
 } as const
 
 const SINGLE_CAPSULE_WINDOW_WIDTH = 160
@@ -909,6 +912,17 @@ function registerIpcHandlers(): void {
     if (resolveRendererRole(event.sender.id) !== 'island' || typeof threadId !== 'string')
       return false
     return codexActivity?.dismissTask(threadId) ?? false
+  })
+
+  // 打开诊断日志目录:目录可能尚未创建(日志懒写入),先兜底建目录再定位,避免打开空路径
+  ipcMain.handle(CHANNELS.openDiagLogFolder, async () => {
+    const directory = resolveDiagLogDirectory()
+    try {
+      await mkdir(directory, { recursive: true })
+      await shell.openPath(directory)
+    } catch {
+      logDiag('open-diag-log-folder failed')
+    }
   })
 
   // 下载已检测到的新版本安装包;进度经 updateProgress 通道推送

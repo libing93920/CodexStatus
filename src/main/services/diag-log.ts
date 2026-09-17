@@ -42,6 +42,11 @@ function resolveDiagDirectory(): string {
   return join(base, 'codex-status', 'diag')
 }
 
+/** 供"打开日志文件夹"入口复用,避免目录拼装逻辑在别处硬编码漂移 */
+export function resolveDiagLogDirectory(): string {
+  return resolveDiagDirectory()
+}
+
 export function resolveDiagEnabled(): boolean {
   return process.env.CODEX_STATUS_DIAG !== '0'
 }

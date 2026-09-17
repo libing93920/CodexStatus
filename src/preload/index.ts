@@ -58,7 +58,8 @@ const CHANNELS = {
   islandInteractive: 'codex-status:island-interactive',
   islandDiagnostic: 'codex-status:island-diagnostic',
   islandOpenTask: 'codex-status:island-open-task',
-  islandDismissTask: 'codex-status:island-dismiss-task'
+  islandDismissTask: 'codex-status:island-dismiss-task',
+  openDiagLogFolder: 'codex-status:open-diag-log-folder'
 } as const
 
 const api: CodexStatusApi = {
@@ -118,7 +119,8 @@ const api: CodexStatusApi = {
   openIslandTask: (threadId: string) =>
     ipcRenderer.invoke(CHANNELS.islandOpenTask, threadId) as Promise<boolean>,
   dismissIslandTask: (threadId: string) =>
-    ipcRenderer.invoke(CHANNELS.islandDismissTask, threadId) as Promise<boolean>
+    ipcRenderer.invoke(CHANNELS.islandDismissTask, threadId) as Promise<boolean>,
+  openDiagLogFolder: () => ipcRenderer.invoke(CHANNELS.openDiagLogFolder) as Promise<void>
 }
 
 if (process.contextIsolated) {

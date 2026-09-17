@@ -2087,6 +2087,15 @@ function App(): React.JSX.Element {
                       <span className="about-row__label">{copy.currentVersion}</span>
                       <span className="about-row__version">v{appVersion || '--'}</span>
                     </div>
+                    <button
+                      className="ghost-button about-row__log-btn"
+                      onClick={() => {
+                        void window.codexStatus.openDiagLogFolder()
+                      }}
+                      type="button"
+                    >
+                      {copy.openLogFolder}
+                    </button>
                     {updateState === 'idle' && (
                       <button
                         className="ghost-button about-row__btn"
