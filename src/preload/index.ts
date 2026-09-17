@@ -56,6 +56,7 @@ const CHANNELS = {
   islandPresentation: 'codex-status:island-presentation',
   islandHidden: 'codex-status:island-hidden',
   islandInteractive: 'codex-status:island-interactive',
+  islandDiagnostic: 'codex-status:island-diagnostic',
   islandOpenTask: 'codex-status:island-open-task',
   islandDismissTask: 'codex-status:island-dismiss-task'
 } as const
@@ -111,8 +112,9 @@ const api: CodexStatusApi = {
   notifyIslandReady: () => ipcRenderer.invoke(CHANNELS.islandReady) as Promise<void>,
   notifyIslandHidden: (revision: number) =>
     ipcRenderer.invoke(CHANNELS.islandHidden, revision) as Promise<void>,
-  setIslandInteractive: (interactive: boolean) =>
-    ipcRenderer.invoke(CHANNELS.islandInteractive, interactive) as Promise<void>,
+  logIslandDiagnostic: (batch) => ipcRenderer.send(CHANNELS.islandDiagnostic, batch),
+  setIslandInteractive: (interactive, diagnostic) =>
+    ipcRenderer.invoke(CHANNELS.islandInteractive, interactive, diagnostic) as Promise<void>,
   openIslandTask: (threadId: string) =>
     ipcRenderer.invoke(CHANNELS.islandOpenTask, threadId) as Promise<boolean>,
   dismissIslandTask: (threadId: string) =>

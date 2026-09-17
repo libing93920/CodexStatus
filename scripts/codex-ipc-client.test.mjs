@@ -58,6 +58,27 @@ test('数字下标补丁路径可正常应用', () => {
   assert.equal(result.turnHistory.history.items[1].status, 'failed')
 })
 
+test('数组补丁区分追加与替换/删除边界', () => {
+  assert.deepEqual(
+    applyStatePatches({ items: ['a'] }, [{ op: 'add', path: ['items', 1], value: 'b' }]),
+    { items: ['a', 'b'] }
+  )
+  assert.deepEqual(
+    applyStatePatches({ items: ['a'] }, [{ op: 'add', path: ['items', '-'], value: 'b' }]),
+    { items: ['a', 'b'] }
+  )
+  for (const op of ['replace', 'remove']) {
+    assert.throws(
+      () => applyStatePatches({ items: ['a'] }, [{ op, path: ['items', 1], value: 'b' }]),
+      /Invalid array index/
+    )
+    assert.throws(
+      () => applyStatePatches({ items: ['a'] }, [{ op, path: ['items', '-'], value: 'b' }]),
+      /Invalid array index/
+    )
+  }
+})
+
 test('快照只投影任务必要字段并以审批优先', () => {
   const state = {
     title: '修复状态',

@@ -5,6 +5,7 @@ import {
   type IslandPreferences,
   type IslandSnapshot
 } from './island'
+import type { IslandDiagBatch } from './island-diagnostics'
 
 export type PercentageMode = 'remaining' | 'used'
 export type RefreshMode = 'auto' | 'manual'
@@ -85,21 +86,6 @@ export interface UsageSnapshot {
     expiresAt?: string
     /** 可用重置卡总数 */
     availableCount: number
-  }
-  /** Codex 雷达:IQ>=90 里性价比最高的模型 */
-  bestModelPick?: {
-    /** 短标签,例如 "Terra xhigh" */
-    shortLabel: string
-    /** 完整标签 */
-    label: string
-    /** IQ 分数 */
-    score: number
-    /** 每题平均美元成本 */
-    averageCostUsd: number
-    /** 每题平均耗时分钟 */
-    averageTaskMinutes: number
-    /** 状态色 */
-    status: 'green' | 'yellow' | 'red'
   }
   /** 团队看板:同组成员的额度剩余状态;本期为主进程返回的 mock 数据,后续接 LAN service */
   teamPeers?: TeamPeer[]
@@ -258,10 +244,6 @@ export interface SpendUsage {
   total: number
 }
 
-export const DEFAULT_IQ_THRESHOLD = 90
-export const MIN_IQ_THRESHOLD = 60
-export const MAX_IQ_THRESHOLD = 115
-
 export interface AppSettings {
   refreshMode: RefreshMode
   refreshIntervalSeconds: number
@@ -270,7 +252,6 @@ export interface AppSettings {
   /** 当前监控的 Agent 工具(Codex/Claude/OpenCode),决定扫描数据源 */
   agentId: AgentId
   launchAtLogin: boolean
-  iqThreshold: number
   /** 团队昵称(空时 UI 显示"我");仅作展示,不涉及凭据 */
   teamNickname?: string
   /** 团队组口令(同口令的 peer 才互见);空表示未加入团队 */
@@ -323,6 +304,7 @@ export interface BootstrapPayload {
   /** 当前运行期最新公告;进程退出后自然清空 */
   announcement: AnnouncementState | null
   island: IslandSnapshot
+  islandDiagnostics: boolean
 }
 
 export interface PreferencesPayload {
@@ -410,7 +392,11 @@ export interface CodexStatusApi {
   onIslandPresentation: (listener: (presentation: IslandPresentation) => void) => () => void
   notifyIslandReady: () => Promise<void>
   notifyIslandHidden: (revision: number) => Promise<void>
-  setIslandInteractive: (interactive: boolean) => Promise<void>
+  logIslandDiagnostic: (batch: IslandDiagBatch) => void
+  setIslandInteractive: (
+    interactive: boolean,
+    diagnostic?: { instance: string; request: number }
+  ) => Promise<void>
   openIslandTask: (threadId: string) => Promise<boolean>
   dismissIslandTask: (threadId: string) => Promise<boolean>
 }
@@ -468,7 +454,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   locale: 'zh-CN',
   agentId: 'codex',
   launchAtLogin: false,
-  iqThreshold: DEFAULT_IQ_THRESHOLD,
   theme: 'midnight',
   capsuleMinimalMode: true,
   autoKeep5hWindow: true,
@@ -526,7 +511,6 @@ export function normalizeSettings(input: Partial<AppSettings> | undefined): AppS
       typeof input?.launchAtLogin === 'boolean'
         ? input.launchAtLogin
         : DEFAULT_SETTINGS.launchAtLogin,
-    iqThreshold: normalizeIqThreshold(input?.iqThreshold),
     teamNickname: normalizeOptionalString(input?.teamNickname),
     teamGroup: normalizeOptionalString(input?.teamGroup),
     theme: isThemeId(input?.theme) ? input.theme : DEFAULT_SETTINGS.theme,
@@ -581,14 +565,6 @@ function normalizeRefreshInterval(value: number | undefined): number {
 
   const normalized = Math.round(value as number)
   return Math.min(MAX_REFRESH_INTERVAL_SECONDS, Math.max(MIN_REFRESH_INTERVAL_SECONDS, normalized))
-}
-
-function normalizeIqThreshold(value: number | undefined): number {
-  if (!Number.isFinite(value)) {
-    return DEFAULT_IQ_THRESHOLD
-  }
-  const n = Math.round(value as number)
-  return Math.min(MAX_IQ_THRESHOLD, Math.max(MIN_IQ_THRESHOLD, n))
 }
 
 function isRefreshMode(value: unknown): value is RefreshMode {

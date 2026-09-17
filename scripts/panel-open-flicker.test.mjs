@@ -374,6 +374,15 @@ test('工具设置包含监控工具、5h 窗口和灵动岛', () => {
   assert.match(section, /className="setting-row tool-setting-row"/)
 })
 
+test('灵动岛设置不受额度监控工具切换影响', () => {
+  const sectionStart = appSource.indexOf('{copy.groupAgent}')
+  const sectionEnd = appSource.indexOf('{copy.groupRefresh}', sectionStart)
+  const section = appSource.slice(sectionStart, sectionEnd)
+
+  assert.match(section, /\n\s*<IslandSettingsCard/)
+  assert.doesNotMatch(section, /\{isCodex \? \(\s*<IslandSettingsCard/)
+})
+
 test('Window Keeper 只在 Codex ChatGPT 且存在 5h 窗口时显示', () => {
   assert.match(
     appSource,

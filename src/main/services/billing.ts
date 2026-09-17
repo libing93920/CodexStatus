@@ -3,6 +3,7 @@
 import { net } from 'electron'
 import type { SpendDay, SpendUsage, UsageWindow } from '../../shared/capsule'
 import { readOfficialCodexCredentials } from './quota'
+import { formatDiagError, logDiag } from './diag-log'
 
 const BILLING_URL = 'https://api.openai.com/v1/dashboard/billing/usage'
 const BILLING_TIMEOUT_MS = 10_000
@@ -82,7 +83,7 @@ async function requestDaySpend(apiKey: string, date: string): Promise<number | u
       )
     ])) as Response
     if (!response.ok) {
-      console.warn(`[codex-status] billing ${date} HTTP ${response.status}`)
+      logDiag(`billing failed date=${date} reason=http status=${response.status}`)
       return undefined
     }
     const body = (await response.json()) as Record<string, unknown>
@@ -93,10 +94,7 @@ async function requestDaySpend(apiKey: string, date: string): Promise<number | u
     }
     return Math.round((totalUsage / 100) * 10000) / 10000
   } catch (error) {
-    console.warn(
-      `[codex-status] billing ${date} failed:`,
-      error instanceof Error ? error.message : String(error)
-    )
+    logDiag(`billing failed date=${date} ${formatDiagError(error)}`)
     return undefined
   }
 }

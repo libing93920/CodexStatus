@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { monitorEventLoopDelay } from 'node:perf_hooks'
 
 /**
- * 诊断日志:性能计数 + 关键路径耗时,写入 <userData>/diag/diag.log。
+ * 诊断日志:性能计数 + 关键路径耗时 + 主进程诊断事件,写入 <userData>/diag/diag.log。
  * 默认开启(用户测试包),滚动上限 4MB;后续版本如需移除,只删本文件与各处 recordPerf 调用即可,
  * 其他业务代码零依赖。开关:环境变量 CODEX_STATUS_DIAG=0 关闭。
  *
@@ -15,6 +15,7 @@ import { monitorEventLoopDelay } from 'node:perf_hooks'
 const DIAG_LOG_MAX_BYTES = 4 * 1024 * 1024
 const PERF_REPORT_INTERVAL_MS = 10_000
 const SLOW_THRESHOLD_MS = 200
+const MAX_ERROR_MESSAGE_LENGTH = 500
 
 let logDirectory: string | undefined
 let logFilePath: string | undefined
@@ -41,7 +42,7 @@ function resolveDiagDirectory(): string {
   return join(base, 'codex-status', 'diag')
 }
 
-function resolveDiagEnabled(): boolean {
+export function resolveDiagEnabled(): boolean {
   return process.env.CODEX_STATUS_DIAG !== '0'
 }
 
@@ -71,9 +72,9 @@ async function rotateIfNeeded(target: string): Promise<void> {
   }
 }
 
-function appendLine(line: string): void {
+function appendLine(line: string): Promise<void> {
   const target = ensureLogPath()
-  if (!target) return
+  if (!target) return Promise.resolve()
   // 串行化 mkdir/轮转/append,避免并发写入交错和同步文件操作阻塞主进程
   writeChain = writeChain.then(async () => {
     try {
@@ -84,11 +85,29 @@ function appendLine(line: string): void {
       // 诊断日志失败不能影响业务,也不能中断后续写入
     }
   })
+  return writeChain
 }
 
 /** 记录一条诊断日志(自动带时间戳) */
 export function logDiag(message: string): void {
-  appendLine(`${new Date().toISOString()} ${message}\n`)
+  void appendLine(`${new Date().toISOString()} ${message}\n`)
+}
+
+/** 诊断批次用完成信号限制待写数量，输入处理不等待磁盘。 */
+export function writeDiagBatch(message: string): Promise<void> {
+  return appendLine(`${new Date().toISOString()} ${message}\n`)
+}
+
+/** 格式化异常,避免换行或过长内容破坏一行一事件的诊断日志。 */
+export function formatDiagError(error: unknown): string {
+  const errorName = error instanceof Error ? error.name : typeof error
+  const message = error instanceof Error ? error.message : String(error)
+  const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
+  return (
+    `errorType=${JSON.stringify(errorName)}` +
+    `${code ? ` errorCode=${JSON.stringify(code)}` : ''} ` +
+    `error=${JSON.stringify(message.replace(/[\r\n]+/g, ' ').slice(0, MAX_ERROR_MESSAGE_LENGTH))}`
+  )
 }
 
 /** 计数一次事件;sample 为该次耗时(毫秒)时同时统计 total/max */

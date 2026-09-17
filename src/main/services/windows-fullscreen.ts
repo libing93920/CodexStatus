@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import readline from 'node:readline'
-import { recordPerf } from './diag-log.ts'
+import { formatDiagError, logDiag, recordPerf } from './diag-log.ts'
 
 export interface NativeBounds {
   x: number
@@ -49,9 +49,14 @@ export class WindowsFullscreenMonitor {
     })
     child.once('close', (code) => {
       if (this.child === child) this.child = undefined
-      if (code && stderr.trim()) this.onError?.(stderr.trim().slice(-500))
+      if (code && stderr.trim()) {
+        const errorMessage = stderr.trim().slice(-500)
+        logDiag(`fullscreen monitor failed code=${code} error=${JSON.stringify(errorMessage)}`)
+        this.onError?.(errorMessage)
+      }
     })
-    child.once('error', () => {
+    child.once('error', (error) => {
+      logDiag(`fullscreen monitor spawn failed ${formatDiagError(error)}`)
       if (this.child === child) this.child = undefined
     })
   }

@@ -1,12 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import {
-  DEFAULT_IQ_THRESHOLD,
   DEFAULT_SETTINGS,
   DEFAULT_WINDOW_PREFERENCES,
   CAPSULE_MINIMAL_TRIGGER_MS,
   CAPSULE_MINIMAL_WINDOW_SIZE,
-  MAX_IQ_THRESHOLD,
-  MIN_IQ_THRESHOLD,
   REFRESH_INTERVAL_OPTIONS,
   MAX_REFRESH_INTERVAL_SECONDS,
   MIN_REFRESH_INTERVAL_SECONDS,
@@ -59,12 +56,10 @@ import {
   formatCapsuleTokens,
   formatCountdownCapsule,
   formatCountdownShort,
-  formatModelPick,
   formatRelativeDate,
   isFixedRefreshInterval,
   localDayKey,
-  normalizeCustomRefreshInterval,
-  resolveModelColor
+  normalizeCustomRefreshInterval
 } from './formatters'
 import { clampProgressPercent, resolveMinimalMetricColor } from './minimal-quota'
 
@@ -111,9 +106,6 @@ function App(): React.JSX.Element {
   const [tabMotionView, setTabMotionView] = useState<PanelView | null>(null)
   const [customRefreshInput, setCustomRefreshInput] = useState(
     String(DEFAULT_SETTINGS.refreshIntervalSeconds)
-  )
-  const [iqThresholdInput, setIqThresholdInput] = useState(
-    String(DEFAULT_SETTINGS.iqThreshold ?? DEFAULT_IQ_THRESHOLD)
   )
   const [teamNicknameInput, setTeamNicknameInput] = useState(DEFAULT_SETTINGS.teamNickname ?? '')
   const [teamGroupInput, setTeamGroupInput] = useState(DEFAULT_SETTINGS.teamGroup ?? '')
@@ -213,7 +205,6 @@ function App(): React.JSX.Element {
           setFocusTargetPending(payload.focusTarget)
         }
         setCustomRefreshInput(String(payload.settings.refreshIntervalSeconds))
-        setIqThresholdInput(String(payload.settings.iqThreshold))
         setTeamNicknameInput(payload.settings.teamNickname ?? '')
         setTeamGroupInput(payload.settings.teamGroup ?? '')
         setAppVersion(payload.version)
@@ -239,7 +230,6 @@ function App(): React.JSX.Element {
       setSettings(payload.settings)
       setWindowPreferences(payload.window)
       setCustomRefreshInput(String(payload.settings.refreshIntervalSeconds))
-      setIqThresholdInput(String(payload.settings.iqThreshold))
       setTeamNicknameInput(payload.settings.teamNickname ?? '')
       setTeamGroupInput(payload.settings.teamGroup ?? '')
     })
@@ -801,29 +791,14 @@ function App(): React.JSX.Element {
           }
         ]
       : []),
-    // 雷达是 Codex 专有功能(推荐模型),非 Codex 工具不展示
-    ...(isCodex
-      ? [
-          {
-            icon: <SparkleIcon />,
-            iconTone: 'var(--panel-icon-violet)',
-            label: settings.locale === 'zh-CN' ? '雷达推荐模型' : 'Top model',
-            labelHref: 'https://codex-reset-radar.pages.dev/',
-            value: snapshot.bestModelPick
-              ? formatModelPick(snapshot.bestModelPick.shortLabel)
-              : undefined,
-            valueColor: snapshot.bestModelPick
-              ? resolveModelColor(snapshot.bestModelPick.label)
-              : undefined,
-            hint: snapshot.bestModelPick
-              ? settings.locale === 'zh-CN'
-                ? `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/题`
-                : `IQ ${snapshot.bestModelPick.score.toFixed(1)} · $${snapshot.bestModelPick.averageCostUsd.toFixed(2)}/task`
-              : undefined
-          }
-        ]
-      : []),
-    // 额度特赦重置:静态外链入口,跳转 codex-resets.com 查看官方重置记录(订阅专有,API Key 模式隐藏)
+    // AI 雷达:静态外链入口,跳转 codex-reset-radar 查看模型雷达榜
+    {
+      icon: <SparkleIcon />,
+      iconTone: 'var(--panel-icon-violet)',
+      label: settings.locale === 'zh-CN' ? 'AI 雷达' : 'AI Radar',
+      labelHref: 'https://codex-reset-radar.pages.dev/'
+    },
+    // 额度特赦重置:静态外链入口,跳转 codexrunway.com 查看官方重置记录(订阅专有,API Key 模式隐藏)
     ...(isApiMode
       ? []
       : [
@@ -831,7 +806,7 @@ function App(): React.JSX.Element {
             icon: <ResetIcon />,
             iconTone: 'var(--panel-icon-green)',
             label: settings.locale === 'zh-CN' ? '额度重置监测' : 'Usage reset monitor',
-            labelHref: 'https://codex-resets.com/'
+            labelHref: 'https://www.codexrunway.com/zh.html'
           }
         ])
   ]
@@ -1369,20 +1344,6 @@ function App(): React.JSX.Element {
     }
   }
 
-  function commitIqThreshold(): void {
-    const parsed = Number.parseInt(iqThresholdInput, 10)
-    if (!Number.isFinite(parsed)) {
-      setIqThresholdInput(String(settings.iqThreshold))
-      return
-    }
-
-    const normalized = Math.min(MAX_IQ_THRESHOLD, Math.max(MIN_IQ_THRESHOLD, Math.round(parsed)))
-    setIqThresholdInput(String(normalized))
-    if (normalized !== settings.iqThreshold) {
-      void handleSettingsPatch({ iqThreshold: normalized })
-    }
-  }
-
   // 团队昵称:trim 后提交;空串保存为 undefined(主进程 normalizeSettings 兜底)
   function commitTeamNickname(): void {
     const trimmed = teamNicknameInput.trim()
@@ -1534,7 +1495,7 @@ function App(): React.JSX.Element {
                   >
                     {isApiMode ? (
                       <>
-                        {/* API 模式横版:今日 token → 缓存命中率(含进度) → 推荐模型 */}
+                        {/* API 模式横版:今日 token → 缓存命中率(含进度) */}
                         <ApiCapsuleStat
                           label={copy.usageToday}
                           value={apiTokenText}
@@ -2030,34 +1991,6 @@ function App(): React.JSX.Element {
                         ]}
                         value={settings.percentageMode}
                       />
-                    </SettingField>
-                  </div>
-                ) : null}
-
-                {isCodex ? (
-                  <div className="settings-section">
-                    <p className="settings-section__title">{copy.groupRecommend}</p>
-                    <SettingField label={copy.iqThreshold} hint={copy.iqThresholdHint}>
-                      <label className="inline-input">
-                        <span>{copy.iqThreshold}</span>
-                        <input
-                          max={MAX_IQ_THRESHOLD}
-                          min={MIN_IQ_THRESHOLD}
-                          onBlur={commitIqThreshold}
-                          onChange={(event) => {
-                            setIqThresholdInput(event.target.value)
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') {
-                              event.currentTarget.blur()
-                            }
-                          }}
-                          step={1}
-                          type="number"
-                          value={iqThresholdInput}
-                        />
-                        <em>IQ</em>
-                      </label>
                     </SettingField>
                   </div>
                 ) : null}

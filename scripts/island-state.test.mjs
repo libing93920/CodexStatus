@@ -1,5 +1,8 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
 import assert from 'node:assert/strict'
+import { promises as fs } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import test from 'node:test'
 import {
   IslandState,
@@ -7,9 +10,14 @@ import {
   normalizeIslandPreferences,
   getDisplayStatus,
   resolveIslandWindowBounds,
-  shouldPresentAlert
+  shouldPresentAlert,
+  shouldNavigateIslandTask
 } from '../src/shared/island.ts'
-import { mapCodexHookEvent, parseCodexHookPayload } from '../src/main/services/codex-hook-events.ts'
+import {
+  mapCodexHookEvent,
+  parseCodexHookPayload,
+  readCodexTranscriptSource
+} from '../src/main/services/codex-hook-events.ts'
 import { CodexActivityService } from '../src/main/services/codex-activity.ts'
 
 const NOW = 1_000
@@ -380,6 +388,137 @@ test('提醒暂停后只等待剩余时长', () => {
   assert.equal(elapsed, 0)
   clock.advance(1)
   assert.equal(elapsed, 1)
+})
+
+test('CLI 任务不订阅或合并私有 IPC，未知来源仍跟踪', () => {
+  let latest
+  const service = activityService((snapshot) => {
+    latest = snapshot
+  })
+  const followed = []
+  service.ipc = { followThread: (threadId) => followed.push(threadId) }
+  service.threadSources?.set('local\u0000thread-1', 'cli')
+  service.handleHookPayload?.(hookPayload('UserPromptSubmit'), NOW)
+  assert.deepEqual(followed, [])
+
+  service.updateIpcTasks?.([
+    {
+      ...authoritativeTask('failed', 'turn-1'),
+      source: 'cli',
+      requests: [{ id: 'input-1', kind: 'input', summary: '不要合并', createdAt: NOW }]
+    }
+  ])
+  assert.equal(latest.tasks[0].phase, 'running')
+  assert.equal(getDisplayStatus(latest.tasks[0]), 'running')
+
+  service.threadSources?.set('local\u0000cli-only', 'cli')
+  service.updateIpcTasks?.([
+    { ...authoritativeTask('running', 'turn-1'), threadId: 'cli-only', source: 'cli' }
+  ])
+  assert.equal(latest.tasks.some((task) => task.threadId === 'cli-only'), false)
+
+  service.handleHookPayload?.(
+    { ...hookPayload('UserPromptSubmit'), session_id: 'unknown-thread' },
+    NOW + 1
+  )
+  assert.deepEqual(followed, ['unknown-thread'])
+})
+
+test('目录中的 CLI 任务不进入私有 IPC 初始订阅', async () => {
+  const source = await fs.readFile(new URL('../src/main/services/codex-activity.ts', import.meta.url), 'utf8')
+  const start = source.indexOf('async start()')
+  const end = source.indexOf('\n  async stop()', start)
+  assert.ok(start >= 0)
+  assert.ok(end > start)
+  assert.match(
+    source.slice(start, end),
+    /for \(const entry of catalog\) \{\s*this\.threadSources\.set\(createTaskKey\('local', entry\.id\), entry\.source\)\s*if \(entry\.source !== 'cli'\) threadIds\.push\(entry\.id\)/
+  )
+})
+
+test('新 Hook 线程从 transcript 首行识别 CLI 来源', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-status-transcript-'))
+  const transcriptPath = path.join(directory, 'session.jsonl')
+  await fs.writeFile(
+    transcriptPath,
+    `${JSON.stringify({ type: 'session_meta', payload: { source: 'cli' } })}\n` +
+      `${JSON.stringify({ type: 'response', payload: { secret: 'must not read' } })}\n`
+  )
+  context.after(() => fs.rm(directory, { recursive: true, force: true }))
+
+  const service = activityService(() => undefined)
+  const payload = parseCodexHookPayload({
+    ...hookPayload('UserPromptSubmit'),
+    transcript_path: transcriptPath
+  })
+  assert.equal(payload?.transcript_path, transcriptPath)
+  service.handleHookPayload?.(payload, NOW)
+
+  assert.equal(service.getSnapshot().tasks[0].source, 'cli')
+})
+
+test('可解析但没有来源的 transcript 稳定缓存为 unknown', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-status-transcript-unknown-'))
+  const transcriptPath = path.join(directory, 'session.jsonl')
+  await fs.writeFile(transcriptPath, `${JSON.stringify({ type: 'response', payload: {} })}\n`)
+  context.after(() => fs.rm(directory, { recursive: true, force: true }))
+
+  assert.equal(readCodexTranscriptSource(transcriptPath), 'unknown')
+  const service = activityService(() => undefined)
+  const payload = {
+    ...hookPayload('SessionStart'),
+    session_id: 'unknown-source',
+    transcript_path: transcriptPath
+  }
+  assert.equal(service.resolveHookSource?.(payload), 'unknown')
+  await fs.unlink(transcriptPath)
+  assert.equal(service.resolveHookSource?.(payload), 'unknown')
+})
+
+test('Hook 来源临时读盘失败在冷却后重试并恢复', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-status-transcript-retry-'))
+  const transcriptPath = path.join(directory, 'session.jsonl')
+  await fs.writeFile(transcriptPath, '{')
+  context.after(() => fs.rm(directory, { recursive: true, force: true }))
+
+  const service = activityService(() => undefined)
+  const payload = {
+    ...hookPayload('SessionStart'),
+    session_id: 'retry-source',
+    transcript_path: transcriptPath
+  }
+  const key = 'local\u0000retry-source'
+  assert.equal(service.resolveHookSource?.(payload), undefined)
+  assert.ok(service.hookSourceRetryAt?.get(key) > Date.now())
+
+  await fs.writeFile(
+    transcriptPath,
+    `${JSON.stringify({ type: 'session_meta', payload: { source: 'cli' } })}\n`
+  )
+  service.hookSourceRetryAt?.set(key, Date.now() + 60_000)
+  assert.equal(service.resolveHookSource?.(payload), undefined)
+  service.hookSourceRetryAt?.set(key, 0)
+  assert.equal(service.resolveHookSource?.(payload), 'cli')
+  assert.equal(service.hookSourceRetryAt?.has(key), false)
+})
+
+test('灵动岛点击按来源分流，CLI 不导航且未知来源仍导航', () => {
+  assert.equal(shouldNavigateIslandTask('cli'), false)
+  assert.equal(shouldNavigateIslandTask('vscode'), true)
+  assert.equal(shouldNavigateIslandTask('unknown'), true)
+})
+
+test('灵动岛点击在导航分支之后统一记录已查看', async () => {
+  const source = await fs.readFile(new URL('../src/main/index.ts', import.meta.url), 'utf8')
+  const start = source.indexOf('ipcMain.handle(CHANNELS.islandOpenTask')
+  const end = source.indexOf('ipcMain.handle(CHANNELS.islandDismissTask', start)
+  assert.ok(start >= 0)
+  assert.ok(end > start)
+  const handler = source.slice(start, end)
+  assert.match(
+    handler,
+    /if \(shouldNavigateIslandTask\(task\.source\)\) \{\s*await shell\.openExternal\(`codex:\/\/threads\/\$\{encodeURIComponent\(threadId\)\}`\)\s*\}\s*codexActivity\?\.markViewed\(/
+  )
 })
 
 test('Hook 只投影必要字段，权限请求不保留工具输入', () => {

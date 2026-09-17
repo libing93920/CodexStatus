@@ -59,7 +59,6 @@ import {
   parseAnnouncementText
 } from '../shared/announcement'
 import { collectUsageSnapshot, invalidateQuotaCaches, resolveCodexAuthPath } from './services/quota'
-import { refreshRadarNow, startRadarTimer, stopRadarTimer } from './services/radar'
 import {
   getCachedAgentTokenTotals,
   getCachedTokenTotals,
@@ -85,18 +84,26 @@ import {
   createEmptyIslandSnapshot,
   getDisplayStatus,
   ISLAND_ALERT_DURATION_MS,
+  shouldNavigateIslandTask,
   type IslandPresentation,
   type IslandSnapshot
 } from '../shared/island'
 import { CodexActivityService } from './services/codex-activity'
 import {
+  formatDiagError,
   logDiag,
   perfEnd,
   perfStart,
   recordPerf,
+  resolveDiagEnabled,
   setDiagDirectory,
   startPerfReport
 } from './services/diag-log'
+import {
+  islandDiagnostics,
+  islandInteractiveDiagnostic,
+  receiveIslandDiagnostics
+} from './services/island-diagnostics'
 import {
   getDefaultCodexHooksPath,
   installCodexHooks,
@@ -141,6 +148,7 @@ const CHANNELS = {
   islandPresentation: 'codex-status:island-presentation',
   islandHidden: 'codex-status:island-hidden',
   islandInteractive: 'codex-status:island-interactive',
+  islandDiagnostic: 'codex-status:island-diagnostic',
   islandOpenTask: 'codex-status:island-open-task',
   islandDismissTask: 'codex-status:island-dismiss-task'
 } as const
@@ -174,6 +182,7 @@ let islandRendererReady = false
 let islandPresentationVisible = false
 let fullscreenState: FullscreenState | undefined
 let fullscreenAlertUntil = 0
+let islandFullscreenSuppressed = false
 let fullscreenAlertTimer: NodeJS.Timeout | undefined
 let lastIslandAttentionKey: string | undefined
 const lanService = new LanService()
@@ -356,11 +365,13 @@ function ensureIslandWindow(): BrowserWindow {
     islandWindow = null
     islandRendererReady = false
     islandPresentationVisible = false
+    islandDiagnostics.record('window', { reason: 'closed' })
   })
   window.webContents.on('render-process-gone', () => {
     islandRendererReady = false
     islandPresentationVisible = false
     window.setIgnoreMouseEvents(true)
+    islandDiagnostics.record('native', { reason: 'renderer-gone', ignore: true, forward: false })
     window.hide()
     logDiag('island renderer gone: forward released and hidden')
   })
@@ -432,6 +443,7 @@ if (hasSingleInstanceLock) {
     registerIpcHandlers()
     // 诊断日志:周期性汇总性能计数,写入 userData/diag/diag.log(测试版保留)
     setDiagDirectory(app.getPath('userData'))
+    islandDiagnostics.setEnabled(resolveDiagEnabled())
     startPerfReport()
     logDiag(`app ready version=${app.getVersion()} platform=${process.platform}`)
     // autoUpdater 初始化并注册进度转发:把更新事件推给渲染层
@@ -464,8 +476,6 @@ if (hasSingleInstanceLock) {
     createTray()
     watchCodexAuthFile()
     syncLanService()
-    // radar 推荐模型走独立定时(10 分钟),不再跟随额度刷新;拉到后注入 snapshot 并广播
-    syncRadarTimer()
     void refreshStatus()
 
     // models.dev 价格后台同步:注入花费计算,拉取失败自动回落内置价格表
@@ -523,7 +533,6 @@ app.on('before-quit', () => {
   isQuitting = true
   clearRefreshTimer()
   clearCodexAuthWatcher()
-  stopRadarTimer()
   windowKeeper?.stop()
   void codexActivity?.stop()
   fullscreenMonitor?.stop()
@@ -545,6 +554,7 @@ function registerIpcHandlers(): void {
       focusTarget: role === 'panel' ? consumeFocusTarget() : undefined,
       announcement: currentAnnouncement,
       island: createIslandRendererSnapshot(),
+      islandDiagnostics: role === 'island' && resolveDiagEnabled(),
       version: app.getVersion()
     }
   })
@@ -559,7 +569,6 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(CHANNELS.updateSettings, async (_, patch: Partial<AppSettings>) => {
-    const previousIqThreshold = persistedState.settings.iqThreshold
     const previousTeamGroup = persistedState.settings.teamGroup
     const previousTeamNickname = persistedState.settings.teamNickname
     const previousAgentId = persistedState.settings.agentId
@@ -594,21 +603,13 @@ function registerIpcHandlers(): void {
       syncLanService()
     }
 
-    const iqThresholdChanged =
-      typeof patch.iqThreshold === 'number' && patch.iqThreshold !== previousIqThreshold
     const agentIdChanged = patch.agentId !== undefined && patch.agentId !== previousAgentId
 
     if (agentIdChanged) {
-      // 切换工具:清用量缓存,radar 仅 Codex 启动,强制全量刷新
+      // 切换工具:清用量缓存,强制全量刷新
       windowKeeper?.updateSnapshot(createApiModeSnapshot())
       invalidateUsageCache()
       invalidateQuotaCaches()
-      syncRadarTimer()
-      void refreshStatus({ forceCredentialCheck: true })
-    } else if (iqThresholdChanged) {
-      // IQ 阈值变更:重置卡缓存重拉,radar 立即按新阈值重拉(独立定时,不跟随额度刷新)
-      invalidateQuotaCaches()
-      void refreshRadarNow(persistedState.settings.iqThreshold)
       void refreshStatus({ forceCredentialCheck: true })
     } else if (
       patch.island === undefined &&
@@ -819,25 +820,74 @@ function registerIpcHandlers(): void {
   ipcMain.handle(CHANNELS.islandReady, async (event) => {
     if (event.sender.id !== islandWindow?.webContents.id) return
     islandRendererReady = true
-    setIslandPresentation(shouldShowIsland(), true)
+    if (resolveDiagEnabled()) {
+      logDiag(
+        `island environment ${JSON.stringify({
+          protocol: 1,
+          version: app.getVersion(),
+          platform: process.platform,
+          electron: process.versions.electron,
+          webContents: event.sender.id,
+          bounds: islandWindow.getBounds(),
+          scaleFactor: screen.getPrimaryDisplay().scaleFactor
+        })}`
+      )
+    }
+    setIslandPresentation(shouldShowIsland(), true, 'renderer-ready')
+  })
+
+  ipcMain.on(CHANNELS.islandDiagnostic, (event, payload: unknown) => {
+    receiveIslandDiagnostics(event.sender.id, islandWindow?.webContents.id, payload)
   })
 
   ipcMain.handle(CHANNELS.islandHidden, async (event, revision: unknown) => {
     if (event.sender.id !== islandWindow?.webContents.id || typeof revision !== 'number') return
-    if (revision !== islandPresentationRevision || islandPresentationVisible) return
+    const accepted = revision === islandPresentationRevision && !islandPresentationVisible
+    islandDiagnostics.record('hidden-ack', {
+      revision,
+      accepted,
+      reason: accepted ? 'accepted' : 'stale-or-visible',
+      visible: islandPresentationVisible
+    })
+    if (!accepted) return
     islandWindow.webContents.setBackgroundThrottling(true)
     // 隐藏后解除鼠标转发:Windows 上 forward:true 挂全局 WH_MOUSE_LL 钩子,
     // 不释放会在主进程忙碌时放大成全系统输入延迟(灵动岛隐藏期间本就无交互)
     islandWindow.setIgnoreMouseEvents(true)
+    islandDiagnostics.record('native', {
+      reason: 'hidden-ack',
+      revision,
+      ignore: true,
+      forward: false
+    })
     islandWindow.hide()
     logDiag(`island hidden revision=${revision} forward released`)
   })
 
-  ipcMain.handle(CHANNELS.islandInteractive, async (event, interactive: unknown) => {
-    if (event.sender.id !== islandWindow?.webContents.id || typeof interactive !== 'boolean') return
-    if (!islandPresentationVisible) return
-    islandWindow.setIgnoreMouseEvents(!interactive, { forward: true })
-  })
+  ipcMain.handle(
+    CHANNELS.islandInteractive,
+    async (event, interactive: unknown, diagnostic: unknown) => {
+      if (event.sender.id !== islandWindow?.webContents.id || typeof interactive !== 'boolean')
+        return
+      const fields = islandInteractiveDiagnostic(diagnostic)
+      islandDiagnostics.record('interactive', {
+        ...fields,
+        interactive,
+        reason: 'received',
+        accepted: islandPresentationVisible,
+        revision: islandPresentationRevision
+      })
+      if (!islandPresentationVisible) return
+      islandWindow.setIgnoreMouseEvents(!interactive, { forward: true })
+      islandDiagnostics.record('native', {
+        ...fields,
+        reason: 'interactive-applied',
+        ignore: !interactive,
+        forward: true,
+        revision: islandPresentationRevision
+      })
+    }
+  )
 
   ipcMain.handle(CHANNELS.islandOpenTask, async (event, threadId: unknown) => {
     if (resolveRendererRole(event.sender.id) !== 'island' || typeof threadId !== 'string')
@@ -845,7 +895,9 @@ function registerIpcHandlers(): void {
     const task = currentIslandSnapshot.tasks.find((candidate) => candidate.threadId === threadId)
     if (!task) return false
     try {
-      await shell.openExternal(`codex://threads/${encodeURIComponent(threadId)}`)
+      if (shouldNavigateIslandTask(task.source)) {
+        await shell.openExternal(`codex://threads/${encodeURIComponent(threadId)}`)
+      }
       codexActivity?.markViewed(task.requests[0]?.id ?? task.latestEventId)
       return true
     } catch {
@@ -1061,7 +1113,6 @@ function prepareToQuit(): void {
   islandPresentationVisible = false
   clearRefreshTimer()
   clearCodexAuthWatcher()
-  stopRadarTimer()
   windowKeeper?.stop()
   fullscreenMonitor?.stop()
   void codexActivity?.stop()
@@ -1176,7 +1227,6 @@ function getLanSnapshot(): PeerSnapshot {
     authMode: currentSnapshot.authMode,
     remainingPercent: getSelfRemaining(),
     weeklyResetsAt: long?.resetsAt,
-    bestModelLabel: currentSnapshot.bestModelPick?.shortLabel,
     resetCreditCount: currentSnapshot.resetCredit?.availableCount,
     shortWindow: short
       ? { label: short.label, remainingPercent: short.remainingPercent }
@@ -1251,20 +1301,6 @@ function broadcastAnnouncement(): void {
   sendToRenderers(CHANNELS.announcementUpdated, currentAnnouncement)
 }
 
-function applyRadarPick(pick: UsageSnapshot['bestModelPick']): void {
-  setCurrentSnapshot({ ...currentSnapshot, bestModelPick: pick })
-  broadcastSnapshot()
-}
-
-// radar 仅 Codex 有意义(推荐模型);非 Codex 停掉定时器避免无谓请求与 bestModelPick 残留
-function syncRadarTimer(): void {
-  if (persistedState.settings.agentId === 'codex') {
-    startRadarTimer(persistedState.settings.iqThreshold, applyRadarPick)
-  } else {
-    stopRadarTimer()
-  }
-}
-
 async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): Promise<void> {
   if (refreshPromise) {
     return refreshPromise
@@ -1288,24 +1324,15 @@ async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): 
       const agentId = persistedState.settings.agentId
       const collected =
         agentId === 'codex'
-          ? await collectUsageSnapshot({
-              iqThreshold: persistedState.settings.iqThreshold,
-              bestModelPick: currentSnapshot.bestModelPick
-            })
+          ? await collectUsageSnapshot()
           : createApiModeSnapshot()
       perfEnd('refresh:collect')
       // 预热三窗口 token 汇总,供本机排行榜与 LAN 广播同步读取
       perfStart('refresh:warm')
       await warmAllAgentTokenTotals()
       perfEnd('refresh:warm')
-      // collect 期间 radar 回调可能已更新 bestModelPick;优先取最新值,旧值仅作兜底
       setCurrentSnapshot({
         ...collected,
-        // 非 Codex 不保留雷达推荐(切换工具时避免旧 Codex 推荐残留)
-        bestModelPick:
-          agentId === 'codex'
-            ? (currentSnapshot.bestModelPick ?? collected.bestModelPick)
-            : undefined,
         teamPeers: buildTeamPeers(getSelfRemaining())
       })
       // 本机数据变化,广播给已连 peer
@@ -1405,13 +1432,14 @@ function broadcastPreferences(): void {
 }
 
 function queueSyncIslandService(): void {
-  islandSyncPromise = islandSyncPromise.then(syncIslandService).catch(() => {
+  islandSyncPromise = islandSyncPromise.then(syncIslandService).catch((error) => {
+    logDiag(`island sync failed ${formatDiagError(error)}`)
     void codexActivity?.stop()
     codexActivity = undefined
     stopFullscreenMonitor()
     currentIslandSnapshot = createEmptyIslandSnapshot()
     broadcastIslandSnapshot()
-    hideIslandImmediately()
+    hideIslandImmediately('service-error')
   })
 }
 
@@ -1421,7 +1449,7 @@ async function syncIslandService(): Promise<void> {
     codexActivity = undefined
     currentIslandSnapshot = createEmptyIslandSnapshot()
     broadcastIslandSnapshot()
-    hideIslandImmediately()
+    hideIslandImmediately('disabled')
     stopFullscreenMonitor()
     // 关闭灵动岛即销毁窗口:确保全局鼠标钩子随窗口销毁彻底释放,不留到进程退出
     islandWindow?.destroy()
@@ -1452,9 +1480,9 @@ async function syncIslandService(): Promise<void> {
       updateFullscreenAlertWindow(snapshot)
       if (shouldShowIsland()) {
         broadcastIslandSnapshot()
-        syncIslandWindowVisibility()
+        syncIslandWindowVisibility('snapshot')
       } else {
-        syncIslandWindowVisibility()
+        syncIslandWindowVisibility('snapshot')
         broadcastIslandSnapshot()
       }
     }
@@ -1512,13 +1540,14 @@ function createIslandRendererSnapshot(): IslandSnapshot {
   return { ...currentIslandSnapshot, visibility }
 }
 
-function syncIslandWindowVisibility(): void {
+function syncIslandWindowVisibility(reason: string): void {
   if (!islandWindow || islandWindow.isDestroyed()) return
-  setIslandPresentation(shouldShowIsland())
+  setIslandPresentation(shouldShowIsland(), false, reason)
 }
 
 function shouldShowIsland(): boolean {
   const fullscreenSuppressed = isSelectedDisplayFullscreen() && Date.now() >= fullscreenAlertUntil
+  islandFullscreenSuppressed = fullscreenSuppressed
   return (
     persistedState.settings.island.enabled &&
     currentIslandSnapshot.tasks.length > 0 &&
@@ -1526,7 +1555,7 @@ function shouldShowIsland(): boolean {
   )
 }
 
-function setIslandPresentation(visible: boolean, force = false): void {
+function setIslandPresentation(visible: boolean, force: boolean, reason: string): void {
   const window = islandWindow
   if (!window || window.isDestroyed()) return
   if (visible && !islandRendererReady) return
@@ -1535,9 +1564,24 @@ function setIslandPresentation(visible: boolean, force = false): void {
 
   const revision = ++islandPresentationRevision
   const presentation: IslandPresentation = { revision, visible }
+  islandDiagnostics.record('presentation', {
+    reason,
+    revision,
+    visible,
+    enabled: persistedState.settings.island.enabled,
+    taskCount: currentIslandSnapshot.tasks.length,
+    fullscreenSuppressed: islandFullscreenSuppressed,
+    alertUntil: fullscreenAlertUntil
+  })
   if (!visible) {
     // 隐藏即释放全局鼠标钩子(不带 forward),不再保留到窗口销毁
     window.setIgnoreMouseEvents(true)
+    islandDiagnostics.record('native', {
+      reason: 'hide-request',
+      revision,
+      ignore: true,
+      forward: false
+    })
     islandPresentationVisible = false
     window.webContents.send(CHANNELS.islandPresentation, presentation)
     return
@@ -1546,20 +1590,29 @@ function setIslandPresentation(visible: boolean, force = false): void {
   positionIslandWindow(window)
   if (!window.isVisible()) window.showInactive()
   window.setIgnoreMouseEvents(true, { forward: true })
+  islandDiagnostics.record('native', { reason: 'show', revision, ignore: true, forward: true })
   window.webContents.setBackgroundThrottling(false)
   islandPresentationVisible = true
   window.webContents.send(CHANNELS.islandPresentation, presentation)
   logDiag(`island shown revision=${revision} forward armed`)
 }
 
-function hideIslandImmediately(): void {
+function hideIslandImmediately(reason: string): void {
   const revision = ++islandPresentationRevision
   islandPresentationVisible = false
+  islandDiagnostics.record('presentation', { reason, revision, visible: false })
   islandWindow?.webContents.send(CHANNELS.islandPresentation, {
     revision,
     visible: false
   } satisfies IslandPresentation)
   islandWindow?.setIgnoreMouseEvents(true)
+  if (islandWindow)
+    islandDiagnostics.record('native', {
+      reason: 'hide-immediate',
+      revision,
+      ignore: true,
+      forward: false
+    })
   islandWindow?.webContents.setBackgroundThrottling(true)
   islandWindow?.hide()
 }
@@ -1570,12 +1623,12 @@ function ensureFullscreenMonitor(): void {
     (state) => {
       recordPerf('fullscreen:change')
       fullscreenState = state
-      syncIslandWindowVisibility()
+      syncIslandWindowVisibility('fullscreen-change')
       broadcastIslandSnapshot()
     },
     () => {
       fullscreenState = undefined
-      syncIslandWindowVisibility()
+      syncIslandWindowVisibility('fullscreen-reset')
       broadcastIslandSnapshot()
     }
   )
@@ -1606,7 +1659,7 @@ function updateFullscreenAlertWindow(snapshot: IslandSnapshot): void {
   if (fullscreenAlertTimer) clearTimeout(fullscreenAlertTimer)
   fullscreenAlertTimer = setTimeout(
     () => {
-      syncIslandWindowVisibility()
+      syncIslandWindowVisibility('fullscreen-alert-expired')
       broadcastIslandSnapshot()
     },
     Math.max(0, fullscreenAlertUntil - Date.now())

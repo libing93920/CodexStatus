@@ -1,5 +1,6 @@
 import { BrowserWindow, screen, type Rectangle } from 'electron'
 import { resolveIslandWindowBounds } from '../../shared/island'
+import { islandDiagnostics } from '../services/island-diagnostics'
 
 export const ISLAND_WINDOW_SIZE = { width: 464, height: 416 } as const
 
@@ -33,6 +34,7 @@ export function createIslandWindow(options: IslandWindowOptions): BrowserWindow 
   })
   window.setAlwaysOnTop(true, 'screen-saver')
   window.setIgnoreMouseEvents(true)
+  islandDiagnostics.record('native', { reason: 'create-window', ignore: true, forward: false })
   options.loadRenderer(window)
   return window
 }

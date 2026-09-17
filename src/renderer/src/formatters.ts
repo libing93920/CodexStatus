@@ -85,19 +85,6 @@ export function formatUsd(value: number): string {
   return `$${value.toFixed(value < 0.01 ? 4 : 2)}`
 }
 
-// 推荐模型品牌色:按模型名关键词上色
-// Sol=#eab308, Terra=#3b82f6, Luna=#c7d2e0, GPT-5.5=#00e5ff, 兜底灰蓝
-export function resolveModelColor(label: string | undefined): string {
-  if (!label) {
-    return 'rgba(197, 210, 224, 0.85)'
-  }
-  if (label.includes('Sol')) return '#eab308'
-  if (label.includes('Terra')) return '#3b82f6'
-  if (label.includes('Luna')) return '#c7d2e0'
-  if (label.includes('GPT-5.5')) return '#00e5ff'
-  return 'rgba(197, 210, 224, 0.85)'
-}
-
 export function createMetricProgressStyle(
   displayPercent: number | undefined,
   percentageMode: PercentageMode,
@@ -326,24 +313,6 @@ export function formatCountdownCapsule(value: string | undefined, nowMs: number)
     return `${minutes}M`
   }
   return `${totalSeconds}S`
-}
-
-export function formatModelPick(shortLabel: string): string {
-  // shortLabel 形如 "Terra xhigh" -> "Terra Xh", "Sol medium" -> "Sol M", "Luna max" -> "Luna U"
-  const parts = shortLabel.split(/\s+/)
-  if (parts.length < 2) return shortLabel
-  const name = parts[0]
-  const effort = parts.slice(1).join(' ').toLowerCase()
-  const effortAbbr: Record<string, string> = {
-    ultra: 'U',
-    max: 'Mx',
-    xhigh: 'Xh',
-    high: 'H',
-    medium: 'M',
-    low: 'L'
-  }
-  const abbr = effortAbbr[effort] ?? effort.charAt(0).toUpperCase()
-  return `${name} ${abbr}`
 }
 
 export function normalizeCustomRefreshInterval(value: number): number {

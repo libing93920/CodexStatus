@@ -1,6 +1,16 @@
 export type IslandTaskPhase = 'running' | 'completed' | 'failed' | 'stopped'
 export type IslandRequestKind = 'approval' | 'input'
 export type IslandDisplayStatus = 'waiting-approval' | 'waiting-input' | IslandTaskPhase
+export type IslandTaskSource = 'cli' | 'vscode' | 'unknown'
+
+export function normalizeIslandTaskSource(value: unknown): IslandTaskSource | undefined {
+  if (value === 'cli' || value === 'vscode') return value
+  return typeof value === 'string' ? 'unknown' : undefined
+}
+
+export function shouldNavigateIslandTask(source: IslandTaskSource | undefined): boolean {
+  return source !== 'cli'
+}
 
 export interface IslandPreferences {
   enabled: boolean
@@ -16,6 +26,7 @@ export interface IslandRequest {
 export interface IslandTask {
   hostId: string
   threadId: string
+  source?: IslandTaskSource
   turnId: string
   title: string
   project: string
@@ -98,6 +109,7 @@ interface IslandEventBase {
   occurredAt: number
   title?: string
   project?: string
+  source?: IslandTaskSource
 }
 
 export type IslandActivityEvent =
@@ -328,6 +340,7 @@ function prepareTask(current: IslandTask | undefined, event: IslandActivityEvent
     return {
       hostId: event.hostId,
       threadId: event.threadId,
+      ...(event.source ? { source: event.source } : {}),
       turnId: event.turnId,
       title: event.title ?? 'Codex 任务',
       project: event.project ?? '',
@@ -340,6 +353,7 @@ function prepareTask(current: IslandTask | undefined, event: IslandActivityEvent
   }
   return {
     ...current,
+    ...(event.source ? { source: event.source } : {}),
     title: event.title ?? current.title,
     project: event.project ?? current.project,
     requests: current.requests.map((request) => ({ ...request }))

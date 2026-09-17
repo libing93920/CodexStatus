@@ -1,15 +1,30 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import readline from 'node:readline'
+import { normalizeIslandTaskSource, type IslandTaskSource } from '../../shared/island.ts'
 import { buildCodexSpawnCommand } from './window-keeper-runner.ts'
 
 const INITIALIZE_ID = 1
 const LIST_ID = 2
+
+export interface CodexThreadCatalogEntry {
+  id: string
+  source: IslandTaskSource
+}
 
 export async function listCodexThreadIds(
   executable: string,
   cwd: string,
   timeoutMs = 15_000
 ): Promise<string[]> {
+  const catalog = await listCodexThreadCatalog(executable, cwd, timeoutMs)
+  return catalog.map((thread) => thread.id)
+}
+
+export async function listCodexThreadCatalog(
+  executable: string,
+  cwd: string,
+  timeoutMs = 15_000
+): Promise<CodexThreadCatalogEntry[]> {
   const command = buildCodexSpawnCommand(executable, ['app-server', '--stdio'])
   const child = spawn(command.file, command.args, {
     cwd,
@@ -18,38 +33,45 @@ export async function listCodexThreadIds(
     windowsHide: true
   })
   try {
-    return await readThreadIds(child, timeoutMs)
+    return await readThreadCatalog(child, timeoutMs)
   } finally {
     child.kill()
   }
 }
 
 export function parseThreadListResult(value: unknown): string[] | undefined {
+  const catalog = parseThreadCatalogResult(value)
+  return catalog?.map((thread) => thread.id)
+}
+
+export function parseThreadCatalogResult(value: unknown): CodexThreadCatalogEntry[] | undefined {
   const message = getRecord(value)
   if (message?.id !== LIST_ID) return undefined
   if (message.error) throw new Error('Codex thread catalog failed')
   const data = getRecord(message.result)?.data
   if (!Array.isArray(data)) return []
   return data.flatMap((item) => {
-    const id = getString(getRecord(item)?.id)
-    return id ? [id] : []
+    const record = getRecord(item)
+    const id = getString(record?.id)
+    if (!id) return []
+    return [{ id, source: normalizeIslandTaskSource(record?.source) ?? 'unknown' }]
   })
 }
 
-function readThreadIds(
+function readThreadCatalog(
   child: ChildProcessWithoutNullStreams,
   timeoutMs: number
-): Promise<string[]> {
+): Promise<CodexThreadCatalogEntry[]> {
   return new Promise((resolve, reject) => {
     const lines = readline.createInterface({ input: child.stdout })
     const timeout = setTimeout(() => finish(new Error('Codex thread catalog timed out')), timeoutMs)
     let settled = false
-    const finish = (error?: Error, ids: string[] = []): void => {
+    const finish = (error?: Error, catalog: CodexThreadCatalogEntry[] = []): void => {
       if (settled) return
       settled = true
       clearTimeout(timeout)
       lines.close()
-      error ? reject(error) : resolve(ids)
+      error ? reject(error) : resolve(catalog)
     }
     child.once('error', finish)
     child.once('close', (code) => {
@@ -70,7 +92,7 @@ function readThreadIds(
 function handleLine(
   line: string,
   child: ChildProcessWithoutNullStreams,
-  finish: (error?: Error, ids?: string[]) => void
+  finish: (error?: Error, catalog?: CodexThreadCatalogEntry[]) => void
 ): void {
   let message: unknown
   try {
@@ -89,8 +111,8 @@ function handleLine(
     return
   }
   try {
-    const ids = parseThreadListResult(message)
-    if (ids) finish(undefined, ids)
+    const catalog = parseThreadCatalogResult(message)
+    if (catalog) finish(undefined, catalog)
   } catch (error) {
     finish(error instanceof Error ? error : new Error('Codex thread catalog failed'))
   }

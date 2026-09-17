@@ -259,7 +259,7 @@
   filter: drop-shadow(0 0 3px rgba(255, 170, 0, 0.5));
 }
 
-/* 推荐模型:钢黑凹槽 + 琥珀描边小铭牌 */
+/* 窗口标签:钢黑凹槽 + 琥珀描边小铭牌 */
 [data-theme='cockpit'] .capsule__pick {
   border-radius: 2px;
   background: #141a10;

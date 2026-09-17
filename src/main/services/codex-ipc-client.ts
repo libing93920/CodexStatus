@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import net, { type Socket } from 'node:net'
 import type { IslandRequest, IslandTask, IslandTaskPhase } from '../../shared/island.ts'
-import { recordPerf } from './diag-log.ts'
+import { formatDiagError, logDiag, recordPerf } from './diag-log.ts'
 
 const PIPE_PATH = '\\\\.\\pipe\\codex-ipc'
 const INITIAL_CLIENT_ID = 'initializing-client'
 const MAX_FRAME_BYTES = 64 * 1024 * 1024
+const INITIALIZE_TIMEOUT_MS = 5_000
 
 interface ConversationVersion {
   revision: number
@@ -45,6 +46,7 @@ export class CodexIpcClient {
   private buffer = Buffer.alloc(0)
   private stopped = false
   private retryTimer?: NodeJS.Timeout
+  private initializeTimer?: NodeJS.Timeout
 
   constructor(options: CodexIpcClientOptions) {
     this.options = options
@@ -55,21 +57,38 @@ export class CodexIpcClient {
     if (this.socket || this.stopped) return
     if (this.retryTimer) clearTimeout(this.retryTimer)
     this.retryTimer = undefined
+    logDiag(`ipc start pipe=${PIPE_PATH}`)
     const socket = net.createConnection(PIPE_PATH)
     this.socket = socket
-    socket.once('connect', () => this.initialize(socket))
-    socket.on('data', (chunk: Buffer) => this.consume(chunk))
-    socket.once('error', () => this.disconnect())
-    socket.once('close', () => this.disconnect())
+    socket.once('connect', () => {
+      logDiag('ipc socket connected')
+      this.initialize(socket)
+    })
+    socket.on('data', (chunk: Buffer) => {
+      if (this.socket !== socket) return
+      this.consume(chunk)
+    })
+    socket.once('error', (error) => {
+      if (this.socket !== socket) return
+      logDiag(`ipc socket error ${formatDiagError(error)}`)
+      this.disconnect()
+    })
+    socket.once('close', () => {
+      if (this.socket !== socket) return
+      logDiag('ipc socket closed')
+      this.disconnect()
+    })
   }
 
   stop(): void {
     this.stopped = true
+    logDiag('ipc stop')
     this.setFollowing(false)
     this.socket?.destroy()
     this.socket = undefined
     if (this.retryTimer) clearTimeout(this.retryTimer)
     this.retryTimer = undefined
+    this.clearInitializeTimer()
     this.conversations.clear()
     this.projectedTaskCache.clear()
     this.options.onConnection(false)
@@ -82,6 +101,14 @@ export class CodexIpcClient {
   }
 
   private initialize(socket: Socket): void {
+    logDiag('ipc initialize sent')
+    this.initializeTimer = setTimeout(() => {
+      if (this.socket === socket && this.clientId === INITIAL_CLIENT_ID) {
+        logDiag(`ipc initialize timeout timeoutMs=${INITIALIZE_TIMEOUT_MS}`)
+        this.disconnect(socket)
+      }
+    }, INITIALIZE_TIMEOUT_MS)
+    this.initializeTimer.unref?.()
     this.send(
       {
         type: 'request',
@@ -100,13 +127,17 @@ export class CodexIpcClient {
     this.buffer = Buffer.concat([this.buffer, chunk])
     while (this.buffer.length >= 4) {
       const length = this.buffer.readUInt32LE(0)
-      if (length === 0 || length > MAX_FRAME_BYTES) return this.disconnect()
+      if (length === 0 || length > MAX_FRAME_BYTES) {
+        logDiag(`ipc protocol error reason=invalid-frame-length length=${length}`)
+        return this.disconnect()
+      }
       if (this.buffer.length < length + 4) return
       const payload = this.buffer.subarray(4, length + 4).toString('utf8')
       this.buffer = this.buffer.subarray(length + 4)
       try {
         this.handleMessage(JSON.parse(payload))
-      } catch {
+      } catch (error) {
+        logDiag(`ipc protocol error reason=message ${formatDiagError(error)}`)
         return this.disconnect()
       }
     }
@@ -116,6 +147,8 @@ export class CodexIpcClient {
     const message = getRecord(value)
     if (message?.type === 'response' && getRecord(message.result)?.clientId) {
       this.clientId = String(getRecord(message.result)?.clientId)
+      this.clearInitializeTimer()
+      logDiag('ipc initialize success')
       this.options.onConnection(true)
       this.setFollowing(true)
       return
@@ -238,7 +271,9 @@ export class CodexIpcClient {
     socket.write(frame)
   }
 
-  private disconnect(): void {
+  private disconnect(socket?: Socket): void {
+    if (socket && this.socket !== socket) return
+    this.clearInitializeTimer()
     this.socket?.destroy()
     this.socket = undefined
     this.conversations.clear()
@@ -249,8 +284,15 @@ export class CodexIpcClient {
     if (!this.stopped && !this.retryTimer) {
       this.clientId = INITIAL_CLIENT_ID
       this.buffer = Buffer.alloc(0)
-      this.retryTimer = setTimeout(() => this.start(), this.options.retryDelayMs ?? 3_000)
+      const delayMs = this.options.retryDelayMs ?? 3_000
+      logDiag(`ipc retry scheduled delayMs=${delayMs}`)
+      this.retryTimer = setTimeout(() => this.start(), delayMs)
     }
+  }
+
+  private clearInitializeTimer(): void {
+    if (this.initializeTimer) clearTimeout(this.initializeTimer)
+    this.initializeTimer = undefined
   }
 }
 
@@ -339,7 +381,13 @@ function getPatchChild(parent: unknown, segment: PathSegment): unknown {
 }
 
 function applyArrayPatch(parent: unknown[], key: PathSegment, patch: StatePatch): void {
-  const index = key === '-' ? parent.length : parseArrayIndex(key, parent.length)
+  let index: number
+  if (key === '-') {
+    if (patch.op !== 'add') throw new Error('Invalid array index')
+    index = parent.length
+  } else {
+    index = parseArrayIndex(key, parent.length, patch.op === 'add')
+  }
   if (patch.op === 'add') parent.splice(index, 0, patch.value)
   else if (patch.op === 'replace') parent[index] = patch.value
   else if (patch.op === 'remove') parent.splice(index, 1)
@@ -504,9 +552,10 @@ function isPathSegment(value: unknown): value is PathSegment {
   return typeof value === 'string' || (typeof value === 'number' && Number.isInteger(value))
 }
 
-function parseArrayIndex(value: PathSegment, length: number): number {
+function parseArrayIndex(value: PathSegment, length: number, allowEnd = false): number {
   const index = Number(value)
-  if (!Number.isInteger(index) || index < 0 || index > length)
+  const max = allowEnd ? length : length - 1
+  if (!Number.isInteger(index) || index < 0 || index > max)
     throw new Error('Invalid array index')
   return index
 }

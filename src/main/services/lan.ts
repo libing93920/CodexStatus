@@ -3,6 +3,7 @@ import { createServer, type Server } from 'node:http'
 import { isIPv4, type AddressInfo } from 'node:net'
 import { WebSocketServer, WebSocket } from 'ws'
 import Bonjour from 'bonjour-service'
+import { formatDiagError, logDiag } from './diag-log'
 import type {
   AgentId,
   AuthMode,
@@ -31,7 +32,6 @@ export interface PeerSnapshot {
   authMode?: AuthMode
   remainingPercent?: number
   weeklyResetsAt?: string
-  bestModelLabel?: string
   resetCreditCount?: number
   /** 短窗口(5h)展示用:label + 剩余% */
   shortWindow?: { label: string; remainingPercent?: number }
@@ -51,7 +51,6 @@ interface PeerEntry {
   authMode?: AuthMode
   remainingPercent?: number
   weeklyResetsAt?: string
-  bestModelLabel?: string
   resetCreditCount?: number
   shortWindow?: { label: string; remainingPercent?: number }
   longWindow?: { label: string; remainingPercent?: number }
@@ -133,7 +132,7 @@ export class LanService {
 
     this.startServer().then(
       () => this.startDiscovery(),
-      (error) => console.warn('[codex-status] lan server start failed:', message(error))
+      (error) => logDiag(`lan server start failed ${formatDiagError(error)}`)
     )
   }
 
@@ -479,7 +478,6 @@ export class LanService {
       authMode: snapshot ? snapshot.authMode : existing?.authMode,
       remainingPercent: snapshot ? snapshot.remainingPercent : existing?.remainingPercent,
       weeklyResetsAt: snapshot ? snapshot.weeklyResetsAt : existing?.weeklyResetsAt,
-      bestModelLabel: snapshot ? snapshot.bestModelLabel : existing?.bestModelLabel,
       resetCreditCount: snapshot ? snapshot.resetCreditCount : existing?.resetCreditCount,
       shortWindow: snapshot ? snapshot.shortWindow : existing?.shortWindow,
       longWindow: snapshot ? snapshot.longWindow : existing?.longWindow,
@@ -551,8 +549,4 @@ function parseMessage(raw: string): PeerMessage | undefined {
   } catch {
     return undefined
   }
-}
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

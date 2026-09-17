@@ -227,7 +227,7 @@
   color: #fff;
 }
 
-/* 推荐模型:纸底 + 墨边小印章(参考稿 slab-chip) */
+/* 窗口标签:纸底 + 墨边小印章(参考稿 slab-chip) */
 [data-theme='swiss'] .capsule__pick {
   border-radius: 0;
   background: #f4f4f2;

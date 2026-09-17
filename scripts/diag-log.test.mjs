@@ -7,7 +7,12 @@ import test from 'node:test'
 import vm from 'node:vm'
 import ts from 'typescript'
 
-import { logDiag, setDiagDirectory, startPerfReport } from '../src/main/services/diag-log.ts'
+import {
+  formatDiagError,
+  logDiag,
+  setDiagDirectory,
+  startPerfReport
+} from '../src/main/services/diag-log.ts'
 
 const DIAG_LOG_MAX_BYTES = 4 * 1024 * 1024
 const islandSource = await fs.readFile(resolve('src/renderer/src/island/Island.tsx'), 'utf8')
@@ -95,6 +100,14 @@ test('诊断日志 IO 失败不会抛出且后续目录仍可写入', async (con
   })
 })
 
+test('诊断异常格式保留错误码且不会打断单行日志', () => {
+  const error = Object.assign(new Error('pipe\r\nclosed'), { code: 'ENOENT' })
+  const formatted = formatDiagError(error)
+  assert.match(formatted, /errorCode="ENOENT"/)
+  assert.match(formatted, /error="pipe closed"/)
+  assert.doesNotMatch(formatted, /[\r\n]/)
+})
+
 test('主进程性能报告保留采样契约', () => {
   assert.match(islandSource, /cancelAnimationFrame\(frameId\)/)
   assert.match(islandSource, /pendingEvent = undefined/)
@@ -121,6 +134,11 @@ test('生产鼠标effect在离开和清理后不会执行过期命中', () => {
     const events = {}
     const calls = []
     const cancelled = []
+    const diagnostic = {
+      counters: { current: { effect: 0 } },
+      trace: () => undefined,
+      samplePoint: () => undefined
+    }
     let frame
     let cleanup
     const cancelInteractiveFrameRef = { current: () => undefined }
@@ -132,6 +150,7 @@ test('生产鼠标effect在离开和清理后不会执行过期命中', () => {
       mode: 'compact',
       expandedHeight: 200,
       satelliteStatus: undefined,
+      diagnostic,
       setIslandInteractive: (value) => calls.push(value),
       isPointInIsland: () => true,
       requestAnimationFrame: (fn) => {

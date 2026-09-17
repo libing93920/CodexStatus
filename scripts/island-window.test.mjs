@@ -24,10 +24,12 @@ const CHANNELS = {
   islandPresentation: 'codex-status:island-presentation',
   islandHidden: 'codex-status:island-hidden',
   islandInteractive: 'codex-status:island-interactive',
+  islandDiagnostic: 'codex-status:island-diagnostic',
   islandOpenTask: 'codex-status:island-open-task',
   islandDismissTask: 'codex-status:island-dismiss-task'
 }
 const EXIT_TIMEOUT_MS = 1_500
+const POINTER_MOVE_COUNT = 500
 const testLogPath = process.env.ISLAND_TEST_LOG
 
 function testLog(stage) {
@@ -43,6 +45,8 @@ let interactions = []
 let readyCount = 0
 let presentationRevision = 0
 let currentPresentation = { revision: 0, visible: false }
+let islandDiagnosticsEnabled = true
+const diagnosticBatches = []
 const readyPromise = new Promise((resolveReady) => (ready = resolveReady))
 
 async function verifyIslandWindow() {
@@ -131,6 +135,7 @@ async function verifyIslandWindow() {
     await dispatchPointerMove(window, 10, 300)
     await retry(() => assert.equal(interactions.at(-1), false))
     await verifyStableCompactUpdates(window)
+    await verifyPointerMoveDiagnostics(window)
 
     window.webContents.send(CHANNELS.islandUpdated, snapshot('waiting-approval'))
     await delay(700)
@@ -238,6 +243,8 @@ async function verifyIslandWindow() {
       await verifyRecreate(window)
       testLog(`verify:recreate:${cycle + 1}`)
     }
+    verifyDiagnosticProtocol()
+    await verifyDiagnosticsDisabled(window)
   } finally {
     window.destroy()
   }
@@ -278,9 +285,43 @@ async function verifyAlertRules(window) {
   await delay(900)
   testLog('alerts:completed-auto')
   assert.equal((await inspect(window)).mode, 'alert')
-  await delay(5_200)
+  await window.webContents.executeJavaScript(
+    "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))"
+  )
+  await delay(700)
+  assert.equal((await inspect(window)).mode, 'compact')
+  await window.webContents.executeJavaScript("document.querySelector('.compact').click()")
+  await delay(700)
+  assert.equal((await inspect(window)).mode, 'expanded')
+  await delay(3_200)
   testLog('alerts:auto-collapsed')
   assert.equal((await inspect(window)).mode, 'compact')
+  const legacyReminderFire = lastDiagnosticEvent(
+    (event) =>
+      event.event === 'reminder' &&
+      event.fields?.reason === 'fire' &&
+      event.fields?.modeRef === 'expanded'
+  )
+  assert.ok(legacyReminderFire)
+  const legacyFireIndex = diagnosticEvents().lastIndexOf(legacyReminderFire)
+  const legacyRequest = diagnosticEvents().find(
+    (event, index) =>
+      index > legacyFireIndex &&
+      event.event === 'mode-request' &&
+      event.fields?.to === 'compact' &&
+      event.fields?.reason === 'reminder-fired'
+  )
+  assert.ok(legacyRequest)
+  const legacyRequestIndex = diagnosticEvents().indexOf(legacyRequest)
+  assert.ok(
+    diagnosticEvents().some(
+      (event, index) =>
+        index > legacyRequestIndex &&
+        event.event === 'mode-commit' &&
+        event.fields?.from === 'expanded' &&
+        event.fields?.to === 'compact'
+    )
+  )
 
   window.webContents.send(CHANNELS.islandUpdated, snapshot('completed', 1, '-view'))
   await delay(900)
@@ -331,8 +372,9 @@ async function verifyAlertRules(window) {
   testLog('alerts:end')
 }
 
-async function verifyRecreate(window) {
+async function verifyRecreate(window, expectDiagnostics = true) {
   const previousReadyCount = readyCount
+  const previousDiagnosticCount = diagnosticEvents().length
   const loaded = new Promise((resolveLoad) =>
     window.webContents.once('did-finish-load', resolveLoad)
   )
@@ -341,6 +383,95 @@ async function verifyRecreate(window) {
   await retry(() => assert.ok(readyCount > previousReadyCount))
   sendPresentation(window, true)
   await retry(async () => assert.equal((await inspect(window)).mode, 'compact'))
+  if (expectDiagnostics) {
+    await retry(() => assert.ok(diagnosticEvents().length > previousDiagnosticCount))
+  }
+}
+
+async function verifyPointerMoveDiagnostics(window) {
+  await dispatchPointerMove(window, 232, 24)
+  await retry(() => assert.equal(interactions.at(-1), true))
+  await delay(100)
+  const before = diagnosticEvents()
+  const beforeBatchCount = diagnosticBatches.length
+  const startedAt = Date.now()
+  await dispatchPointerMovesAcrossFrames(window, 232, 24, POINTER_MOVE_COUNT, 20)
+  const dispatchMs = Date.now() - startedAt
+  await delay(100)
+  const after = diagnosticEvents()
+  assert.equal(after.length, before.length)
+  assert.equal(diagnosticBatches.length, beforeBatchCount)
+  console.log(
+    JSON.stringify({
+      islandDiagnostics: 'on',
+      pointerMoveCount: POINTER_MOVE_COUNT,
+      diagnosticBatches: diagnosticBatches.length - beforeBatchCount,
+      diagnosticEvents: after.length - before.length,
+      diagnosticBatchesTotal: diagnosticBatches.length,
+      diagnosticEventsTotal: after.length,
+      dispatchMs
+    })
+  )
+}
+
+function verifyDiagnosticProtocol() {
+  assert.ok(diagnosticBatches.length > 0)
+  const instances = new Map()
+  for (const batch of diagnosticBatches) {
+    assert.ok(Array.isArray(batch?.events))
+    assert.equal(typeof batch?.dropped, 'number')
+    for (const event of batch.events) {
+      assert.equal(typeof event.instance, 'string')
+      assert.ok(event.instance.length > 0)
+      assert.equal(Number.isInteger(event.seq), true)
+      assert.equal(typeof event.at, 'number')
+      assert.equal(typeof event.mono, 'number')
+      assert.equal(typeof event.event, 'string')
+      assert.equal(typeof event.fields, 'object')
+      const sequence = instances.get(event.instance) ?? []
+      sequence.push(event.seq)
+      instances.set(event.instance, sequence)
+    }
+  }
+  assert.ok(instances.size >= 2)
+  for (const sequence of instances.values()) {
+    assert.equal(sequence[0], 1)
+    assert.equal(
+      sequence.every((value, index) => index === 0 || value > sequence[index - 1]),
+      true
+    )
+  }
+}
+
+async function verifyDiagnosticsDisabled(window) {
+  await delay(100)
+  const previousBatchCount = diagnosticBatches.length
+  const previousEventCount = diagnosticEvents().length
+  islandDiagnosticsEnabled = false
+  await verifyRecreate(window, false)
+  await window.webContents.executeJavaScript("document.querySelector('.compact').click()")
+  await delay(700)
+  assert.equal((await inspect(window)).mode, 'expanded')
+  await window.webContents.executeJavaScript("document.querySelector('.collapse').click()")
+  await delay(700)
+  assert.equal((await inspect(window)).mode, 'compact')
+  const startedAt = Date.now()
+  await dispatchPointerMovesAcrossFrames(window, 232, 24, POINTER_MOVE_COUNT, 20)
+  const dispatchMs = Date.now() - startedAt
+  await delay(100)
+  assert.equal(diagnosticBatches.length, previousBatchCount)
+  assert.equal(diagnosticEvents().length, previousEventCount)
+  console.log(
+    JSON.stringify({
+      islandDiagnostics: 'off',
+      pointerMoveCount: POINTER_MOVE_COUNT,
+      diagnosticBatches: diagnosticBatches.length - previousBatchCount,
+      diagnosticEvents: diagnosticEvents().length - previousEventCount,
+      diagnosticBatchesTotal: diagnosticBatches.length,
+      diagnosticEventsTotal: previousEventCount,
+      dispatchMs
+    })
+  )
 }
 
 async function verifyStableCompactUpdates(window) {
@@ -410,6 +541,37 @@ async function verifyInteractions(window) {
   await window.webContents.executeJavaScript("document.querySelector('.compact').click()")
   await delay(700)
   assert.equal((await inspect(window)).mode, 'expanded')
+  await retry(() => {
+    const events = diagnosticEvents()
+    const requestIndex = events.findIndex(
+      (event) =>
+        event.event === 'mode-request' &&
+        event.fields?.to === 'expanded' &&
+        event.fields?.reason === 'compact-click'
+    )
+    assert.ok(requestIndex >= 0)
+    assert.ok(
+      events.some(
+        (event, index) =>
+          index > requestIndex &&
+          event.event === 'mode-commit' &&
+          event.fields?.from === 'compact' &&
+          event.fields?.to === 'expanded'
+      )
+    )
+  })
+  await dispatchPointerLeave(window)
+  await retry(async () => assert.equal((await inspect(window)).mode, 'compact'))
+  await retry(() =>
+    assert.ok(
+      diagnosticEvents().some(
+        (event) => event.event === 'pointer' && event.fields?.reason === 'pointer-leave'
+      )
+    )
+  )
+  await window.webContents.executeJavaScript("document.querySelector('.compact').click()")
+  await delay(700)
+  assert.equal((await inspect(window)).mode, 'expanded')
   await window.webContents.executeJavaScript(
     "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))"
   )
@@ -454,7 +616,8 @@ function sendPresentation(window, visible) {
 function registerHandlers() {
   ipcMain.handle(CHANNELS.bootstrap, () => ({
     settings: { island: { enabled: true } },
-    island: snapshot('running')
+    island: snapshot('running'),
+    islandDiagnostics: islandDiagnosticsEnabled
   }))
   ipcMain.handle(CHANNELS.islandReady, () => {
     readyCount++
@@ -471,6 +634,10 @@ function registerHandlers() {
   ipcMain.handle(CHANNELS.islandInteractive, (event, value) => {
     if (event.sender.id !== BrowserWindow.getAllWindows()[0]?.webContents.id) return
     interactions.push(value)
+  })
+  ipcMain.on(CHANNELS.islandDiagnostic, (event, batch) => {
+    if (event.sender.id !== BrowserWindow.getAllWindows()[0]?.webContents.id) return
+    diagnosticBatches.push(batch)
   })
   ipcMain.handle(CHANNELS.islandOpenTask, (_event, threadId) => {
     openedThread = threadId
@@ -609,6 +776,49 @@ async function dispatchPointerMove(window, x, y) {
   await window.webContents.executeJavaScript(
     `document.dispatchEvent(new PointerEvent('pointermove', { clientX: ${x}, clientY: ${y}, bubbles: true }))`
   )
+}
+
+async function dispatchPointerMovesAcrossFrames(window, x, y, count, frameCount) {
+  await window.webContents.executeJavaScript(`(async () => {
+    const perFrame = Math.ceil(${count} / ${frameCount})
+    for (let frame = 0; frame < ${frameCount}; frame++) {
+      const remaining = ${count} - frame * perFrame
+      for (let index = 0; index < Math.min(perFrame, remaining); index++) {
+        document.dispatchEvent(new PointerEvent('pointermove', {
+          clientX: ${x},
+          clientY: ${y},
+          bubbles: true
+        }))
+      }
+      await new Promise((resolveFrame) => requestAnimationFrame(resolveFrame))
+    }
+  })()`)
+}
+
+async function dispatchPointerLeave(window) {
+  await window.webContents.executeJavaScript(`(() => {
+    const stage = document.querySelector('.island-stage')
+    stage.dispatchEvent(
+      new PointerEvent('pointerout', {
+        bubbles: true,
+        clientX: 10,
+        clientY: 300,
+        relatedTarget: null
+      })
+    )
+  })()`)
+}
+
+function diagnosticEvents() {
+  return diagnosticBatches.flatMap((batch) => (Array.isArray(batch?.events) ? batch.events : []))
+}
+
+function lastDiagnosticEvent(predicate) {
+  const events = diagnosticEvents()
+  for (let index = events.length - 1; index >= 0; index--) {
+    if (predicate(events[index])) return events[index]
+  }
+  return undefined
 }
 
 async function retry(check) {

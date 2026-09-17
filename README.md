@@ -37,7 +37,7 @@ CodexStatus 可以帮你：
 
 - 桌面胶囊常驻显示额度，一眼可见，无需切换窗口
 - 同时监控 5h 和 7d 两个窗口，各有独立的百分比、进度条和重置倒计时
-- 雷达推荐模型：按 IQ 阈值筛选，自动选"够聪明 + 最便宜"的那个
+- AI 雷达入口：详情面板一键跳转 codex-reset-radar 查看模型排行榜
 - 局域网团队排行：同事相互可见剩余额度，方便协调
 
 ## 核心功能
@@ -48,7 +48,7 @@ CodexStatus 可以帮你：
 - **Token 消耗排行榜**：团队页可切换 Token 消耗榜，按 1/7/30 天窗口统计同事消耗
 - **用量统计**：详情面板 1/7/30 天 token 用量（输入/输出/缓存/花费）与每日柱状图
 - **API Key 登录**：支持 Codex API Key 模式，胶囊与详情展示今日 token 与缓存命中率
-- **雷达推荐模型**：从 codex-reset-radar 拉取 IQ 评分，按阈值筛选后取最实惠的
+- **AI 雷达入口**：详情面板一键跳转 codex-reset-radar 查看模型排行榜
 - **在线自动更新**：启动自动检查 + 定时检查，胶囊右上角红点提醒，一键下载静默安装
 - **双口径切换**：剩余百分比 / 已使用百分比，满足不同习惯
 - **官方接口优先**：读取 ChatGPT 官方额度，不可用时自动回退到本地 sessions
@@ -68,8 +68,8 @@ CodexStatus 可以帮你：
 1. 下载 `CodexStatus-*-setup.exe` 并安装
 2. 启动后胶囊窗口自动出现在桌面右上角
 3. 需要读取官方额度时，确保 `~/.codex/auth.json` 存在且含有效 access_token
-4. 点击胶囊打开详情面板，查看完整额度和推荐模型
-5. 在设置页配置刷新间隔、百分比口径、IQ 阈值等偏好
+4. 点击胶囊打开详情面板，查看完整额度
+5. 在设置页配置刷新间隔、百分比口径等偏好
 
 ## 使用说明
 
@@ -77,7 +77,7 @@ CodexStatus 可以帮你：
 
 - **左列**：5h 重置倒计时（无 5h 时显示 7d）
 - **中间**：当前额度百分比 + 进度条（颜色从绿色渐变到红色）
-- **右列**：重置卡到期倒计时 + 雷达推荐模型名称
+- **右列**：重置卡到期倒计时 + 当前额度窗口标签
 
 > API Key 模式：胶囊显示今日 token 用量与缓存命中率，支持竖版 / 横板两种布局。
 
@@ -85,9 +85,9 @@ CodexStatus 可以帮你：
 
 ### 详情面板
 
-- **详情**：5h + 7d 双卡片，1/7/30 天用量统计，重置卡信息，雷达推荐模型，额度重置监测入口
+- **详情**：5h + 7d 双卡片，1/7/30 天用量统计，重置卡信息，AI 雷达入口，额度重置监测入口
 - **团队**：加入相同口令的同事排行榜，额度 / Token 消耗两种模式
-- **设置**：刷新模式 / 间隔 / 百分比口径 / IQ 阈值 / 开机自启 / 语言 / 团队口令 / 检查更新
+- **设置**：刷新模式 / 间隔 / 百分比口径 / 开机自启 / 语言 / 团队口令 / 检查更新
 
 ### 团队功能
 
@@ -104,7 +104,7 @@ CodexStatus 可以帮你：
 | 官方额度 | `chatgpt.com` API | 需要有效 OAuth 凭据 |
 | 重置卡 | `chatgpt.com` API | |
 | 用量统计 | 本地 sessions JSONL | 估算 token 与花费 |
-| 雷达模型 | `codex-reset-radar.pages.dev` | 公开数据 |
+| AI 雷达 | `codex-reset-radar.pages.dev` | 公开数据,详情面板外链入口 |
 | 团队数据 | 局域网 mDNS + WebSocket | 内网直连 |
 
 官方接口不可用时自动回退到本地 sessions JSONL 文件。
@@ -183,7 +183,7 @@ CodexStatus helps you:
 
 - Desktop capsule always on top — quota visible at a glance
 - Dual-window display (5h + 7d), each with percentage, progress bar, and reset countdown
-- Radar model picker: filters by IQ threshold, picks the cheapest qualified model
+- AI Radar entry: jump to codex-reset-radar from the details panel
 - LAN team leaderboard: see teammates' usage side by side
 
 ## Key Features
@@ -194,7 +194,7 @@ CodexStatus helps you:
 - **Token leaderboard**: switch the team board to token consumption, ranked by 1d / 7d / 30d windows
 - **Usage stats**: 1/7/30-day token usage (input / output / cache / cost) with a daily bar chart
 - **API Key login**: supports Codex API Key mode; capsule & panel show today's tokens and cache-hit rate
-- **Radar model recommendation**: IQ scores from codex-reset-radar, filtered by threshold, cheapest wins
+- **AI Radar entry**: one-click jump to codex-reset-radar from the details panel
 - **Auto-update**: Startup check + periodic check, red dot badge on capsule, silent install & auto-restart
 - **Dual metric mode**: Remaining % or Used %, switch anytime
 - **Official API priority**: Fetches from ChatGPT official API, falls back to local sessions
@@ -215,7 +215,7 @@ Go to [Releases](https://github.com/libing93920/CodexStatus/releases) for the la
 2. The capsule appears at the top-right of your desktop on launch
 3. For official quota, make sure `~/.codex/auth.json` contains a valid access_token
 4. Click the capsule to open the panel for full details
-5. Configure refresh interval, metric mode, IQ threshold, etc. in Settings
+5. Configure refresh interval, metric mode, etc. in Settings
 
 ## Data Sources
 
@@ -224,7 +224,7 @@ Go to [Releases](https://github.com/libing93920/CodexStatus/releases) for the la
 | Official quota | `chatgpt.com` API | Requires valid OAuth credentials |
 | Reset credits | `chatgpt.com` API | |
 | Usage stats | Local sessions JSONL | Estimated tokens & cost |
-| Radar models | `codex-reset-radar.pages.dev` | Public data |
+| AI Radar | `codex-reset-radar.pages.dev` | Public data, external link entry |
 | Team data | LAN mDNS + WebSocket | Local network only |
 
 ## Tech Stack

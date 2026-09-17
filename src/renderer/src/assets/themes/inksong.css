@@ -241,7 +241,7 @@
   font-weight: 600;
 }
 
-/* 推荐模型:纸笺小签,朱砂细框;文字色保持模型品牌色(inline) */
+/* 窗口标签:纸笺小签,朱砂细框;文字色保持模型品牌色(inline) */
 [data-theme='inksong'] .capsule__pick {
   border-radius: 2px;
   background: rgba(255, 252, 244, 0.65);

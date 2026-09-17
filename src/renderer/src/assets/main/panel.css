@@ -53,7 +53,7 @@
   --panel-space-page: 24px;
   /* icon 色板:同明度同饱和度的柔和色相,克制不彩虹;明度略提让其在深背景上"浮"出质感 */
   --panel-icon-blue: #8ec9ff; /* 默认:接口/来源 */
-  --panel-icon-violet: #b585ff; /* 推荐/雷达 */
+  --panel-icon-violet: #b585ff; /* AI 雷达 */
   --panel-icon-amber: #ecc05a; /* 时间/重置/倒计时 */
   --panel-icon-pink: #fc92c8; /* 重置卡/凭证 */
   --panel-icon-green: #6fe085; /* 成功/在线 */

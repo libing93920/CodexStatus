@@ -290,7 +290,7 @@
   color: #a3622a;
 }
 
-/* 推荐模型:奶油票签,木色描边;文字色保持模型品牌色(inline) */
+/* 窗口标签:奶油票签,木色描边;文字色保持模型品牌色(inline) */
 [data-theme='greenhouse'] .capsule__pick {
   border-radius: 999px;
   background: rgba(255, 252, 242, 0.85);

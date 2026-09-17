@@ -244,7 +244,7 @@
   transform: rotate(-1deg);
 }
 
-/* 推荐模型:奶油底 + 墨边小印章 + 歪斜 */
+/* 窗口标签:奶油底 + 墨边小印章 + 歪斜 */
 [data-theme='memphis'] .capsule__pick {
   border-radius: 0;
   background: #fffdf7;

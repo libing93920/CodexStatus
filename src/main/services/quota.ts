@@ -57,15 +57,7 @@ export function invalidateQuotaCaches(): void {
   resetCreditCache = undefined
 }
 
-interface CollectOptions {
-  iqThreshold?: number
-  /** 主进程当前缓存的推荐模型;radar 不再跟随额度刷新,由独立定时器维护并注入 */
-  bestModelPick?: UsageSnapshot['bestModelPick']
-}
-
-export async function collectUsageSnapshot(
-  options: CollectOptions = {}
-): Promise<UsageSnapshot> {
+export async function collectUsageSnapshot(): Promise<UsageSnapshot> {
   const checkedPaths = resolveSessionPaths()
   const missingPaths: string[] = []
   const files: JsonlFileEntry[] = []
@@ -95,7 +87,6 @@ export async function collectUsageSnapshot(
   let rateLimitSource: RateLimitSource = hasRateLimits(localRateLimits) ? 'local' : 'none'
   let officialIssue: string | undefined
   let resetCredit: UsageSnapshot['resetCredit']
-  const bestModelPick = options.bestModelPick
 
   const credentialLookup = await readOfficialCodexCredentials()
   let authMode: AuthMode = 'none'
@@ -142,7 +133,6 @@ export async function collectUsageSnapshot(
     sourceHost: resolveSourceHost(rateLimitSource),
     officialIssue,
     resetCredit,
-    bestModelPick,
     issues: Array.from(new Set(issues)).slice(0, 6),
     filesScanned: limitedFiles.length,
     sessionsPath: checkedPaths.find((candidate) => !missingPaths.includes(candidate))

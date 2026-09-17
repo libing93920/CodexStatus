@@ -2,6 +2,7 @@
 // 拉取失败/未命中时,rate.ts 回落到内置 MODEL_RATES 与 DEFAULT_RATE。
 import { net } from 'electron'
 import { normalizeModel, type ModelRate } from './rate'
+import { formatDiagError, logDiag } from './diag-log'
 
 const MODELS_DEV_URL = 'https://models.dev/api.json'
 const MODELS_DEV_TIMEOUT_MS = 15_000
@@ -71,12 +72,9 @@ export async function fetchModelsDevRates(): Promise<void> {
     ratesCache = map
     fetchedAtMs = Date.now()
     // 用 ASCII 避免 Windows 控制台按 GBK 解码 UTF-8 中文出现乱码
-    console.log(`[codex-status] models.dev pricing synced, ${map.size} models`)
+    logDiag(`pricing synced source=models.dev models=${map.size}`)
   } catch (error) {
-    console.warn(
-      '[codex-status] models.dev pricing fetch failed, fallback to built-in table:',
-      error instanceof Error ? error.message : String(error)
-    )
+    logDiag(`pricing fetch failed fallback=built-in ${formatDiagError(error)}`)
   }
 }
 

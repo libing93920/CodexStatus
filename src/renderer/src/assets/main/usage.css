@@ -480,7 +480,7 @@
   line-height: 1.1;
 }
 
-/* 雷达推荐模型等可跳转 label:链接色 + hover 提亮下划线,克制不抢戏 */
+/* 可跳转 label:链接色 + hover 提亮下划线,克制不抢戏 */
 .detail-row__link {
   color: var(--panel-accent);
   font-size: 14px;

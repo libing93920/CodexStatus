@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { logDiag } from './diag-log.ts'
 
 const MANAGED_STATUS = 'CodexStatus task activity'
 // 保留 PreToolUse 用于清除审批状态;PostToolUse 每次工具完成都 spawn 进程,由 IPC 状态流兜底
@@ -17,6 +18,7 @@ const HOOK_EVENTS = [
 interface HookHandler {
   type: 'command'
   command: string
+  commandWindows?: string
   timeout: number
   async?: boolean
   statusMessage?: string
@@ -59,34 +61,50 @@ export async function installCodexHooks(options: InstallCodexHooksOptions): Prom
   const current = await readHooksFile(options.hooksPath)
   // 先清后装:移除旧版本写入的全部 managed 组(含 PreToolUse/PostToolUse 等已缩事件),
   // 再按当前事件表安装 —— 修复存量用户升级后旧事件组永不清理的问题
-  const merged = mergeCodexHooks(removeCodexHooks(current), quoteCommand(launcherPath))
+  const merged = mergeCodexHooks(
+    removeCodexHooks(current),
+    quoteCommand(launcherPath),
+    buildWindowsHookCommand(launcherPath)
+  )
   await writeJsonAtomic(options.hooksPath, merged)
+  logDiag(
+    `hook installed hooksPath=${JSON.stringify(options.hooksPath)} ` +
+      `descriptor=${JSON.stringify(options.descriptorPath)}`
+  )
 }
 
 export async function uninstallCodexHooks(
   hooksPath: string,
   installDirectory: string
 ): Promise<void> {
+  let current: HooksFile = {}
+  let hooksFileExists = true
   try {
     await fs.access(hooksPath)
-  } catch {
-    return
+    current = await readHooksFile(hooksPath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    hooksFileExists = false
   }
-  const current = await readHooksFile(hooksPath)
   const next = removeCodexHooks(current)
-  if (JSON.stringify(next) === JSON.stringify(current)) return
-  await writeJsonAtomic(hooksPath, next)
+  if (hooksFileExists && JSON.stringify(next) !== JSON.stringify(current)) {
+    await writeJsonAtomic(hooksPath, next)
+  }
   await Promise.all([
     fs.unlink(path.join(installDirectory, 'codex-status-hook.cjs')).catch(() => undefined),
     fs.unlink(path.join(installDirectory, 'codex-status-hook.cmd')).catch(() => undefined)
   ])
 }
 
-export function mergeCodexHooks(current: HooksFile, command: string): HooksFile {
+export function mergeCodexHooks(
+  current: HooksFile,
+  command: string,
+  commandWindows?: string
+): HooksFile {
   const hooks = { ...(current.hooks ?? {}) }
   for (const eventName of HOOK_EVENTS) {
     const existing = (hooks[eventName] ?? []).filter((group) => !isManagedGroup(group))
-    hooks[eventName] = [...existing, createManagedGroup(eventName, command)]
+    hooks[eventName] = [...existing, createManagedGroup(eventName, command, commandWindows)]
   }
   return { ...current, hooks }
 }
@@ -113,13 +131,18 @@ export function removeCodexHooks(current: HooksFile): HooksFile {
   return { ...current, hooks }
 }
 
-function createManagedGroup(eventName: string, command: string): HookGroup {
+function createManagedGroup(
+  eventName: string,
+  command: string,
+  commandWindows?: string
+): HookGroup {
   const handler: HookHandler = {
     type: 'command',
     command,
     timeout: eventName === 'PermissionRequest' ? 1 : 2,
     statusMessage: MANAGED_STATUS
   }
+  if (commandWindows !== undefined) handler.commandWindows = commandWindows
   if (eventName !== 'PermissionRequest') handler.async = true
   const matcher = getMatcher(eventName)
   return matcher ? { matcher, hooks: [handler] } : { hooks: [handler] }
@@ -142,6 +165,11 @@ function buildLauncher(executablePath: string, scriptPath: string, descriptorPat
     `${quoteCommand(executablePath)} ${quoteCommand(scriptPath)} ${quoteCommand(descriptorPath)}`,
     ''
   ].join('\r\n')
+}
+
+function buildWindowsHookCommand(launcherPath: string): string {
+  // cmd.exe /C 需要双层引号，才能保留含空格路径的边界。
+  return `cmd.exe /d /c "${quoteCommand(launcherPath)}"`
 }
 
 function quoteCommand(value: string): string {

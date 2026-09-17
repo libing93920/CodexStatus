@@ -1,13 +1,18 @@
-import type { IslandSnapshot, IslandTask } from '../../shared/island.ts'
+import type { IslandSnapshot, IslandTask, IslandTaskSource } from '../../shared/island.ts'
 import { getDisplayStatus, IslandState } from '../../shared/island.ts'
-import { mapCodexHookEvent, type CodexHookPayload } from './codex-hook-events.ts'
+import {
+  mapCodexHookEvent,
+  readCodexTranscriptSource,
+  type CodexHookPayload
+} from './codex-hook-events.ts'
 import { CodexHookIngress } from './codex-hook-ingress.ts'
 import { CodexIpcClient } from './codex-ipc-client.ts'
-import { listCodexThreadIds } from './codex-thread-catalog.ts'
-import { recordPerf } from './diag-log.ts'
+import { listCodexThreadCatalog } from './codex-thread-catalog.ts'
+import { formatDiagError, logDiag, recordPerf } from './diag-log.ts'
 
 // 只在服务层合并执行态更新，避免服务和窗口广播两层等待叠加。
 const EMIT_DEBOUNCE_MS = 100
+const HOOK_SOURCE_RETRY_MS = 1_000
 
 export interface CodexActivityOptions {
   executable?: string
@@ -27,6 +32,9 @@ export class CodexActivityService {
   private ipcTaskKeys = new Set<string>()
   private readonly hookTaskKeys = new Set<string>()
   private readonly hookTurnIds = new Map<string, string>()
+  private readonly threadSources = new Map<string, IslandTaskSource>()
+  private readonly hookSourceCache = new Map<string, IslandTaskSource>()
+  private readonly hookSourceRetryAt = new Map<string, number>()
   private readonly finishedHookTurnIds = new Set<string>()
   private readonly finishedThreadIds = new Set<string>()
   private ipc?: CodexIpcClient
@@ -44,15 +52,27 @@ export class CodexActivityService {
 
   async start(): Promise<void> {
     this.stopped = false
+    logDiag('island activity start')
     await this.ingress.start()
     this.state.setConnection({ hooks: true })
     this.emitNow()
-    let threadIds: string[] = []
+    const threadIds: string[] = []
+    this.threadSources.clear()
+    this.hookSourceCache.clear()
+    this.hookSourceRetryAt.clear()
     try {
       if (this.options.executable) {
-        threadIds = await listCodexThreadIds(this.options.executable, this.options.cwd)
+        const catalog = await listCodexThreadCatalog(this.options.executable, this.options.cwd)
+        for (const entry of catalog) {
+          this.threadSources.set(createTaskKey('local', entry.id), entry.source)
+          if (entry.source !== 'cli') threadIds.push(entry.id)
+        }
+        logDiag(`ipc catalog success threads=${catalog.length}`)
+      } else {
+        logDiag('ipc catalog skipped reason=executable-unresolved')
       }
-    } catch {
+    } catch (error) {
+      logDiag(`ipc catalog failed ${formatDiagError(error)}`)
       this.state.setConnection({ ipc: false })
       this.emit()
     }
@@ -65,6 +85,7 @@ export class CodexActivityService {
         this.emit()
       },
       onConnection: (connected) => {
+        logDiag(`island ipc connection=${connected ? 'connected' : 'disconnected'}`)
         this.state.setConnection({ ipc: connected })
         if (!this.stopped) this.emitNow()
       }
@@ -74,11 +95,15 @@ export class CodexActivityService {
 
   async stop(): Promise<void> {
     this.stopped = true
+    logDiag('island activity stop')
     if (this.emitTimer) clearTimeout(this.emitTimer)
     this.emitTimer = undefined
     this.ipc?.stop()
     this.ipc = undefined
     this.ipcTaskKeys.clear()
+    this.threadSources.clear()
+    this.hookSourceCache.clear()
+    this.hookSourceRetryAt.clear()
     this.hookTaskKeys.clear()
     this.hookTurnIds.clear()
     this.finishedHookTurnIds.clear()
@@ -115,8 +140,12 @@ export class CodexActivityService {
   private handleHookPayload(payload: CodexHookPayload, receivedAt = Date.now()): void {
     recordPerf('island:hookEvent')
     this.state.noteHookEvent(receivedAt)
-    this.ipc?.followThread(payload.session_id)
-    const normalizedPayload = this.resolveHookTurn(payload, receivedAt)
+    const source = this.resolveHookSource(payload)
+    if (source !== 'cli') this.ipc?.followThread(payload.session_id)
+    const normalizedPayload = this.resolveHookTurn(
+      source ? { ...payload, source } : payload,
+      receivedAt
+    )
     if (!normalizedPayload) return this.emit()
     const event = mapCodexHookEvent(normalizedPayload, receivedAt)
     if (!event) return this.emit()
@@ -135,6 +164,27 @@ export class CodexActivityService {
       return
     }
     this.emit()
+  }
+
+  private resolveHookSource(payload: CodexHookPayload): IslandTaskSource | undefined {
+    const key = createTaskKey('local', payload.session_id)
+    if (this.hookSourceCache.has(key)) return this.hookSourceCache.get(key)
+    const catalogSource = this.threadSources.get(key)
+    if (catalogSource === 'cli' || catalogSource === 'vscode') return catalogSource
+    if (!payload.transcript_path) return catalogSource
+    const now = Date.now()
+    const retryAt = this.hookSourceRetryAt.get(key)
+    if (retryAt !== undefined && now < retryAt) return catalogSource
+    const source = readCodexTranscriptSource(payload.transcript_path)
+    if (source !== undefined) {
+      this.hookSourceRetryAt.delete(key)
+      this.hookSourceCache.set(key, source)
+      this.threadSources.set(key, source)
+      return source
+    }
+    // 文件尚未创建或首行仍在写入时允许后续恢复，但限制高频 Hook 的同步读盘次数。
+    this.hookSourceRetryAt.set(key, now + HOOK_SOURCE_RETRY_MS)
+    return catalogSource
   }
 
   private resolveHookTurn(
@@ -159,8 +209,17 @@ export class CodexActivityService {
 
   private updateIpcTasks(tasks: IslandTask[]): void {
     recordPerf('island:ipcUpdate')
-    this.supplementHookTasks(tasks)
-    const ipcTasks = tasks.filter(
+    const sourcedTasks = tasks
+      .filter((task) => {
+        const source = this.threadSources.get(createTaskKey(task.hostId, task.threadId))
+        return source !== 'cli' && task.source !== 'cli'
+      })
+      .map((task) => {
+        const source = this.threadSources.get(createTaskKey(task.hostId, task.threadId))
+        return source ? { ...task, source } : task
+      })
+    this.supplementHookTasks(sourcedTasks)
+    const ipcTasks = sourcedTasks.filter(
       (task) => !this.hookTaskKeys.has(createTaskKey(task.hostId, task.threadId))
     )
     for (const task of ipcTasks) {

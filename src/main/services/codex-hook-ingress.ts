@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs'
 import net, { type Server, type Socket } from 'node:net'
 import path from 'node:path'
 import { parseCodexHookPayload, type CodexHookPayload } from './codex-hook-events.ts'
+import { formatDiagError, logDiag } from './diag-log.ts'
 
 const MAX_MESSAGE_BYTES = 128 * 1024
 
@@ -33,15 +34,18 @@ export class CodexHookIngress {
       nonce: randomBytes(32).toString('hex')
     }
     const server = net.createServer((socket) => this.handleConnection(socket, endpoint.nonce))
-    await listen(server, endpoint.pipePath)
     try {
+      await listen(server, endpoint.pipePath)
       await writeDescriptor(this.options.descriptorPath, endpoint)
     } catch (error) {
+      logDiag(`hook ingress start failed ${formatDiagError(error)}`)
+      this.destroySockets()
       await closeServer(server)
       throw error
     }
     this.server = server
     this.endpoint = endpoint
+    logDiag(`hook ingress ready pipe=${endpoint.pipePath}`)
     return { ...endpoint }
   }
 
@@ -50,10 +54,15 @@ export class CodexHookIngress {
     const endpoint = this.endpoint
     this.server = undefined
     this.endpoint = undefined
-    for (const socket of this.sockets) socket.destroy()
-    this.sockets.clear()
+    if (server || endpoint) logDiag('hook ingress stop')
+    this.destroySockets()
     if (server) await closeServer(server)
     if (endpoint) await removeDescriptor(this.options.descriptorPath, endpoint.nonce)
+  }
+
+  private destroySockets(): void {
+    for (const socket of this.sockets) socket.destroy()
+    this.sockets.clear()
   }
 
   private handleConnection(socket: Socket, nonce: string): void {
@@ -64,12 +73,20 @@ export class CodexHookIngress {
     socket.on('data', (chunk: Buffer) => {
       if (handled) return
       buffered = Buffer.concat([buffered, chunk])
-      if (buffered.length > MAX_MESSAGE_BYTES) return finishSocket(socket, false)
+      if (buffered.length > MAX_MESSAGE_BYTES) {
+        logDiag('hook rejected reason=message-too-large')
+        return finishSocket(socket, false)
+      }
       const newline = buffered.indexOf(10)
       if (newline < 0) return
       handled = true
       const payload = parseEnvelope(buffered.subarray(0, newline).toString('utf8'), nonce)
-      if (payload) this.options.onEvent(payload)
+      if (payload) {
+        logDiag(`hook accepted event=${payload.hook_event_name}`)
+        this.options.onEvent(payload)
+      } else {
+        logDiag('hook rejected reason=invalid-envelope')
+      }
       finishSocket(socket, Boolean(payload))
     })
     socket.once('error', () => undefined)

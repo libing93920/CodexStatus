@@ -201,7 +201,7 @@
   font-weight: 700;
 }
 
-/* 推荐模型:纸底 + 墨边小印章 */
+/* 窗口标签:纸底 + 墨边小印章 */
 [data-theme='poster'] .capsule__pick {
   border-radius: 0;
   background: #faf4e4;
@@ -219,7 +219,7 @@
   padding: 2px 3px;
 }
 
-/* 竖版 orb:推荐模型印章同步收紧 */
+/* 竖版 orb:窗口标签印章同步收紧 */
 [data-theme='poster'] .capsule--orb .capsule__pick {
   font-size: 11px;
   padding: 2px 5px;

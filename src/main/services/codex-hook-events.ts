@@ -1,4 +1,11 @@
-import type { IslandActivityEvent, IslandRequest, IslandRequestKind } from '../../shared/island'
+import { closeSync, openSync, readSync } from 'node:fs'
+import {
+  normalizeIslandTaskSource,
+  type IslandActivityEvent,
+  type IslandRequest,
+  type IslandRequestKind,
+  type IslandTaskSource
+} from '../../shared/island.ts'
 
 const SUPPORTED_EVENTS = new Set([
   'SessionStart',
@@ -9,6 +16,7 @@ const SUPPORTED_EVENTS = new Set([
   'Stop',
   'Interrupt'
 ])
+const TRANSCRIPT_META_READ_BYTES = 64 * 1024
 
 export interface CodexHookPayload {
   hook_event_name: string
@@ -18,6 +26,8 @@ export interface CodexHookPayload {
   tool_name?: string
   tool_use_id?: string
   request_id?: string
+  transcript_path?: string
+  source?: IslandTaskSource
 }
 
 export function parseCodexHookPayload(value: unknown): CodexHookPayload | undefined {
@@ -32,7 +42,29 @@ export function parseCodexHookPayload(value: unknown): CodexHookPayload | undefi
     cwd: getString(input?.cwd),
     tool_name: getString(input?.tool_name),
     tool_use_id: getString(input?.tool_use_id),
-    request_id: getString(input?.request_id)
+    request_id: getString(input?.request_id),
+    transcript_path: getString(input?.transcript_path)
+  }
+}
+
+export function readCodexTranscriptSource(
+  transcriptPath: string | undefined
+): IslandTaskSource | undefined {
+  if (!transcriptPath) return undefined
+  let descriptor: number | undefined
+  try {
+    descriptor = openSync(transcriptPath, 'r')
+    const buffer = Buffer.alloc(TRANSCRIPT_META_READ_BYTES)
+    const bytesRead = readSync(descriptor, buffer, 0, buffer.length, 0)
+    const firstLine = buffer.subarray(0, bytesRead).toString('utf8').split(/\r?\n/, 1)[0]
+    const record = getRecord(JSON.parse(firstLine.replace(/^\uFEFF/, '')))
+    // 首行已成功解析但没有可识别来源时，后续重读同一首行没有收益。
+    if (record?.type !== 'session_meta') return 'unknown'
+    return normalizeIslandTaskSource(getRecord(record.payload)?.source) ?? 'unknown'
+  } catch {
+    return undefined
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor)
   }
 }
 
@@ -47,7 +79,8 @@ export function mapCodexHookEvent(
     threadId: payload.session_id,
     turnId,
     occurredAt: receivedAt,
-    project: getProjectName(payload.cwd)
+    project: getProjectName(payload.cwd),
+    ...(payload.source ? { source: payload.source } : {})
   }
   switch (payload.hook_event_name) {
     case 'UserPromptSubmit':
