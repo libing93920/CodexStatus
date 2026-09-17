@@ -1,15 +1,15 @@
 export type IslandTaskPhase = 'running' | 'completed' | 'failed' | 'stopped'
 export type IslandRequestKind = 'approval' | 'input'
 export type IslandDisplayStatus = 'waiting-approval' | 'waiting-input' | IslandTaskPhase
-export type IslandTaskSource = 'cli' | 'vscode' | 'unknown'
+export type IslandTaskSource = 'cli' | 'vscode' | 'subagent' | 'unknown'
 
 export function normalizeIslandTaskSource(value: unknown): IslandTaskSource | undefined {
-  if (value === 'cli' || value === 'vscode') return value
+  if (value === 'cli' || value === 'vscode' || value === 'subagent') return value
   return typeof value === 'string' ? 'unknown' : undefined
 }
 
 export function shouldNavigateIslandTask(source: IslandTaskSource | undefined): boolean {
-  return source !== 'cli'
+  return source !== 'cli' && source !== 'subagent'
 }
 
 export interface IslandPreferences {

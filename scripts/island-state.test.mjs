@@ -415,17 +415,150 @@ test('CLI 任务不订阅或合并私有 IPC，未知来源仍跟踪', () => {
   service.updateIpcTasks?.([
     { ...authoritativeTask('running', 'turn-1'), threadId: 'cli-only', source: 'cli' }
   ])
-  assert.equal(latest.tasks.some((task) => task.threadId === 'cli-only'), false)
+  assert.equal(
+    latest.tasks.some((task) => task.threadId === 'cli-only'),
+    false
+  )
 
+  service.threadSources?.set('local\u0000unknown-thread', 'unknown')
   service.handleHookPayload?.(
     { ...hookPayload('UserPromptSubmit'), session_id: 'unknown-thread' },
     NOW + 1
   )
   assert.deepEqual(followed, ['unknown-thread'])
+  assert.equal(latest.tasks.find((task) => task.threadId === 'unknown-thread')?.source, 'unknown')
+})
+
+test('子代理 transcript 被识别并在 Hook 进入状态机前忽略', async (context) => {
+  const variants = [{ thread_source: 'subagent' }, { source: { subagent: { thread_spawn: {} } } }]
+
+  for (const [index, metadata] of variants.entries()) {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), `codex-status-subagent-${index}-`))
+    const transcriptPath = path.join(directory, 'session.jsonl')
+    const sessionId = `subagent-thread-${index}`
+    await fs.writeFile(
+      transcriptPath,
+      `${JSON.stringify({ type: 'session_meta', payload: metadata })}\n`
+    )
+    context.after(() => fs.rm(directory, { recursive: true, force: true }))
+
+    assert.equal(readCodexTranscriptSource(transcriptPath), 'subagent')
+    const service = activityService(() => undefined)
+    const followed = []
+    service.ipc = { followThread: (threadId) => followed.push(threadId) }
+    service.handleHookPayload?.(
+      parseCodexHookPayload({
+        ...hookPayload('UserPromptSubmit'),
+        session_id: sessionId,
+        transcript_path: transcriptPath
+      }),
+      NOW
+    )
+
+    assert.deepEqual(followed, [])
+    assert.equal(service.getSnapshot().tasks.length, 0)
+    assert.equal(service.hookTaskKeys?.has(`local\u0000${sessionId}`), false)
+  }
+})
+
+test('transcript 尚未可读时首个子代理 Hook 延迟重放后仍忽略', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-status-subagent-race-'))
+  const transcriptPath = path.join(directory, 'session.jsonl')
+  const sessionId = 'subagent-race-thread'
+  const payload = {
+    ...hookPayload('UserPromptSubmit'),
+    session_id: sessionId,
+    transcript_path: transcriptPath
+  }
+  const key = `local\u0000${sessionId}`
+  context.after(() => fs.rm(directory, { recursive: true, force: true }))
+
+  const service = activityService(() => undefined)
+  const retries = []
+  service.scheduleHookRetry = (callback) => retries.push(callback)
+  const followed = []
+  service.ipc = { followThread: (threadId) => followed.push(threadId) }
+  service.handleHookPayload?.(payload, NOW)
+  assert.equal(retries.length, 1)
+  assert.deepEqual(followed, [])
+  assert.equal(service.getSnapshot().tasks.length, 0)
+  assert.equal(service.hookTaskKeys?.has(key), false)
+
+  await fs.writeFile(
+    transcriptPath,
+    `${JSON.stringify({ type: 'session_meta', payload: { thread_source: 'subagent' } })}\n`
+  )
+  retries[0]()
+
+  assert.deepEqual(followed, [])
+  assert.equal(service.getSnapshot().tasks.length, 0)
+  assert.equal(service.hookTaskKeys?.has(key), false)
+})
+
+test('transcript 重试仍不可读时同一 Hook 按 unknown 处理且不再次调度', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-status-unknown-race-'))
+  const transcriptPath = path.join(directory, 'session.jsonl')
+  const sessionId = 'unknown-race-thread'
+  const payload = {
+    ...hookPayload('UserPromptSubmit'),
+    session_id: sessionId,
+    transcript_path: transcriptPath
+  }
+  context.after(() => fs.rm(directory, { recursive: true, force: true }))
+
+  const service = activityService(() => undefined)
+  const retries = []
+  service.scheduleHookRetry = (callback) => retries.push(callback)
+  const followed = []
+  service.ipc = { followThread: (threadId) => followed.push(threadId) }
+  service.handleHookPayload?.(payload, NOW)
+  assert.equal(retries.length, 1)
+  assert.equal(service.getSnapshot().tasks.length, 0)
+
+  retries[0]()
+
+  assert.equal(retries.length, 1)
+  assert.deepEqual(followed, [sessionId])
+  assert.equal(service.getSnapshot().tasks[0]?.threadId, sessionId)
+  assert.equal(service.getSnapshot().tasks[0]?.source, undefined)
+})
+
+test('transcript 重试回调在服务停止后不再处理 Hook', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-status-stop-race-'))
+  const transcriptPath = path.join(directory, 'session.jsonl')
+  const sessionId = 'stopped-race-thread'
+  const payload = {
+    ...hookPayload('UserPromptSubmit'),
+    session_id: sessionId,
+    transcript_path: transcriptPath
+  }
+  const key = `local\u0000${sessionId}`
+  context.after(() => fs.rm(directory, { recursive: true, force: true }))
+
+  const service = activityService(() => undefined)
+  const retries = []
+  service.scheduleHookRetry = (callback) => retries.push(callback)
+  const followed = []
+  service.ipc = {
+    followThread: (threadId) => followed.push(threadId),
+    stop: () => undefined
+  }
+  service.handleHookPayload?.(payload, NOW)
+  assert.equal(retries.length, 1)
+
+  await service.stop()
+  retries[0]()
+
+  assert.deepEqual(followed, [])
+  assert.equal(service.getSnapshot().tasks.length, 0)
+  assert.equal(service.hookTaskKeys?.has(key), false)
 })
 
 test('目录中的 CLI 任务不进入私有 IPC 初始订阅', async () => {
-  const source = await fs.readFile(new URL('../src/main/services/codex-activity.ts', import.meta.url), 'utf8')
+  const source = await fs.readFile(
+    new URL('../src/main/services/codex-activity.ts', import.meta.url),
+    'utf8'
+  )
   const start = source.indexOf('async start()')
   const end = source.indexOf('\n  async stop()', start)
   assert.ok(start >= 0)
@@ -502,10 +635,44 @@ test('Hook 来源临时读盘失败在冷却后重试并恢复', async (context)
   assert.equal(service.hookSourceRetryAt?.has(key), false)
 })
 
-test('灵动岛点击按来源分流，CLI 不导航且未知来源仍导航', () => {
+test('transcript 延迟识别后普通 CLI/VSCode Hook 可恢复', async (context) => {
+  for (const source of ['cli', 'vscode']) {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), `codex-status-${source}-race-`))
+    const transcriptPath = path.join(directory, 'session.jsonl')
+    const sessionId = `${source}-race-thread`
+    const payload = {
+      ...hookPayload('UserPromptSubmit'),
+      session_id: sessionId,
+      transcript_path: transcriptPath
+    }
+    context.after(() => fs.rm(directory, { recursive: true, force: true }))
+
+    const service = activityService(() => undefined)
+    const retries = []
+    service.scheduleHookRetry = (callback) => retries.push(callback)
+    const followed = []
+    service.ipc = { followThread: (threadId) => followed.push(threadId) }
+    service.handleHookPayload?.(payload, NOW)
+    assert.equal(retries.length, 1)
+    assert.equal(service.getSnapshot().tasks.length, 0)
+
+    await fs.writeFile(
+      transcriptPath,
+      `${JSON.stringify({ type: 'session_meta', payload: { source } })}\n`
+    )
+    retries[0]()
+
+    assert.equal(service.getSnapshot().tasks[0]?.source, source)
+    assert.deepEqual(followed, source === 'vscode' ? [sessionId] : [])
+  }
+})
+
+test('灵动岛点击仅排除 CLI 和子代理来源', () => {
   assert.equal(shouldNavigateIslandTask('cli'), false)
   assert.equal(shouldNavigateIslandTask('vscode'), true)
+  assert.equal(shouldNavigateIslandTask('subagent'), false)
   assert.equal(shouldNavigateIslandTask('unknown'), true)
+  assert.equal(shouldNavigateIslandTask(undefined), true)
 })
 
 test('灵动岛点击在导航分支之后统一记录已查看', async () => {

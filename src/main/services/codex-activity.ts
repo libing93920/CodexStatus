@@ -137,10 +137,19 @@ export class CodexActivityService {
     return true
   }
 
-  private handleHookPayload(payload: CodexHookPayload, receivedAt = Date.now()): void {
+  private handleHookPayload(
+    payload: CodexHookPayload,
+    receivedAt = Date.now(),
+    isRetry = false
+  ): void {
     recordPerf('island:hookEvent')
-    this.state.noteHookEvent(receivedAt)
     const source = this.resolveHookSource(payload)
+    if (payload.transcript_path && source === undefined && !isRetry) {
+      this.scheduleHookSourceRetry(payload, receivedAt)
+      return
+    }
+    if (source === 'subagent') return
+    this.state.noteHookEvent(receivedAt)
     if (source !== 'cli') this.ipc?.followThread(payload.session_id)
     const normalizedPayload = this.resolveHookTurn(
       source ? { ...payload, source } : payload,
@@ -164,6 +173,19 @@ export class CodexActivityService {
       return
     }
     this.emit()
+  }
+
+  private scheduleHookSourceRetry(payload: CodexHookPayload, receivedAt: number): void {
+    this.scheduleHookRetry(() => {
+      if (this.stopped) return
+      this.hookSourceRetryAt.delete(createTaskKey('local', payload.session_id))
+      this.handleHookPayload(payload, receivedAt, true)
+    })
+  }
+
+  private scheduleHookRetry(callback: () => void): void {
+    const timer = setTimeout(callback, HOOK_SOURCE_RETRY_MS)
+    timer.unref?.()
   }
 
   private resolveHookSource(payload: CodexHookPayload): IslandTaskSource | undefined {

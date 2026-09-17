@@ -60,7 +60,9 @@ export function readCodexTranscriptSource(
     const record = getRecord(JSON.parse(firstLine.replace(/^\uFEFF/, '')))
     // 首行已成功解析但没有可识别来源时，后续重读同一首行没有收益。
     if (record?.type !== 'session_meta') return 'unknown'
-    return normalizeIslandTaskSource(getRecord(record.payload)?.source) ?? 'unknown'
+    const payload = getRecord(record.payload)
+    if (isSubagentTranscript(payload)) return 'subagent'
+    return normalizeIslandTaskSource(payload?.source) ?? 'unknown'
   } catch {
     return undefined
   } finally {
@@ -137,4 +139,10 @@ function getRecord(value: unknown): Record<string, unknown> | undefined {
 
 function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function isSubagentTranscript(payload: Record<string, unknown> | undefined): boolean {
+  const threadSource = getString(payload?.thread_source)
+  if (threadSource === 'subagent') return true
+  return getRecord(getRecord(payload?.source)?.subagent) !== undefined
 }
