@@ -2041,10 +2041,11 @@ function App(): React.JSX.Element {
 
                 <div className="settings-section">
                   <p className="settings-section__title">{copy.team}</p>
-                  <SettingField label={copy.teamNickname} hint={copy.teamNicknameHint}>
-                    <label className="inline-input">
-                      <span>{copy.teamNickname}</span>
+                  <div className="team-auth">
+                    <label className="team-auth__field">
+                      <span className="team-auth__label">{copy.teamNickname}</span>
                       <input
+                        aria-label={copy.teamNickname}
                         onBlur={commitTeamNickname}
                         onChange={(event) => {
                           setTeamNicknameInput(event.target.value)
@@ -2059,11 +2060,10 @@ function App(): React.JSX.Element {
                         value={teamNicknameInput}
                       />
                     </label>
-                  </SettingField>
-                  <SettingField label={copy.teamGroup} hint={copy.teamGroupHint}>
-                    <label className="inline-input">
-                      <span>{copy.teamGroup}</span>
+                    <label className="team-auth__field team-auth__field--group">
+                      <span className="team-auth__label">{copy.teamGroup}</span>
                       <input
+                        aria-label={copy.teamGroup}
                         onBlur={commitTeamGroup}
                         onChange={(event) => {
                           setTeamGroupInput(event.target.value)
@@ -2077,7 +2077,7 @@ function App(): React.JSX.Element {
                         value={teamGroupInput}
                       />
                     </label>
-                  </SettingField>
+                  </div>
                 </div>
 
                 <div className="settings-section">
