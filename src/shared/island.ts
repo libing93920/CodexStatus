@@ -1,15 +1,10 @@
 export type IslandTaskPhase = 'running' | 'completed' | 'failed' | 'stopped'
 export type IslandRequestKind = 'approval' | 'input'
 export type IslandDisplayStatus = 'waiting-approval' | 'waiting-input' | IslandTaskPhase
-export type IslandTaskSource = 'cli' | 'vscode' | 'subagent' | 'unknown'
-
-export function normalizeIslandTaskSource(value: unknown): IslandTaskSource | undefined {
-  if (value === 'cli' || value === 'vscode' || value === 'subagent') return value
-  return typeof value === 'string' ? 'unknown' : undefined
-}
+export type IslandTaskSource = 'cli' | 'vscode' | 'subagent' | 'internal' | 'unknown'
 
 export function shouldNavigateIslandTask(source: IslandTaskSource | undefined): boolean {
-  return source !== 'cli' && source !== 'subagent'
+  return source === 'vscode'
 }
 
 export interface IslandPreferences {
@@ -220,6 +215,10 @@ export class IslandState {
 
   removeTask(hostId: string, threadId: string): void {
     this.tasks.delete(taskKey(hostId, threadId))
+  }
+
+  hasTask(hostId: string, threadId: string): boolean {
+    return this.tasks.has(taskKey(hostId, threadId))
   }
 
   setConnection(patch: Partial<IslandConnectionState>): void {

@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import readline from 'node:readline'
-import { normalizeIslandTaskSource, type IslandTaskSource } from '../../shared/island.ts'
+import type { IslandTaskSource } from '../../shared/island.ts'
+import { classifyIslandTaskIdentity } from './codex-task-identity.ts'
 import { buildCodexSpawnCommand } from './window-keeper-runner.ts'
 
 const INITIALIZE_ID = 1
@@ -54,7 +55,12 @@ export function parseThreadCatalogResult(value: unknown): CodexThreadCatalogEntr
     const record = getRecord(item)
     const id = getString(record?.id)
     if (!id) return []
-    return [{ id, source: normalizeIslandTaskSource(record?.source) ?? 'unknown' }]
+    const identity = classifyIslandTaskIdentity(record?.source, record?.threadSource, {
+      catalog: true,
+      ephemeral: record?.ephemeral,
+      path: record?.path
+    })
+    return [{ id, source: identity.source }]
   })
 }
 

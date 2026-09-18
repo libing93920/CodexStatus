@@ -22,6 +22,190 @@ import { CodexActivityService } from '../src/main/services/codex-activity.ts'
 
 const NOW = 1_000
 
+test('无元数据的Hook与IPC均不能创建任务或依靠payload source冒充身份', () => {
+  const service = activityService(() => undefined)
+  service.threadSources.clear()
+  const followed = []
+  service.ipc = { followThread: (id) => followed.push(id), unfollowThread: () => undefined }
+  for (const name of ['SessionStart', 'UserPromptSubmit', 'PermissionRequest', 'Stop']) {
+    service.handleHookPayload(parseCodexHookPayload({ ...hookPayload(name), source: 'cli' }), NOW)
+  }
+  service.updateIpcTasks([{ ...authoritativeTask('running', 'turn-1'), source: 'vscode' }])
+  assert.equal(service.getSnapshot().tasks.length, 0)
+  assert.equal(service.getSnapshot().connection.lastHookEventAt, undefined)
+  assert.deepEqual(followed, [])
+})
+
+test('后台建议、记忆和子代理即使没有Stop也不进入任务和提醒', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-admission-'))
+  context.after(() => fs.rm(directory, { recursive: true, force: true }))
+  const variants = [
+    { source: { internal: 'memory_consolidation' }, thread_source: 'memory_consolidation' },
+    { source: 'vscode', thread_source: 'ambient_suggestions' },
+    { source: 'cli', thread_source: 'ambient_suggestion_safety' },
+    { source: 'vscode', thread_source: 'subagent' },
+    { source: 'vscode', thread_source: 'unknown-future-task' }
+  ]
+  for (const metadata of variants) {
+    const file = path.join(directory, 'session.jsonl')
+    await fs.writeFile(file, `${JSON.stringify({ type: 'session_meta', payload: metadata })}\n`)
+    const service = activityService(() => undefined)
+    const followed = []
+    service.ipc = { followThread: (id) => followed.push(id), unfollowThread: () => undefined }
+    for (const name of ['SessionStart', 'UserPromptSubmit', 'PermissionRequest']) {
+      service.handleHookPayload({ ...hookPayload(name), transcript_path: file }, NOW)
+    }
+    service.updateIpcTasks([authoritativeTask('running', 'turn-1')])
+    assert.equal(service.getSnapshot().tasks.length, 0)
+    assert.equal(service.hookTaskKeys.size, 0)
+    assert.deepEqual(followed, [])
+  }
+})
+
+test('新内部证据撤销已上岛任务与审批，迟到IPC、Hook和目录不复活', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-revoke-'))
+  context.after(() => fs.rm(directory, { recursive: true, force: true }))
+  const service = activityService(() => undefined)
+  const unfollowed = []
+  service.ipc = { followThread: () => undefined, unfollowThread: (id) => unfollowed.push(id) }
+  service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW)
+  service.handleHookPayload(hookPayload('PermissionRequest'), NOW + 1)
+  assert.equal(service.getSnapshot().tasks[0].requests.length, 1)
+  const file = path.join(directory, 'session.jsonl')
+  await fs.writeFile(
+    file,
+    `${JSON.stringify({ type: 'session_meta', payload: { source: { internal: 'memory_consolidation' } } })}\n`
+  )
+  service.handleHookPayload({ ...hookPayload('PreToolUse'), transcript_path: file }, NOW + 2)
+  assert.equal(service.getSnapshot().tasks.length, 0)
+  assert.equal(service.hookTaskKeys.size, 0)
+  assert.equal(service.hookTurnIds.size, 0)
+  assert.ok(unfollowed.includes('thread-1'))
+  assert.deepEqual(service.registerCatalog([{ id: 'thread-1', source: 'vscode' }]), [])
+  service.updateIpcTasks([authoritativeTask('running', 'turn-1')])
+  service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW + 3)
+  assert.equal(service.getSnapshot().tasks.length, 0)
+})
+
+test('已撤销的稳定拒绝不再付出全量快照成本，首次仍清理', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-revoke-cost-'))
+  context.after(() => fs.rm(directory, { recursive: true, force: true }))
+  const file = path.join(directory, 'session.jsonl')
+  await fs.writeFile(
+    file,
+    `${JSON.stringify({ type: 'session_meta', payload: { source: { internal: 'memory_consolidation' } } })}\n`
+  )
+  const snapshots = []
+  const service = activityService((snapshot) => snapshots.push(snapshot))
+  const payload = { ...hookPayload('PreToolUse'), transcript_path: file }
+
+  const original = IslandState.prototype.getSnapshot
+  let snapshotCalls = 0
+  IslandState.prototype.getSnapshot = function (...args) {
+    snapshotCalls += 1
+    return original.apply(this, args)
+  }
+  context.after(() => {
+    IslandState.prototype.getSnapshot = original
+  })
+
+  service.handleHookPayload(payload, NOW)
+  const afterFirst = snapshotCalls
+  for (let i = 0; i < 100; i += 1) service.handleHookPayload(payload, NOW + i)
+  assert.equal(snapshotCalls, afterFirst, '稳定拒绝不应读取全量快照')
+  assert.equal(
+    service.revokedThreadKeys?.has('local\u0000thread-1'),
+    true,
+    '首次拒绝后应标记已撤销'
+  )
+  assert.equal(snapshots.length, 0, '无残留任务的拒绝不广播')
+})
+
+test('先写internal再撤销已上岛任务：首次不短路，幽灵任务不残留', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-revoke-ghost-'))
+  context.after(() => fs.rm(directory, { recursive: true, force: true }))
+  const file = path.join(directory, 'session.jsonl')
+  await fs.writeFile(
+    file,
+    `${JSON.stringify({ type: 'session_meta', payload: { source: { internal: 'guardian_review' } } })}\n`
+  )
+  const service = activityService(() => undefined)
+  const unfollowed = []
+  service.ipc = { followThread: () => undefined, unfollowThread: (id) => unfollowed.push(id) }
+  service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW)
+  service.handleHookPayload(hookPayload('PermissionRequest'), NOW + 1)
+  assert.equal(service.getSnapshot().tasks.length, 1)
+
+  const payload = { ...hookPayload('PreToolUse'), transcript_path: file }
+  service.handleHookPayload(payload, NOW + 2)
+  assert.equal(service.getSnapshot().tasks.length, 0, '首次拒绝必须清掉已有任务')
+  assert.deepEqual(unfollowed, ['thread-1'])
+  for (let i = 0; i < 100; i += 1) service.handleHookPayload(payload, NOW + 3 + i)
+  assert.equal(service.getSnapshot().tasks.length, 0)
+  assert.deepEqual(unfollowed, ['thread-1'], '稳定拒绝不应重复退订')
+})
+
+test('重新准入清除撤销标记：拒绝→准入→再拒绝仍会退订', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-readmit-revoke-'))
+  context.after(() => fs.rm(directory, { recursive: true, force: true }))
+  const file = path.join(directory, 'session.jsonl')
+  await fs.writeFile(
+    file,
+    `${JSON.stringify({ type: 'session_meta', payload: { source: { internal: 'memory_consolidation' } } })}\n`
+  )
+  const service = activityService(() => undefined)
+  const events = []
+  service.ipc = {
+    followThread: (id) => events.push(['follow', id]),
+    unfollowThread: (id) => events.push(['unfollow', id])
+  }
+  // 线程尚未被目录证实：先清掉 fixture 预置的桌面身份。
+  service.threadSources.clear()
+  const session = { hook_event_name: 'SessionStart', session_id: 'thread-1', turn_id: 'turn-1' }
+  // 1. 未知来源（无 transcript）被拒绝，记录撤销标记。
+  service.handleHookPayload(session, NOW)
+  assert.equal(service.revokedThreadKeys?.has('local\u0000thread-1'), true)
+  // 2. 目录确认后重新准入，撤销标记必须清除。
+  service.registerCatalog([{ id: 'thread-1', source: 'vscode' }])
+  assert.equal(
+    service.revokedThreadKeys?.has('local\u0000thread-1'),
+    false,
+    '重新准入应清除撤销标记'
+  )
+  // 3. 无 transcript 的 SessionStart 重新建立订阅，此时尚无任务。
+  service.handleHookPayload(session, NOW + 1)
+  assert.equal(service.getSnapshot().tasks.length, 0)
+  assert.ok(events.some(([kind, id]) => kind === 'follow' && id === 'thread-1'))
+  // 4. 随后识别为 internal，仍必须真正执行撤销并退订。
+  service.handleHookPayload({ ...hookPayload('PreToolUse'), transcript_path: file }, NOW + 2)
+  assert.equal(service.getSnapshot().tasks.length, 0)
+  assert.equal(
+    events.filter(([kind, id]) => kind === 'unfollow' && id === 'thread-1').length,
+    2,
+    '再次拒绝应再次退订，不能被旧标记短路'
+  )
+})
+
+test('历史桌面缺用途的transcript只有目录证实后才可上岛', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-legacy-'))
+  context.after(() => fs.rm(directory, { recursive: true, force: true }))
+  const file = path.join(directory, 'session.jsonl')
+  await fs.writeFile(
+    file,
+    `${JSON.stringify({ type: 'session_meta', payload: { source: 'vscode' } })}\n`
+  )
+  const service = activityService(() => undefined)
+  service.threadSources.clear()
+  const payload = { ...hookPayload('UserPromptSubmit'), transcript_path: file }
+  service.handleHookPayload(payload, NOW)
+  assert.equal(service.getSnapshot().tasks.length, 0)
+  service.registerCatalog([{ id: 'thread-1', source: 'vscode' }])
+  service.handleHookPayload(payload, NOW + 1)
+  assert.equal(service.getSnapshot().tasks[0].source, 'vscode')
+  service.handleHookPayload({ ...payload, hook_event_name: 'Stop' }, NOW + 2)
+  assert.equal(service.getSnapshot().tasks[0].phase, 'completed')
+})
+
 test('灵动岛在主屏顶部中央且支持负坐标显示器', () => {
   assert.deepEqual(
     resolveIslandWindowBounds(
@@ -131,6 +315,7 @@ test('IPC 活动列表移除任务时清理已取消的执行态', () => {
       latest = snapshot
     }
   })
+  service.threadSources.set('local\u0000cancelled-thread', 'vscode')
   service.updateIpcTasks?.([
     {
       hostId: 'local',
@@ -175,6 +360,7 @@ test('IPC 终态后的模糊 active 快照不复活已结束任务', () => {
       latest = snapshot
     }
   })
+  service.threadSources.set('local\u0000thread-1', 'vscode')
   const running = authoritativeTask('running', 'turn-1')
   service.updateIpcTasks?.([running])
   service.updateIpcTasks?.([{ ...running, phase: 'completed', latestEventId: 'ipc:completed' }])
@@ -200,6 +386,7 @@ test('已查看的 IPC 完成任务不会被后续快照重新加入', () => {
       latest = snapshot
     }
   })
+  service.threadSources.set('local\u0000thread-1', 'vscode')
   const completed = authoritativeTask('completed', 'turn-1')
   service.updateIpcTasks?.([completed])
   service.markViewed(completed.latestEventId)
@@ -222,6 +409,7 @@ test('Hook 任务不会被 IPC 缺失或完成快照覆盖', () => {
 
 test('缺少 turn_id 时新输入建立新回合且后续 Hook 继承', () => {
   const service = activityService(() => undefined)
+  service.threadSources.set('local\u0000thread-without-turn', 'vscode')
   const payload = (hookEventName) => ({
     hook_event_name: hookEventName,
     session_id: 'thread-without-turn',
@@ -246,6 +434,7 @@ test('缺少 turn_id 时新输入建立新回合且后续 Hook 继承', () => {
 
 test('旧回合迟到 Hook 不覆盖当前回合或回退回合映射', () => {
   const service = activityService(() => undefined)
+  service.threadSources.set('local\u0000thread-with-late-turn', 'vscode')
   const payload = (hookEventName, turnId) => ({
     hook_event_name: hookEventName,
     session_id: 'thread-with-late-turn',
@@ -305,6 +494,7 @@ test('IPC 只向 Hook 任务补充待回复并可清除', () => {
     latest = snapshot
   })
   service.handleHookPayload?.(hookPayload('UserPromptSubmit'), NOW)
+  service.threadSources.set('local\u0000thread-1', 'vscode')
   const running = authoritativeTask('running', 'turn-1')
   service.updateIpcTasks?.([
     {
@@ -390,13 +580,16 @@ test('提醒暂停后只等待剩余时长', () => {
   assert.equal(elapsed, 1)
 })
 
-test('CLI 任务不订阅或合并私有 IPC，未知来源仍跟踪', () => {
+test('CLI 任务不订阅或合并私有 IPC，未知来源不跟踪', () => {
   let latest
   const service = activityService((snapshot) => {
     latest = snapshot
   })
   const followed = []
-  service.ipc = { followThread: (threadId) => followed.push(threadId) }
+  service.ipc = {
+    unfollowThread: () => undefined,
+    followThread: (threadId) => followed.push(threadId)
+  }
   service.threadSources?.set('local\u0000thread-1', 'cli')
   service.handleHookPayload?.(hookPayload('UserPromptSubmit'), NOW)
   assert.deepEqual(followed, [])
@@ -425,8 +618,11 @@ test('CLI 任务不订阅或合并私有 IPC，未知来源仍跟踪', () => {
     { ...hookPayload('UserPromptSubmit'), session_id: 'unknown-thread' },
     NOW + 1
   )
-  assert.deepEqual(followed, ['unknown-thread'])
-  assert.equal(latest.tasks.find((task) => task.threadId === 'unknown-thread')?.source, 'unknown')
+  assert.deepEqual(followed, [])
+  assert.equal(
+    latest.tasks.some((task) => task.threadId === 'unknown-thread'),
+    false
+  )
 })
 
 test('子代理 transcript 被识别并在 Hook 进入状态机前忽略', async (context) => {
@@ -445,7 +641,10 @@ test('子代理 transcript 被识别并在 Hook 进入状态机前忽略', async
     assert.equal(readCodexTranscriptSource(transcriptPath), 'subagent')
     const service = activityService(() => undefined)
     const followed = []
-    service.ipc = { followThread: (threadId) => followed.push(threadId) }
+    service.ipc = {
+      unfollowThread: () => undefined,
+      followThread: (threadId) => followed.push(threadId)
+    }
     service.handleHookPayload?.(
       parseCodexHookPayload({
         ...hookPayload('UserPromptSubmit'),
@@ -477,7 +676,10 @@ test('transcript 尚未可读时首个子代理 Hook 延迟重放后仍忽略', 
   const retries = []
   service.scheduleHookRetry = (callback) => retries.push(callback)
   const followed = []
-  service.ipc = { followThread: (threadId) => followed.push(threadId) }
+  service.ipc = {
+    unfollowThread: () => undefined,
+    followThread: (threadId) => followed.push(threadId)
+  }
   service.handleHookPayload?.(payload, NOW)
   assert.equal(retries.length, 1)
   assert.deepEqual(followed, [])
@@ -495,7 +697,7 @@ test('transcript 尚未可读时首个子代理 Hook 延迟重放后仍忽略', 
   assert.equal(service.hookTaskKeys?.has(key), false)
 })
 
-test('transcript 重试仍不可读时同一 Hook 按 unknown 处理且不再次调度', async (context) => {
+test('transcript 重试仍不可读时拒绝上岛且不再次调度', async (context) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-status-unknown-race-'))
   const transcriptPath = path.join(directory, 'session.jsonl')
   const sessionId = 'unknown-race-thread'
@@ -510,7 +712,10 @@ test('transcript 重试仍不可读时同一 Hook 按 unknown 处理且不再次
   const retries = []
   service.scheduleHookRetry = (callback) => retries.push(callback)
   const followed = []
-  service.ipc = { followThread: (threadId) => followed.push(threadId) }
+  service.ipc = {
+    unfollowThread: () => undefined,
+    followThread: (threadId) => followed.push(threadId)
+  }
   service.handleHookPayload?.(payload, NOW)
   assert.equal(retries.length, 1)
   assert.equal(service.getSnapshot().tasks.length, 0)
@@ -518,9 +723,8 @@ test('transcript 重试仍不可读时同一 Hook 按 unknown 处理且不再次
   retries[0]()
 
   assert.equal(retries.length, 1)
-  assert.deepEqual(followed, [sessionId])
-  assert.equal(service.getSnapshot().tasks[0]?.threadId, sessionId)
-  assert.equal(service.getSnapshot().tasks[0]?.source, undefined)
+  assert.deepEqual(followed, [])
+  assert.equal(service.getSnapshot().tasks.length, 0)
 })
 
 test('transcript 重试回调在服务停止后不再处理 Hook', async (context) => {
@@ -540,6 +744,7 @@ test('transcript 重试回调在服务停止后不再处理 Hook', async (contex
   service.scheduleHookRetry = (callback) => retries.push(callback)
   const followed = []
   service.ipc = {
+    unfollowThread: () => undefined,
     followThread: (threadId) => followed.push(threadId),
     stop: () => undefined
   }
@@ -554,18 +759,16 @@ test('transcript 重试回调在服务停止后不再处理 Hook', async (contex
   assert.equal(service.hookTaskKeys?.has(key), false)
 })
 
-test('目录中的 CLI 任务不进入私有 IPC 初始订阅', async () => {
-  const source = await fs.readFile(
-    new URL('../src/main/services/codex-activity.ts', import.meta.url),
-    'utf8'
-  )
-  const start = source.indexOf('async start()')
-  const end = source.indexOf('\n  async stop()', start)
-  assert.ok(start >= 0)
-  assert.ok(end > start)
-  assert.match(
-    source.slice(start, end),
-    /for \(const entry of catalog\) \{\s*this\.threadSources\.set\(createTaskKey\('local', entry\.id\), entry\.source\)\s*if \(entry\.source !== 'cli'\) threadIds\.push\(entry\.id\)/
+test('目录初始订阅只包含已准入桌面，CLI与未知不订阅', () => {
+  const service = activityService(() => undefined)
+  assert.deepEqual(
+    service.registerCatalog([
+      { id: 'desktop', source: 'vscode' },
+      { id: 'cli', source: 'cli' },
+      { id: 'internal', source: 'internal' },
+      { id: 'unknown', source: 'unknown' }
+    ]),
+    ['desktop']
   )
 })
 
@@ -603,9 +806,9 @@ test('可解析但没有来源的 transcript 稳定缓存为 unknown', async (co
     session_id: 'unknown-source',
     transcript_path: transcriptPath
   }
-  assert.equal(service.resolveHookSource?.(payload), 'unknown')
+  assert.equal(service.resolveHookIdentity?.(payload)?.source, 'unknown')
   await fs.unlink(transcriptPath)
-  assert.equal(service.resolveHookSource?.(payload), 'unknown')
+  assert.equal(service.resolveHookIdentity?.(payload)?.source, 'unknown')
 })
 
 test('Hook 来源临时读盘失败在冷却后重试并恢复', async (context) => {
@@ -621,7 +824,7 @@ test('Hook 来源临时读盘失败在冷却后重试并恢复', async (context)
     transcript_path: transcriptPath
   }
   const key = 'local\u0000retry-source'
-  assert.equal(service.resolveHookSource?.(payload), undefined)
+  assert.equal(service.resolveHookIdentity?.(payload)?.source, undefined)
   assert.ok(service.hookSourceRetryAt?.get(key) > Date.now())
 
   await fs.writeFile(
@@ -629,9 +832,9 @@ test('Hook 来源临时读盘失败在冷却后重试并恢复', async (context)
     `${JSON.stringify({ type: 'session_meta', payload: { source: 'cli' } })}\n`
   )
   service.hookSourceRetryAt?.set(key, Date.now() + 60_000)
-  assert.equal(service.resolveHookSource?.(payload), undefined)
+  assert.equal(service.resolveHookIdentity?.(payload)?.source, undefined)
   service.hookSourceRetryAt?.set(key, 0)
-  assert.equal(service.resolveHookSource?.(payload), 'cli')
+  assert.equal(service.resolveHookIdentity?.(payload)?.source, 'cli')
   assert.equal(service.hookSourceRetryAt?.has(key), false)
 })
 
@@ -651,14 +854,17 @@ test('transcript 延迟识别后普通 CLI/VSCode Hook 可恢复', async (contex
     const retries = []
     service.scheduleHookRetry = (callback) => retries.push(callback)
     const followed = []
-    service.ipc = { followThread: (threadId) => followed.push(threadId) }
+    service.ipc = {
+      unfollowThread: () => undefined,
+      followThread: (threadId) => followed.push(threadId)
+    }
     service.handleHookPayload?.(payload, NOW)
     assert.equal(retries.length, 1)
     assert.equal(service.getSnapshot().tasks.length, 0)
 
     await fs.writeFile(
       transcriptPath,
-      `${JSON.stringify({ type: 'session_meta', payload: { source } })}\n`
+      `${JSON.stringify({ type: 'session_meta', payload: { source, thread_source: 'user' } })}\n`
     )
     retries[0]()
 
@@ -667,12 +873,12 @@ test('transcript 延迟识别后普通 CLI/VSCode Hook 可恢复', async (contex
   }
 })
 
-test('灵动岛点击仅排除 CLI 和子代理来源', () => {
+test('灵动岛点击仅允许已准入的桌面来源', () => {
   assert.equal(shouldNavigateIslandTask('cli'), false)
   assert.equal(shouldNavigateIslandTask('vscode'), true)
   assert.equal(shouldNavigateIslandTask('subagent'), false)
-  assert.equal(shouldNavigateIslandTask('unknown'), true)
-  assert.equal(shouldNavigateIslandTask(undefined), true)
+  assert.equal(shouldNavigateIslandTask('unknown'), false)
+  assert.equal(shouldNavigateIslandTask(undefined), false)
 })
 
 test('灵动岛点击在导航分支之后统一记录已查看', async () => {
@@ -747,13 +953,16 @@ function authoritativeTask(phase, turnId) {
 }
 
 function activityService(onSnapshot) {
-  return new CodexActivityService({
+  const service = new CodexActivityService({
     cwd: '.',
     descriptorPath: 'unused',
     onSnapshot,
     // 测试断言同步读取最新快照,关闭 emit debounce
     emitDebounceMs: 0
   })
+  service.threadSources.set('local\u0000thread-1', 'vscode')
+  service.threadSources.set('local\u0000thread-2', 'vscode')
+  return service
 }
 
 function hookPayload(hookEventName) {

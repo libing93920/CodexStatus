@@ -1,8 +1,9 @@
 import type { IslandSnapshot, IslandTask, IslandTaskSource } from '../../shared/island.ts'
 import { getDisplayStatus, IslandState } from '../../shared/island.ts'
+import { isAdmittedIslandTaskSource, type IslandTaskIdentity } from './codex-task-identity.ts'
 import {
   mapCodexHookEvent,
-  readCodexTranscriptSource,
+  readCodexTranscriptIdentity,
   type CodexHookPayload
 } from './codex-hook-events.ts'
 import { CodexHookIngress } from './codex-hook-ingress.ts'
@@ -33,10 +34,12 @@ export class CodexActivityService {
   private readonly hookTaskKeys = new Set<string>()
   private readonly hookTurnIds = new Map<string, string>()
   private readonly threadSources = new Map<string, IslandTaskSource>()
-  private readonly hookSourceCache = new Map<string, IslandTaskSource>()
+  private readonly hookSourceCache = new Map<string, IslandTaskIdentity>()
   private readonly hookSourceRetryAt = new Map<string, number>()
   private readonly finishedHookTurnIds = new Set<string>()
   private readonly finishedThreadIds = new Set<string>()
+  // 记录已完成撤销的线程：身份确认且清理跑完后，后续同源拒绝无需再付出全量快照与清理成本。
+  private readonly revokedThreadKeys = new Set<string>()
   private ipc?: CodexIpcClient
   private stopped = false
 
@@ -58,15 +61,13 @@ export class CodexActivityService {
     this.emitNow()
     const threadIds: string[] = []
     this.threadSources.clear()
+    this.revokedThreadKeys.clear()
     this.hookSourceCache.clear()
     this.hookSourceRetryAt.clear()
     try {
       if (this.options.executable) {
         const catalog = await listCodexThreadCatalog(this.options.executable, this.options.cwd)
-        for (const entry of catalog) {
-          this.threadSources.set(createTaskKey('local', entry.id), entry.source)
-          if (entry.source !== 'cli') threadIds.push(entry.id)
-        }
+        threadIds.push(...this.registerCatalog(catalog))
         logDiag(`ipc catalog success threads=${catalog.length}`)
       } else {
         logDiag('ipc catalog skipped reason=executable-unresolved')
@@ -81,7 +82,12 @@ export class CodexActivityService {
       threadIds,
       onTasks: (tasks) => this.updateIpcTasks(tasks),
       onVisibleThread: (threadId) => {
-        this.state.setVisibleThread(threadId)
+        const source = threadId && this.threadSources.get(createTaskKey('local', threadId))
+        if (source === 'vscode') {
+          this.revokedThreadKeys.delete(createTaskKey('local', threadId!))
+          this.ipc?.followThread(threadId!)
+        }
+        this.state.setVisibleThread(source === 'vscode' ? threadId : undefined)
         this.emit()
       },
       onConnection: (connected) => {
@@ -102,6 +108,7 @@ export class CodexActivityService {
     this.ipc = undefined
     this.ipcTaskKeys.clear()
     this.threadSources.clear()
+    this.revokedThreadKeys.clear()
     this.hookSourceCache.clear()
     this.hookSourceRetryAt.clear()
     this.hookTaskKeys.clear()
@@ -115,6 +122,26 @@ export class CodexActivityService {
 
   getSnapshot(): IslandSnapshot {
     return this.state.getSnapshot()
+  }
+
+  private registerCatalog(catalog: { id: string; source: IslandTaskSource }[]): string[] {
+    const threadIds: string[] = []
+    for (const entry of catalog) {
+      const key = createTaskKey('local', entry.id)
+      const cached = this.hookSourceCache.get(key)
+      // 启动目录可能晚于 Hook 返回，不覆盖已读到的明确内部身份。
+      const source =
+        entry.source === 'internal' || entry.source === 'subagent'
+          ? entry.source
+          : cached && !cached.legacyDesktopCandidate
+            ? cached.source
+            : entry.source
+      this.threadSources.set(key, source)
+      if (isAdmittedIslandTaskSource(source)) this.revokedThreadKeys.delete(key)
+      if (source === 'vscode') threadIds.push(entry.id)
+      else if (source !== 'cli') this.rejectThread('local', entry.id, source)
+    }
+    return threadIds
   }
 
   markViewed(eventId: string): void {
@@ -142,15 +169,22 @@ export class CodexActivityService {
     receivedAt = Date.now(),
     isRetry = false
   ): void {
+    if (this.stopped) return
     recordPerf('island:hookEvent')
-    const source = this.resolveHookSource(payload)
-    if (payload.transcript_path && source === undefined && !isRetry) {
+    const identity = this.resolveHookIdentity(payload)
+    if (payload.transcript_path && identity === undefined && !isRetry) {
       this.scheduleHookSourceRetry(payload, receivedAt)
       return
     }
-    if (source === 'subagent') return
+    if (!identity || !identity.admitted) {
+      this.rejectThread('local', payload.session_id, identity?.source ?? 'unknown')
+      return
+    }
+    const source = identity.source
     this.state.noteHookEvent(receivedAt)
-    if (source !== 'cli') this.ipc?.followThread(payload.session_id)
+    // 重新准入意味着撤销不再完成：订阅会重建，必须清掉旧标记，否则后续拒绝会短路。
+    this.revokedThreadKeys.delete(createTaskKey('local', payload.session_id))
+    if (source === 'vscode') this.ipc?.followThread(payload.session_id)
     const normalizedPayload = this.resolveHookTurn(
       source ? { ...payload, source } : payload,
       receivedAt
@@ -188,25 +222,64 @@ export class CodexActivityService {
     timer.unref?.()
   }
 
-  private resolveHookSource(payload: CodexHookPayload): IslandTaskSource | undefined {
+  private resolveHookIdentity(payload: CodexHookPayload): IslandTaskIdentity | undefined {
     const key = createTaskKey('local', payload.session_id)
-    if (this.hookSourceCache.has(key)) return this.hookSourceCache.get(key)
     const catalogSource = this.threadSources.get(key)
-    if (catalogSource === 'cli' || catalogSource === 'vscode') return catalogSource
-    if (!payload.transcript_path) return catalogSource
+    const known =
+      catalogSource === undefined
+        ? undefined
+        : {
+            source: catalogSource,
+            admitted: isAdmittedIslandTaskSource(catalogSource),
+            legacyDesktopCandidate: false
+          }
+    if (catalogSource === 'internal' || catalogSource === 'subagent') return known
+    const cached = this.hookSourceCache.get(key)
+    if (cached) return cached.legacyDesktopCandidate && catalogSource === 'vscode' ? known : cached
+    if (!payload.transcript_path) return known
     const now = Date.now()
     const retryAt = this.hookSourceRetryAt.get(key)
-    if (retryAt !== undefined && now < retryAt) return catalogSource
-    const source = readCodexTranscriptSource(payload.transcript_path)
-    if (source !== undefined) {
+    if (retryAt !== undefined && now < retryAt) return known?.admitted ? known : undefined
+    const identity = readCodexTranscriptIdentity(payload.transcript_path)
+    if (identity !== undefined) {
       this.hookSourceRetryAt.delete(key)
-      this.hookSourceCache.set(key, source)
-      this.threadSources.set(key, source)
-      return source
+      this.hookSourceCache.set(key, identity)
+      if (identity.legacyDesktopCandidate && catalogSource === 'vscode') return known
+      this.threadSources.set(key, identity.source)
+      if (isAdmittedIslandTaskSource(identity.source)) this.revokedThreadKeys.delete(key)
+      return identity
     }
     // 文件尚未创建或首行仍在写入时允许后续恢复，但限制高频 Hook 的同步读盘次数。
     this.hookSourceRetryAt.set(key, now + HOOK_SOURCE_RETRY_MS)
-    return catalogSource
+    return known?.admitted ? known : undefined
+  }
+
+  private rejectThread(hostId: string, threadId: string, source: IslandTaskSource): void {
+    const key = createTaskKey(hostId, threadId)
+    // 已确认拒绝、撤销已完成、且快照无残留任务时才短路；只查身份会漏掉“先写 internal 再撤销已有任务”的首次清理。
+    if (
+      this.threadSources.get(key) === source &&
+      this.revokedThreadKeys.has(key) &&
+      !this.state.hasTask(hostId, threadId)
+    ) {
+      return
+    }
+    const hadTask = this.state.hasTask(hostId, threadId)
+    if (this.threadSources.get(key) !== source || hadTask) {
+      logDiag(`island admission rejected thread=${JSON.stringify(threadId)} source=${source}`)
+    }
+    this.threadSources.set(key, source)
+    this.revokedThreadKeys.add(key)
+    this.state.removeTask(hostId, threadId)
+    this.hookTaskKeys.delete(key)
+    this.ipcTaskKeys.delete(key)
+    this.hookTurnIds.delete(threadId)
+    this.finishedThreadIds.delete(threadId)
+    for (const turnKey of this.finishedHookTurnIds) {
+      if (turnKey.startsWith(`${threadId}\u0000`)) this.finishedHookTurnIds.delete(turnKey)
+    }
+    if (hostId === 'local') this.ipc?.unfollowThread(threadId)
+    if (hadTask) this.emitNow()
   }
 
   private resolveHookTurn(
@@ -230,16 +303,18 @@ export class CodexActivityService {
   }
 
   private updateIpcTasks(tasks: IslandTask[]): void {
+    if (this.stopped) return
     recordPerf('island:ipcUpdate')
-    const sourcedTasks = tasks
-      .filter((task) => {
-        const source = this.threadSources.get(createTaskKey(task.hostId, task.threadId))
-        return source !== 'cli' && task.source !== 'cli'
-      })
-      .map((task) => {
-        const source = this.threadSources.get(createTaskKey(task.hostId, task.threadId))
-        return source ? { ...task, source } : task
-      })
+    const sourcedTasks: IslandTask[] = []
+    for (const task of tasks) {
+      const source = this.threadSources.get(createTaskKey(task.hostId, task.threadId))
+      if (source === 'cli') continue
+      if (source !== 'vscode') {
+        this.rejectThread(task.hostId, task.threadId, source ?? 'unknown')
+        continue
+      }
+      sourcedTasks.push({ ...task, source })
+    }
     this.supplementHookTasks(sourcedTasks)
     const ipcTasks = sourcedTasks.filter(
       (task) => !this.hookTaskKeys.has(createTaskKey(task.hostId, task.threadId))

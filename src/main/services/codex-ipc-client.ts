@@ -100,6 +100,16 @@ export class CodexIpcClient {
     this.sendFollowing(threadId, true)
   }
 
+  unfollowThread(threadId: string): void {
+    const following = this.threadIds.delete(threadId)
+    const key = conversationKey('local', threadId)
+    this.conversations.delete(key)
+    this.activeConversationKeys.delete(key)
+    this.terminalTasks.delete(key)
+    this.projectedTaskCache.delete(key)
+    if (following) this.sendFollowing(threadId, false)
+  }
+
   private initialize(socket: Socket): void {
     logDiag('ipc initialize sent')
     this.initializeTimer = setTimeout(() => {
@@ -169,7 +179,6 @@ export class CodexIpcClient {
     if (sourceClientId === this.clientId) return
     const threadId = getString(params?.conversationId)
     const following = params?.following === true
-    if (threadId && following) this.followThread(threadId)
     if (threadId) this.options.onVisibleThread(following ? threadId : undefined)
   }
 
@@ -179,6 +188,8 @@ export class CodexIpcClient {
     const hostId = getString(params?.hostId) ?? 'local'
     const change = getRecord(params?.change)
     if (!threadId || !change) throw new Error('Invalid state change')
+    // 拒绝会话退订后仍可能收到在途补丁，不能重建缓存或触发 revision 重连。
+    if (!this.threadIds.has(threadId)) return
     const key = conversationKey(hostId, threadId)
     const previous = this.conversations.get(key)
     const previousState = previous?.state
@@ -555,8 +566,7 @@ function isPathSegment(value: unknown): value is PathSegment {
 function parseArrayIndex(value: PathSegment, length: number, allowEnd = false): number {
   const index = Number(value)
   const max = allowEnd ? length : length - 1
-  if (!Number.isInteger(index) || index < 0 || index > max)
-    throw new Error('Invalid array index')
+  if (!Number.isInteger(index) || index < 0 || index > max) throw new Error('Invalid array index')
   return index
 }
 

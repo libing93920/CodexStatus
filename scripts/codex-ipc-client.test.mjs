@@ -9,7 +9,7 @@ import {
 } from '../src/main/services/codex-ipc-client.ts'
 import { getDisplayStatus } from '../src/shared/island.ts'
 
-test('其他客户端发现的新任务只补充一次本地订阅', () => {
+test('其他客户端发现任务只通知服务层，未准入前不自动订阅', () => {
   const visibleThreads = []
   const followed = []
   const client = new CodexIpcClient({
@@ -24,9 +24,40 @@ test('其他客户端发现的新任务只补充一次本地订阅', () => {
   client.handleFollowing?.({ conversationId: 'new-thread', following: true }, 'codex-ui')
   client.handleFollowing?.({ conversationId: 'new-thread', following: false }, 'codex-ui')
 
-  assert.deepEqual(followed, [{ threadId: 'new-thread', following: true }])
-  assert.equal(client.threadIds?.has('new-thread'), true)
+  assert.deepEqual(followed, [])
+  assert.equal(client.threadIds?.has('new-thread'), false)
   assert.deepEqual(visibleThreads, ['new-thread', 'new-thread', undefined])
+  client.followThread('known-approved')
+  client.followThread('known-approved')
+  assert.deepEqual(followed, [{ threadId: 'known-approved', following: true }])
+})
+
+test('退订清除投影缓存并忽略迟到补丁，其他任务不受影响', () => {
+  const client = new CodexIpcClient({
+    threadIds: ['rejected', 'kept'],
+    onTasks: () => undefined,
+    onVisibleThread: () => undefined,
+    onConnection: () => undefined
+  })
+  const following = []
+  client.sendFollowing = (threadId, value) => following.push([threadId, value])
+  const key = 'local\u0000rejected'
+  client.conversations.set(key, { revision: 1, state: {} })
+  client.activeConversationKeys.add(key)
+  client.projectedTaskCache.set(key, { revision: 1 })
+  client.unfollowThread('rejected')
+  assert.equal(client.conversations.has(key), false)
+  assert.equal(client.activeConversationKeys.has(key), false)
+  assert.equal(client.projectedTaskCache.has(key), false)
+  assert.equal(client.threadIds.has('kept'), true)
+  assert.deepEqual(following, [['rejected', false]])
+  assert.doesNotThrow(() =>
+    client.handleStateChange({
+      conversationId: 'rejected',
+      change: { type: 'patches', baseRevision: 1, revision: 2, patches: [] }
+    })
+  )
+  assert.equal(client.conversations.has(key), false)
 })
 
 test('应用连续 revision 路径补丁且不修改原快照', () => {
@@ -287,7 +318,7 @@ test('IPC 未变化的历史终态不重复通知', () => {
 test('前一帧只有模糊 active 时新失败 turn 仍会输出终态', () => {
   const outputs = []
   const client = new CodexIpcClient({
-    threadIds: [],
+    threadIds: ['thread-1'],
     onTasks: (tasks) => outputs.push(tasks),
     onVisibleThread: () => undefined,
     onConnection: () => undefined

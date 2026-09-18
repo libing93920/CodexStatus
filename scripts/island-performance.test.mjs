@@ -58,6 +58,8 @@ function createService() {
     descriptorPath: 'unused',
     onSnapshot: (snapshot) => snapshots.push(snapshot)
   })
+  for (const id of ['thread', 'ipc-thread', 'second'])
+    service.threadSources.set(`local\u0000${id}`, 'vscode')
   const hook = (hook_event_name, extra = {}) =>
     service.handleHookPayload({
       hook_event_name,

@@ -1,11 +1,11 @@
 import { closeSync, openSync, readSync } from 'node:fs'
 import {
-  normalizeIslandTaskSource,
   type IslandActivityEvent,
   type IslandRequest,
   type IslandRequestKind,
   type IslandTaskSource
 } from '../../shared/island.ts'
+import { classifyIslandTaskIdentity, type IslandTaskIdentity } from './codex-task-identity.ts'
 
 const SUPPORTED_EVENTS = new Set([
   'SessionStart',
@@ -50,6 +50,12 @@ export function parseCodexHookPayload(value: unknown): CodexHookPayload | undefi
 export function readCodexTranscriptSource(
   transcriptPath: string | undefined
 ): IslandTaskSource | undefined {
+  return readCodexTranscriptIdentity(transcriptPath)?.source
+}
+
+export function readCodexTranscriptIdentity(
+  transcriptPath: string | undefined
+): IslandTaskIdentity | undefined {
   if (!transcriptPath) return undefined
   let descriptor: number | undefined
   try {
@@ -59,10 +65,11 @@ export function readCodexTranscriptSource(
     const firstLine = buffer.subarray(0, bytesRead).toString('utf8').split(/\r?\n/, 1)[0]
     const record = getRecord(JSON.parse(firstLine.replace(/^\uFEFF/, '')))
     // 首行已成功解析但没有可识别来源时，后续重读同一首行没有收益。
-    if (record?.type !== 'session_meta') return 'unknown'
+    if (record?.type !== 'session_meta') return classifyIslandTaskIdentity(undefined, undefined)
     const payload = getRecord(record.payload)
-    if (isSubagentTranscript(payload)) return 'subagent'
-    return normalizeIslandTaskSource(payload?.source) ?? 'unknown'
+    return classifyIslandTaskIdentity(payload?.source, payload?.thread_source, {
+      ephemeral: payload?.ephemeral
+    })
   } catch {
     return undefined
   } finally {
@@ -139,10 +146,4 @@ function getRecord(value: unknown): Record<string, unknown> | undefined {
 
 function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
-}
-
-function isSubagentTranscript(payload: Record<string, unknown> | undefined): boolean {
-  const threadSource = getString(payload?.thread_source)
-  if (threadSource === 'subagent') return true
-  return getRecord(getRecord(payload?.source)?.subagent) !== undefined
 }
