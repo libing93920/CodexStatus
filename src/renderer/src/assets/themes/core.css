@@ -58,6 +58,16 @@
   --capsule-stat-value-font: 14px;
   --capsule-stat-pad-y: 0px;
   --capsule-stat-pad-x: 0px;
+
+  /* 团队凭据:默认青蓝深色卡片格,主题变量显式列出便于对照其余主题 */
+  --ta-gap: 10px;
+  --ta-divider: var(--panel-line);
+  --ta-radius: var(--panel-radius-md);
+  --ta-bg: var(--panel-card-2);
+  --ta-border: 1px solid var(--panel-line);
+  --ta-label-color: var(--panel-muted);
+  --ta-input-color: var(--panel-text);
+  --ta-placeholder: var(--panel-muted);
 }
 
 /* 入场:柔和淡入上浮(默认主题,低调过场) */

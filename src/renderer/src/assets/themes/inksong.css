@@ -1281,6 +1281,24 @@
   border-color: #b3402f;
   box-shadow: 0 0 0 3px rgba(179, 64, 47, 0.12);
 }
+/* 团队凭据:两方朱丝栏名刺,纸底墨框直角;标签朱砂色 + 竖分栏线 */
+[data-theme='inksong'] .team-auth {
+  --ta-gap: 10px;
+  --ta-divider: rgba(90, 75, 45, 0.4);
+  --ta-radius: 2px;
+  --ta-bg: #fffef6;
+  --ta-border: 1px solid rgba(90, 75, 45, 0.4);
+  --ta-font: Georgia, 'Noto Serif SC', 'Microsoft YaHei UI', serif;
+  --ta-label-color: #b3402f;
+  --ta-label-size: 12.5px;
+  --ta-label-weight: 700;
+  --ta-input-color: #211c12;
+  --ta-placeholder: #a99b83;
+}
+[data-theme='inksong'] .team-auth__field:focus-within {
+  border-color: #b3402f;
+  box-shadow: 0 0 0 3px rgba(179, 64, 47, 0.12);
+}
 
 /* 团队广播:鱼雁往还——信笺格纹纸条 */
 [data-theme='inksong'] .team-broadcast {

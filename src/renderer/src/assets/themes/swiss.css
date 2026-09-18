@@ -1105,6 +1105,40 @@
     inset 2px 2px 0 rgba(16, 16, 18, 0.15),
     3px 3px 0 rgba(208, 42, 36, 0.4);
 }
+/* 团队凭据:两块编辑部登记格,硬黑边 + 偏移阴影;标签是红/青/黑轮换色块 */
+[data-theme='swiss'] .team-auth {
+  --ta-gap: 10px;
+  --ta-divider: rgba(255, 255, 255, 0.45);
+  --ta-radius: 0;
+  --ta-bg: #ffffff;
+  --ta-border: 2px solid #101012;
+  --ta-shadow: 3px 3px 0 rgba(16, 16, 18, 0.2);
+  --ta-font: 'Helvetica Neue', Helvetica, 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  --ta-pad-x: 12px;
+  --ta-label-color: #ffffff;
+  --ta-label-size: 11px;
+  --ta-label-weight: 800;
+  --ta-label-spacing: 0.15em;
+  --ta-input-color: #101012;
+  --ta-input-weight: 700;
+  --ta-placeholder: rgba(16, 16, 18, 0.4);
+}
+[data-theme='swiss'] .team-auth__label {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  margin: 0 12px 0 calc(var(--ta-pad-x, 12px) * -1);
+  padding: 0 10px;
+  background: var(--sc, #d02a24);
+  text-transform: uppercase;
+}
+[data-theme='swiss'] .team-auth__field:nth-child(2) {
+  --sc: #1f4d5c;
+}
+[data-theme='swiss'] .team-auth__field:focus-within {
+  border-color: #101012;
+  box-shadow: 3px 3px 0 rgba(208, 42, 36, 0.4);
+}
 
 /* 团队公告:编辑部通知,纸底墨边 + 红色左边条(参考稿 team-announcement) */
 [data-theme='swiss'] .team-announcement {

@@ -1441,6 +1441,25 @@
 [data-theme='greenhouse'] .inline-input:focus-within {
   border-color: #4d8b5a;
 }
+/* 团队凭据:两块苗圃木牌,木色描边 + 新芽绿标签 */
+[data-theme='greenhouse'] .team-auth {
+  --ta-gap: 10px;
+  --ta-divider: rgba(122, 92, 64, 0.35);
+  --ta-radius: 12px;
+  --ta-bg: #fdfdfa;
+  --ta-border: 1px solid rgba(122, 92, 64, 0.4);
+  --ta-font: 'Trebuchet MS', 'Microsoft YaHei UI', Verdana, sans-serif;
+  --ta-label-color: #4d8b5a;
+  --ta-label-size: 12.5px;
+  --ta-label-weight: 700;
+  --ta-input-color: #33452c;
+  --ta-input-weight: 700;
+  --ta-placeholder: #93a382;
+}
+[data-theme='greenhouse'] .team-auth__field:focus-within {
+  border-color: #4d8b5a;
+  box-shadow: 0 0 0 3px rgba(77, 139, 90, 0.15);
+}
 
 /* ---------- team-broadcast:水塔下的闲谈 ---------- */
 

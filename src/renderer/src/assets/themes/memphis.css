@@ -1105,6 +1105,48 @@
   border-color: #ff5c8a;
   box-shadow: 4px 4px 0 #ff5c8a;
 }
+/* 团队凭据:两块贴纸标签,粗墨边 + 错位实色阴影;标签是歪斜色块 */
+[data-theme='memphis'] .team-auth {
+  --ta-gap: 11px;
+  --ta-divider: #1c1a17;
+  --ta-divider-width: 3px;
+  --ta-radius: 0;
+  --ta-bg: #fffdf7;
+  --ta-border: 3.5px solid #1c1a17;
+  --ta-shadow: 4px 4px 0 #f0e4cf;
+  --ta-font: 'Arial Black', 'Microsoft YaHei UI', sans-serif;
+  --ta-pad-x: 12px;
+  --ta-label-color: #fffdf7;
+  --ta-label-size: 11.5px;
+  --ta-label-weight: 900;
+  --ta-label-spacing: 1px;
+  --ta-input-color: #1c1a17;
+  --ta-input-weight: 900;
+  --ta-placeholder: #b3aa99;
+}
+[data-theme='memphis'] .team-auth__label {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  margin: 0 12px 0 calc(var(--ta-pad-x, 12px) * -1);
+  padding: 0 10px;
+  background: #ff5c8a;
+  transform: rotate(-1.5deg);
+}
+[data-theme='memphis'] .team-auth__field:nth-child(2) .team-auth__label {
+  background: #3a6cff;
+  transform: rotate(1.5deg);
+}
+[data-theme='memphis'] .team-auth__field:nth-child(odd) {
+  transform: rotate(-0.5deg);
+}
+[data-theme='memphis'] .team-auth__field:nth-child(2) {
+  --ta-shadow: 4px 4px 0 #ffc93c;
+}
+[data-theme='memphis'] .team-auth__field:focus-within {
+  border-color: #1c1a17;
+  box-shadow: 4px 4px 0 #ff5c8a;
+}
 
 /* 团队公告:图钉 + 纸底墨边 + 芥末底 */
 [data-theme='memphis'] .team-announcement {

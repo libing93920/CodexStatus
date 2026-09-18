@@ -753,6 +753,35 @@
     inset 2px 2px 0 rgba(34, 51, 59, 0.15),
     3px 3px 0 rgba(217, 93, 24, 0.4);
 }
+/* 团队凭据:两块行李挂牌,粗墨边 + 硬偏移阴影;标签做成暗底漆字牌 */
+[data-theme='poster'] .team-auth {
+  --ta-gap: 10px;
+  --ta-divider: rgba(250, 244, 228, 0.55);
+  --ta-radius: 0;
+  --ta-bg: #fdf8ea;
+  --ta-border: 2.5px solid #22333b;
+  --ta-shadow: 3px 3px 0 rgba(34, 51, 59, 0.2);
+  --ta-pad-x: 12px;
+  --ta-label-color: #faf4e4;
+  --ta-label-size: 12px;
+  --ta-label-weight: 700;
+  --ta-label-spacing: 0.5px;
+  --ta-input-color: #22333b;
+  --ta-input-weight: 700;
+  --ta-placeholder: #8d9aa0;
+}
+[data-theme='poster'] .team-auth__label {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  margin: 0 12px 0 calc(var(--ta-pad-x, 12px) * -1);
+  padding: 0 10px;
+  background: #22333b;
+}
+[data-theme='poster'] .team-auth__field:focus-within {
+  border-color: #22333b;
+  box-shadow: 3px 3px 0 rgba(217, 93, 24, 0.4);
+}
 
 /* 团队公告:图钉 + 纸底墨边,落日左边条换图钉顶饰 */
 [data-theme='poster'] .team-announcement {

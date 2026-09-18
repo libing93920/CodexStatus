@@ -912,6 +912,21 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.26);
 }
+/* 团队凭据:两块磨砂玻璃格,标签冷灰 + 内凹玻璃底,聚焦亮蓝描边 */
+[data-theme='aurora'] .team-auth {
+  --ta-gap: 10px;
+  --ta-divider: rgba(255, 255, 255, 0.1);
+  --ta-radius: 11px;
+  --ta-bg: rgba(0, 0, 0, 0.26);
+  --ta-border: 1px solid rgba(255, 255, 255, 0.1);
+  --ta-label-color: #6f7d92;
+  --ta-input-color: #e6edf3;
+  --ta-placeholder: #6f7d92;
+}
+[data-theme='aurora'] .team-auth__field:focus-within {
+  border-color: rgba(121, 192, 255, 0.45);
+  box-shadow: 0 0 0 3px rgba(121, 192, 255, 0.1);
+}
 
 [data-theme='cyber'] .settings-section {
   border: 0;
@@ -941,6 +956,28 @@
   border-radius: 0;
   border: 1px solid rgba(0, 255, 213, 0.22);
   background: rgba(0, 0, 0, 0.4);
+}
+/* 团队凭据:两块切角数据格,霓虹青描边 + 左input右divider 的终端读数 */
+[data-theme='cyber'] .team-auth {
+  --ta-gap: 8px;
+  --ta-divider: rgba(0, 255, 213, 0.22);
+  --ta-radius: 0;
+  --ta-bg: rgba(0, 0, 0, 0.4);
+  --ta-border: 1px solid rgba(0, 255, 213, 0.22);
+  --ta-font: 'Consolas', 'Courier New', 'Microsoft YaHei UI', monospace;
+  --ta-label-color: #4f7a70;
+  --ta-label-size: 11px;
+  --ta-label-spacing: 1px;
+  --ta-input-color: #00ffd5;
+  --ta-input-spacing: 1px;
+  --ta-placeholder: #4f7a70;
+}
+[data-theme='cyber'] .team-auth__field {
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+}
+[data-theme='cyber'] .team-auth__field:focus-within {
+  border-color: rgba(0, 255, 213, 0.6);
+  box-shadow: 0 0 12px rgba(0, 255, 213, 0.15);
 }
 
 [data-theme='titan'] .settings-section {
@@ -981,6 +1018,18 @@
     inset 0 2px 4px rgba(0, 0, 0, 0.5),
     inset 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
+/* 团队凭据:两块金属凹槽,内阴影下沉 + 琥珀浅字,聚焦金色内棱 */
+[data-theme='titan'] .team-auth {
+  --ta-gap: 10px;
+  --ta-divider: rgba(255, 255, 255, 0.08);
+  --ta-radius: 10px;
+  --ta-bg: rgba(0, 0, 0, 0.35);
+  --ta-border: 0;
+  --ta-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --ta-label-color: #6b6e76;
+  --ta-input-color: #e8e8ea;
+  --ta-placeholder: #5c5f66;
+}
 
 /* inline-input input 聚焦态(各主题 accent 描边) */
 [data-theme='aurora'] .inline-input:focus-within {
@@ -992,6 +1041,12 @@
   box-shadow: 0 0 12px rgba(0, 255, 213, 0.15);
 }
 [data-theme='titan'] .inline-input:focus-within {
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(217, 164, 65, 0.55);
+}
+[data-theme='titan'] .team-auth__field:focus-within {
+  border-color: transparent;
   box-shadow:
     inset 0 2px 4px rgba(0, 0, 0, 0.5),
     inset 0 0 0 1px rgba(217, 164, 65, 0.55);

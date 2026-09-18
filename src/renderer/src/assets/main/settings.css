@@ -323,44 +323,56 @@
   opacity: 0.6;
 }
 
-/* 团队凭据:昵称 / 口令等宽两格,单行放完,避免设置页被两块输入撑高 */
+/* 团队凭据:昵称 / 口令等宽两格,单行放完,避免设置页被两块输入撑高。
+   两格共用同一套皮肤,差异只在 --ta-divider:两格并排时靠分隔线划界,
+   主题各自给 token 赋本主题的语言,结构布局不经主题改动 */
 .team-auth {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: var(--ta-gap, 10px);
   min-width: 0;
+  --ta-divider: var(--panel-line);
+  --ta-divider-width: 1px;
+  --ta-radius: var(--panel-radius-md);
+  --ta-border-width: 1px;
 }
 
 .team-auth__field {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--ta-gap-inner, 12px);
   min-width: 0;
-  min-height: 42px;
-  padding: 0 14px 0 16px;
-  border-radius: var(--panel-radius-md);
-  border: 1px solid var(--panel-line);
-  background: var(--panel-card-2);
-  font-size: 14px;
-  font-weight: 520;
+  min-height: var(--ta-height, 42px);
+  padding: var(--ta-pad-y, 0) var(--ta-pad-x, 14px);
+  border-radius: var(--ta-radius);
+  border: var(--ta-border, var(--ta-border-width) solid var(--panel-line));
+  background: var(--ta-bg, var(--panel-card-2));
+  box-shadow: var(--ta-shadow, none);
+  font-family: var(--ta-font);
+  font-size: var(--ta-font-size, 14px);
+  font-weight: var(--ta-font-weight, 520);
   transition:
     border-color 180ms ease,
     box-shadow 180ms ease;
 }
 
 .team-auth__field:focus-within {
-  border-color: color-mix(in srgb, var(--panel-accent) 30%, transparent);
-  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--panel-accent) 30%, transparent);
+  border-color: var(--ta-focus-border, color-mix(in srgb, var(--panel-accent) 30%, transparent));
+  box-shadow: var(
+    --ta-focus-shadow,
+    0 0 0 0.5px color-mix(in srgb, var(--panel-accent) 30%, transparent)
+  );
 }
 
 /* 标签弱化 + 右侧分隔线,与可填内容在视觉上分离 */
 .team-auth__label {
   flex: 0 0 auto;
-  padding-right: 12px;
-  border-right: 1px solid var(--panel-line);
-  color: var(--panel-muted);
-  font-size: 13.5px;
-  font-weight: 500;
+  padding-right: var(--ta-gap-inner, 12px);
+  border-right: var(--ta-divider-width) solid var(--ta-divider);
+  color: var(--ta-label-color, var(--panel-muted));
+  font-size: var(--ta-label-size, 13.5px);
+  font-weight: var(--ta-label-weight, 500);
+  letter-spacing: var(--ta-label-spacing, normal);
   white-space: nowrap;
 }
 
@@ -370,15 +382,17 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--panel-text);
-  font-size: 14px;
-  font-weight: 560;
+  color: var(--ta-input-color, var(--panel-text));
+  font-family: var(--ta-font);
+  font-size: var(--ta-input-size, 14px);
+  font-weight: var(--ta-input-weight, 560);
+  letter-spacing: var(--ta-input-spacing, normal);
   text-align: left;
 }
 
 .team-auth__field input::placeholder {
-  color: var(--panel-muted);
-  font-weight: 480;
+  color: var(--ta-placeholder, var(--panel-muted));
+  font-weight: var(--ta-placeholder-weight, 480);
 }
 
 @keyframes panel-tab-content-snap {
