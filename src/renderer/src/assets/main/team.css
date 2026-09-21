@@ -290,7 +290,7 @@
   transition: width 400ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 团队页排行榜模式切换:额度 | Token消耗,置于顶部 tab 与标题之间 */
+/* 团队页排行榜模式切换:额度 | Token消耗 | 花费,置于顶部 tab 与标题之间 */
 .team-mode-switch {
   margin-bottom: 12px;
 }
@@ -468,8 +468,8 @@
   }
 }
 
-/* Token 消耗行:四列 rank | name | bar | value,去掉额度行的重置卡列,value 加宽容纳紧凑 token */
-.team-row--token {
+/* Token/花费行:四列 rank | name | bar | value,去掉额度行的重置卡列,value 加宽容纳紧凑数值 */
+.team-row:is(.team-row--token, .team-row--cost) {
   grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1.2fr) 68px;
   position: relative;
 }
@@ -865,8 +865,11 @@
 }
 
 .team__refresh svg {
-  width: 11px;
-  height: 11px;
+  display: block;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  color: currentColor;
 }
 
 .team__refresh.is-refreshing svg {

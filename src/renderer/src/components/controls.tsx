@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react'
 import type React from 'react'
 import type { AgentId, LocaleCode, PanelView, ThemeId } from '../../../shared/capsule'
-import { formatCompactTokens, resolveMetricColor } from '../formatters'
+import { formatCompactTokensDisplay, formatUsd, resolveMetricColor } from '../formatters'
 import { TEAM_ROW_STAGGER_MAX_INDEX, TEAM_ROW_STAGGER_MS } from '../ui-constants'
 import { HeartIcon, TicketIcon } from './icons'
 
@@ -183,14 +183,16 @@ const AGENT_SEGMENT_LABELS: Record<AgentId, string> = {
   opencode: 'OpenCode'
 }
 
-// Token 消耗排行榜一行:排名/昵称/按窗口最大值归一化的横条/紧凑 token 值;self 行高亮
-export function TokenRow({
+// Token/花费排行榜共用一行:按窗口最大值归一化横条;self 行高亮
+export function TeamUsageRow({
   isSelf,
   rank,
   nickname,
+  valueMode = 'tokens',
   tokens,
+  cost,
   tokensByAgent,
-  maxTokens,
+  maxValue,
   locale,
   appVersion,
   isLatestVersion,
@@ -201,9 +203,12 @@ export function TokenRow({
   isSelf: boolean
   rank: number
   nickname: string
+  valueMode?: 'tokens' | 'cost'
   tokens?: number
+  cost?: number
   tokensByAgent?: Partial<Record<AgentId, number>>
-  maxTokens: number
+  /** 当前排行榜窗口的最大值;花费榜同样按实际最大金额归一化 */
+  maxValue: number
   locale: LocaleCode
   appVersion?: string
   isLatestVersion?: boolean
@@ -211,18 +216,26 @@ export function TokenRow({
   selfLiked?: boolean
   onLike?: () => void
 }): React.JSX.Element {
-  const percent = tokens !== undefined ? Math.min(100, Math.max(0, (tokens / maxTokens) * 100)) : 0
+  const isCost = valueMode === 'cost'
+  const value = isCost ? cost : tokens
+  const safeValue = value !== undefined && Number.isFinite(value) ? value : undefined
+  const percent =
+    safeValue !== undefined && maxValue > 0
+      ? Math.min(100, Math.max(0, (safeValue / maxValue) * 100))
+      : 0
   const rankClass =
     rank === 1 ? ' is-top-1' : rank === 2 ? ' is-top-2' : rank === 3 ? ' is-top-3' : ''
-  const segments = tokensByAgent
-    ? (['codex', 'claude', 'opencode'] as const)
-        .map((id) => ({ id, tokens: tokensByAgent[id] ?? 0 }))
-        .filter((segment) => segment.tokens > 0)
-    : undefined
+  const segments =
+    !isCost && tokensByAgent
+      ? (['codex', 'claude', 'opencode'] as const)
+          .map((id) => ({ id, tokens: tokensByAgent[id] ?? 0 }))
+          .filter((segment) => segment.tokens > 0)
+      : undefined
+  const showLike = !isCost && onLike !== undefined
   return (
     <div
-      className={`team-row team-row--token${isSelf ? ' is-self' : ''}${rankClass}${
-        onLike ? ' is-like' : ''
+      className={`team-row team-row--${isCost ? 'cost' : 'token'}${isSelf ? ' is-self' : ''}${rankClass}${
+        showLike ? ' is-like' : ''
       }`}
       style={
         {
@@ -241,11 +254,11 @@ export function TokenRow({
           ) : null}
           {nickname}
         </span>
-        {onLike ? (
+        {showLike ? (
           <button
             aria-label="点赞"
             className={`team-row__like${selfLiked ? ' is-liked' : ''}`}
-            onClick={onLike}
+            onClick={() => onLike?.()}
             type="button"
           >
             <span className="team-row__like-count">{likeCount ?? 0}</span>
@@ -261,7 +274,9 @@ export function TokenRow({
                 className="team-row__bar-segment"
                 key={segment.id}
                 style={{
-                  width: `${Math.min(100, Math.max(0, (segment.tokens / maxTokens) * 100))}%`,
+                  width: `${
+                    maxValue > 0 ? Math.min(100, Math.max(0, (segment.tokens / maxValue) * 100)) : 0
+                  }%`,
                   background: AGENT_SEGMENT_COLORS[segment.id]
                 }}
               />
@@ -272,7 +287,11 @@ export function TokenRow({
         )}
       </span>
       <span className="team-row__value">
-        {tokens === undefined ? '--' : formatCompactTokens(tokens, locale)}
+        {safeValue === undefined
+          ? '--'
+          : isCost
+            ? formatUsd(safeValue)
+            : formatCompactTokensDisplay(safeValue, locale)}
       </span>
       {segments && segments.length > 0 ? (
         <span className="team-row__tooltip" role="tooltip">
@@ -284,7 +303,7 @@ export function TokenRow({
               />
               <span className="team-row__tooltip-label">{AGENT_SEGMENT_LABELS[id]}</span>
               <span className="team-row__tooltip-value">
-                {formatCompactTokens(tokensByAgent?.[id] ?? 0, locale)}
+                {formatCompactTokensDisplay(tokensByAgent?.[id] ?? 0, locale)}
               </span>
             </span>
           ))}

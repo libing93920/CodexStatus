@@ -37,7 +37,7 @@ export function HourglassIcon(): React.JSX.Element {
 
 export function RefreshIcon(): React.JSX.Element {
   return (
-    <svg fill="none" viewBox="0 0 24 24">
+    <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
       <path
         d="M20 11a8 8 0 1 0-1.5 5M20 5v6h-6"
         stroke="currentColor"

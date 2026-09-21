@@ -39,6 +39,8 @@ export interface PeerSnapshot {
   longWindow?: { label: string; remainingPercent?: number }
   /** 各窗口 token 消耗总数(1d/7d/30d) */
   tokenUsage?: Partial<Record<UsageWindow, number>>
+  /** 各窗口估算花费总额(USD,1d/7d/30d) */
+  costUsage?: Partial<Record<UsageWindow, number>>
   /** 各窗口各工具 token 消耗(团队榜分段用) */
   tokenUsageByAgent?: Partial<Record<UsageWindow, Partial<Record<AgentId, number>>>>
   /** 应用版本:接收端以组内最高版本为基准判定是否最新 */
@@ -55,6 +57,7 @@ interface PeerEntry {
   shortWindow?: { label: string; remainingPercent?: number }
   longWindow?: { label: string; remainingPercent?: number }
   tokenUsage?: Partial<Record<UsageWindow, number>>
+  costUsage?: Partial<Record<UsageWindow, number>>
   tokenUsageByAgent?: Partial<Record<UsageWindow, Partial<Record<AgentId, number>>>>
   appVersion?: string
   updatedAt?: string
@@ -251,6 +254,7 @@ export class LanService {
       longWindow: entry.longWindow,
       resetCreditCount: entry.resetCreditCount,
       tokenUsage: entry.tokenUsage,
+      costUsage: entry.costUsage,
       tokenUsageByAgent: entry.tokenUsageByAgent,
       appVersion: entry.appVersion,
       updatedAt: entry.updatedAt
@@ -468,8 +472,7 @@ export class LanService {
     const existing = this.peers.get(peerId)
     // 昵称缺省时留空串,前端按 locale 显示本地化占位名;绝不用 'peer' 之类的字面量兜底,
     // 那会冒充真名出现在排行榜里,无法与成员实际设置的昵称区分
-    const resolvedNickname =
-      snapshot?.nickname ?? nickname ?? existing?.nickname ?? ''
+    const resolvedNickname = snapshot?.nickname ?? nickname ?? existing?.nickname ?? ''
     const entry: PeerEntry = {
       id: peerId,
       nickname: resolvedNickname,
@@ -482,6 +485,7 @@ export class LanService {
       shortWindow: snapshot ? snapshot.shortWindow : existing?.shortWindow,
       longWindow: snapshot ? snapshot.longWindow : existing?.longWindow,
       tokenUsage: snapshot ? snapshot.tokenUsage : existing?.tokenUsage,
+      costUsage: snapshot ? snapshot.costUsage : existing?.costUsage,
       tokenUsageByAgent: snapshot ? snapshot.tokenUsageByAgent : existing?.tokenUsageByAgent,
       appVersion: snapshot ? snapshot.appVersion : existing?.appVersion,
       updatedAt: new Date().toISOString()

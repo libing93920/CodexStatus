@@ -128,6 +128,8 @@ export interface TeamPeer {
   resetCreditCount?: number
   /** 各窗口 token 消耗总数(1d/7d/30d);无数据的窗口不包含对应键 */
   tokenUsage?: Partial<Record<UsageWindow, number>>
+  /** 各窗口估算花费总额(USD,1d/7d/30d);无数据的窗口不包含对应键 */
+  costUsage?: Partial<Record<UsageWindow, number>>
   /** 各窗口各工具 token 消耗(团队榜分段用);缺省工具按 0 */
   tokenUsageByAgent?: Partial<Record<UsageWindow, Partial<Record<AgentId, number>>>>
   /** 应用版本:排行榜以组内最高版本为基准标绿/黄点 */

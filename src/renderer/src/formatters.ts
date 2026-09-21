@@ -9,6 +9,7 @@ import { COPY } from './copy'
 import { resolveMetricColor } from './minimal-quota'
 
 export { resolveMetricColor } from './minimal-quota'
+export { formatCompactTokens, formatCompactTokensDisplay } from './compact-tokens'
 
 // 窗口天数多时只标首/末与每 5 天,避免拥挤
 export function shouldShowDateLabel(count: number, index: number): boolean {
@@ -20,31 +21,6 @@ export function shouldShowDateLabel(count: number, index: number): boolean {
 
 export function formatDayLabel(date: string): string {
   return date.slice(5)
-}
-
-// 紧凑数字:zh-CN 用 1.2万 / 3.4亿,其余用 1.2K / 3.4M / 1.1B
-export function formatCompactTokens(value: number, locale: LocaleCode): string {
-  if (locale === 'zh-CN') {
-    if (value >= 1e8) return `${trimTrailingZero((value / 1e8).toFixed(1))}亿`
-    if (value >= 1e4) return `${trimTrailingZero((value / 1e4).toFixed(1))}万`
-    return String(Math.round(value))
-  }
-  if (value >= 1e9) return `${trimTrailingZero((value / 1e9).toFixed(1))}B`
-  if (value >= 1e6) return `${trimTrailingZero((value / 1e6).toFixed(1))}M`
-  if (value >= 1e3) return `${trimTrailingZero((value / 1e3).toFixed(1))}K`
-  return String(Math.round(value))
-}
-
-// 胶囊今日 token:万级(1万~9999万)取整不显示小数;亿级沿用公共格式化保留 1 位小数
-export function formatCapsuleTokens(value: number, locale: LocaleCode): string {
-  if (locale === 'zh-CN' && value >= 1e4 && value < 1e8) {
-    return `${Math.round(value / 1e4)}万`
-  }
-  return formatCompactTokens(value, locale)
-}
-
-export function trimTrailingZero(value: string): string {
-  return value.endsWith('.0') ? value.slice(0, -2) : value
 }
 
 // 胶囊自适应字号:按文本宽度估算(CJK≈1em,数字/字母≈0.55em,符号≈0.3em),

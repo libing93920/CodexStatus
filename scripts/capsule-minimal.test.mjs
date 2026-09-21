@@ -5,6 +5,10 @@ import {
   resolveMetricColor,
   resolveMinimalMetricColor
 } from '../src/renderer/src/minimal-quota.ts'
+import {
+  formatCompactTokens,
+  formatCompactTokensDisplay
+} from '../src/renderer/src/compact-tokens.ts'
 
 test('极简额度环限制剩余百分比边界', () => {
   assert.equal(clampProgressPercent(undefined), undefined)
@@ -62,4 +66,25 @@ test('浅色主题极简额度色复用统一分段色', () => {
 test('深色主题极简额度色使用深色调色板', () => {
   assert.equal(resolveMinimalMetricColor(0, 'titan'), '#F87171')
   assert.equal(resolveMinimalMetricColor(100, 'titan'), '#4ADE80')
+})
+
+test('中文紧凑 token 格式:万级取整,亿级保留当前格式', () => {
+  assert.equal(formatCompactTokens(9999, 'zh-CN'), '9999')
+  assert.equal(formatCompactTokens(12600, 'zh-CN'), '1.3万')
+  assert.equal(formatCompactTokensDisplay(10000, 'zh-CN'), '1万')
+  assert.equal(formatCompactTokensDisplay(12600, 'zh-CN'), '1万')
+  assert.equal(formatCompactTokensDisplay(126000, 'zh-CN'), '13万')
+  assert.equal(formatCompactTokensDisplay(15600, 'zh-CN'), '2万')
+  assert.equal(formatCompactTokensDisplay(12600000, 'zh-CN'), '1260万')
+  assert.equal(formatCompactTokensDisplay(99999999, 'zh-CN'), '10000万')
+  assert.equal(formatCompactTokens(100000000, 'zh-CN'), '1亿')
+  assert.equal(formatCompactTokens(120000000, 'zh-CN'), '1.2亿')
+  assert.equal(formatCompactTokens(300000000, 'zh-CN'), '3亿')
+  assert.equal(formatCompactTokensDisplay(100000000, 'zh-CN'), '1亿')
+})
+
+test('英文紧凑 token 格式保持 K/M/B 规则', () => {
+  assert.equal(formatCompactTokens(12600, 'en-US'), '12.6K')
+  assert.equal(formatCompactTokens(1200000, 'en-US'), '1.2M')
+  assert.equal(formatCompactTokens(3000000000, 'en-US'), '3B')
 })

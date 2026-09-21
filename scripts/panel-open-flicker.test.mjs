@@ -207,7 +207,7 @@ test('tab 栏和页面标题不参与窗口拖拽，避免重叠时拦截点击'
 
 test('排行榜模式和时间窗口切换会逐行上浮并消散模糊', () => {
   assert.match(appSource, /function handleTeamBoardModeChange\(/)
-  assert.match(appSource, /function handleTeamTokenWindowChange\(/)
+  assert.match(appSource, /function handleTeamUsageWindowChange\(/)
   assert.match(appSource, /is-team-switching/)
   assert.match(cssSource, /@keyframes team-row-rise-in/)
   assert.match(
@@ -222,6 +222,21 @@ test('排行榜模式和时间窗口切换会逐行上浮并消散模糊', () =>
   assert.match(appSource, /const TEAM_ROW_STAGGER_MS = 72/)
   assert.match(appSource, /const TEAM_BOARD_MOTION_CLEAR_MS = 1360/)
   assert.match(cssSource, /animation-delay:\s*var\(--team-row-delay, 0ms\)/)
+})
+
+test('额度榜仅对 Codex ChatGPT 订阅显示，Token 和花费榜共用时间窗口', () => {
+  assert.match(
+    appSource,
+    /const isQuotaTeamBoardAvailable = isCodex && snapshot\.authMode === 'chatgpt'/
+  )
+  assert.match(appSource, /teamModeCost/)
+  assert.match(appSource, /peer\.costUsage\?\.\[teamUsageWindow\]/)
+})
+
+test('团队刷新图标保持可见尺寸并保留旋转状态', () => {
+  assert.match(cssSource, /\.team__refresh svg\s*{[^}]*flex:\s*0 0 16px/s)
+  assert.match(cssSource, /\.team__refresh svg\s*{[^}]*color:\s*currentColor/s)
+  assert.match(cssSource, /\.team__refresh\.is-refreshing svg\s*{[^}]*team-refresh-spin/s)
 })
 
 test('排行榜冠军在上浮结束后扫光', () => {

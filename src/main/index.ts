@@ -62,11 +62,12 @@ import {
 import { collectUsageSnapshot, invalidateQuotaCaches, resolveCodexAuthPath } from './services/quota'
 import {
   getCachedAgentTokenTotals,
+  getCachedCostTotals,
   getCachedTokenTotals,
   getTokenUsage,
   getTokenUsageRange,
   invalidateUsageCache,
-  warmAllAgentTokenTotals
+  warmAllAgentUsageTotals
 } from './services/usage'
 import { setRateLookup } from './services/rate'
 import { fetchModelsDevRates, getPricingRate } from './services/pricing'
@@ -1198,6 +1199,7 @@ function buildTeamPeers(selfRemaining: number | undefined): TeamPeer[] {
     longWindow: long ? { label: long.label, remainingPercent: long.remainingPercent } : undefined,
     resetCreditCount: currentSnapshot.resetCredit?.availableCount,
     tokenUsage: getCachedTokenTotals(),
+    costUsage: getCachedCostTotals(),
     tokenUsageByAgent: getCachedAgentTokenTotals(),
     appVersion: app.getVersion(),
     updatedAt: new Date().toISOString()
@@ -1247,6 +1249,7 @@ function getLanSnapshot(): PeerSnapshot {
       : undefined,
     longWindow: long ? { label: long.label, remainingPercent: long.remainingPercent } : undefined,
     tokenUsage: getCachedTokenTotals(),
+    costUsage: getCachedCostTotals(),
     tokenUsageByAgent: getCachedAgentTokenTotals(),
     appVersion: app.getVersion()
   }
@@ -1336,14 +1339,11 @@ async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): 
     perfStart('refresh:collect')
     try {
       const agentId = persistedState.settings.agentId
-      const collected =
-        agentId === 'codex'
-          ? await collectUsageSnapshot()
-          : createApiModeSnapshot()
+      const collected = agentId === 'codex' ? await collectUsageSnapshot() : createApiModeSnapshot()
       perfEnd('refresh:collect')
-      // 预热三窗口 token 汇总,供本机排行榜与 LAN 广播同步读取
+      // 预热三工具三窗口 token 与花费汇总,供本机排行榜与 LAN 广播同步读取
       perfStart('refresh:warm')
-      await warmAllAgentTokenTotals()
+      await warmAllAgentUsageTotals()
       perfEnd('refresh:warm')
       setCurrentSnapshot({
         ...collected,

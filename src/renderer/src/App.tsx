@@ -45,7 +45,7 @@ import {
   SegmentedControl,
   SettingField,
   TeamRow,
-  TokenRow,
+  TeamUsageRow,
   ToggleSwitch
 } from './components/controls'
 import {
@@ -53,7 +53,7 @@ import {
   createMetricProgressStyle,
   fitFontSize,
   formatAbsoluteDate,
-  formatCapsuleTokens,
+  formatCompactTokensDisplay,
   formatCountdownCapsule,
   formatCountdownShort,
   formatRelativeDate,
@@ -109,9 +109,9 @@ function App(): React.JSX.Element {
   )
   const [teamNicknameInput, setTeamNicknameInput] = useState(DEFAULT_SETTINGS.teamNickname ?? '')
   const [teamGroupInput, setTeamGroupInput] = useState(DEFAULT_SETTINGS.teamGroup ?? '')
-  // 团队页排行榜模式:quota=额度, tokens=Token 消耗;消耗模式再选 1d/7d/30d 窗口
-  const [teamBoardMode, setTeamBoardMode] = useState<'quota' | 'tokens'>('quota')
-  const [teamTokenWindow, setTeamTokenWindow] = useState<UsageWindow>('1d')
+  // 团队页排行榜模式:quota=额度, tokens=Token 消耗, cost=花费;用量模式共用窗口
+  const [teamBoardMode, setTeamBoardMode] = useState<'quota' | 'tokens' | 'cost'>('quota')
+  const [teamUsageWindow, setTeamUsageWindow] = useState<UsageWindow>('1d')
   const [teamBoardMotionActive, setTeamBoardMotionActive] = useState(false)
   const [capsulePointerActive, setCapsulePointerActive] = useState(false)
   const [minimalStage, setMinimalStage] = useState<CapsuleMinimalStage>('full')
@@ -490,7 +490,7 @@ function App(): React.JSX.Element {
   const capsuleWeeklyText = isApiMode
     ? apiTodayTotal === undefined
       ? '--'
-      : formatCapsuleTokens(apiTodayTotal, settings.locale)
+      : formatCompactTokensDisplay(apiTodayTotal, settings.locale)
     : capsuleResetText
   // API Key 模式胶囊数值与自适应字号(长文本自动缩小,不出框)
   // 竖版仅 50px 宽,字号与最大宽度都比横版收紧
@@ -567,16 +567,30 @@ function App(): React.JSX.Element {
     })
   // Token 消耗排行榜:按选中窗口 token 总量降序(undefined 排末尾);横条按窗口内最大值归一化
   const teamTokenPeers = [...(snapshot.teamPeers ?? [])].sort((a, b) => {
-    const at = a.tokenUsage?.[teamTokenWindow] ?? -1
-    const bt = b.tokenUsage?.[teamTokenWindow] ?? -1
+    const at = a.tokenUsage?.[teamUsageWindow] ?? -1
+    const bt = b.tokenUsage?.[teamUsageWindow] ?? -1
     return bt - at
   })
   const teamTokenMax = Math.max(
-    1,
-    ...teamTokenPeers.map((peer) => peer.tokenUsage?.[teamTokenWindow] ?? 0)
+    0,
+    ...teamTokenPeers.map((peer) => peer.tokenUsage?.[teamUsageWindow] ?? 0)
   )
-  // 非 Codex 无订阅额度,团队页只留 Token 消耗榜(不显示额度/Token 切换 tab,切换工具即生效)
-  const effectiveTeamBoardMode: 'quota' | 'tokens' = isCodex ? teamBoardMode : 'tokens'
+  // 花费榜与 Token 榜共用窗口;缺失花费排在有效 0 之后,横条按真实最大值归一化
+  const teamCostPeers = [...(snapshot.teamPeers ?? [])].sort((a, b) => {
+    const ac = a.costUsage?.[teamUsageWindow] ?? -1
+    const bc = b.costUsage?.[teamUsageWindow] ?? -1
+    return bc - ac
+  })
+  const teamCostMax = Math.max(
+    0,
+    ...teamCostPeers.map((peer) => peer.costUsage?.[teamUsageWindow] ?? 0)
+  )
+  const isQuotaTeamBoardAvailable = isCodex && snapshot.authMode === 'chatgpt'
+  const effectiveTeamBoardMode =
+    !isQuotaTeamBoardAvailable && teamBoardMode === 'quota' ? 'tokens' : teamBoardMode
+  const isTeamUsageBoard = effectiveTeamBoardMode !== 'quota'
+  const teamUsagePeers = effectiveTeamBoardMode === 'cost' ? teamCostPeers : teamTokenPeers
+  const teamUsageMax = effectiveTeamBoardMode === 'cost' ? teamCostMax : teamTokenMax
   // 本机 peer 标识:供回声过滤(自己发的消息只进 panel 流,不驱动胶囊切换)
   const selfPeerId = snapshot.teamPeers?.find((peer) => peer.isSelf)?.id
   useEffect(() => {
@@ -1237,7 +1251,7 @@ function App(): React.JSX.Element {
   }
 
   function handleTeamBoardModeChange(value: string): void {
-    const mode = value as 'quota' | 'tokens'
+    const mode = value as 'quota' | 'tokens' | 'cost'
     if (mode === teamBoardMode) {
       return
     }
@@ -1245,13 +1259,13 @@ function App(): React.JSX.Element {
     setTeamBoardMode(mode)
   }
 
-  function handleTeamTokenWindowChange(value: string): void {
+  function handleTeamUsageWindowChange(value: string): void {
     const usageWindow = value as UsageWindow
-    if (usageWindow === teamTokenWindow) {
+    if (usageWindow === teamUsageWindow) {
       return
     }
     startTeamBoardMotion()
-    setTeamTokenWindow(usageWindow)
+    setTeamUsageWindow(usageWindow)
   }
 
   function recordSnapshotIssue(error: unknown): void {
@@ -1663,22 +1677,38 @@ function App(): React.JSX.Element {
                   </button>
                 </section>
               ) : null}
-              {isCodex ? (
+              {isQuotaTeamBoardAvailable ? (
                 <div className="team-mode-switch">
                   <SegmentedControl
                     onChange={handleTeamBoardModeChange}
                     options={[
                       { label: copy.teamModeQuota, value: 'quota' },
-                      { label: copy.teamModeTokens, value: 'tokens' }
+                      { label: copy.teamModeTokens, value: 'tokens' },
+                      { label: copy.teamModeCost, value: 'cost' }
                     ]}
-                    value={teamBoardMode}
+                    value={effectiveTeamBoardMode}
                   />
                 </div>
-              ) : null}
+              ) : (
+                <div className="team-mode-switch">
+                  <SegmentedControl
+                    onChange={handleTeamBoardModeChange}
+                    options={[
+                      { label: copy.teamModeTokens, value: 'tokens' },
+                      { label: copy.teamModeCost, value: 'cost' }
+                    ]}
+                    value={effectiveTeamBoardMode}
+                  />
+                </div>
+              )}
               <div className="panel__header panel__header--team">
                 <div>
                   <h2 className="panel__title">
-                    {effectiveTeamBoardMode === 'quota' ? copy.teamBoard : copy.teamTokenBoard}
+                    {effectiveTeamBoardMode === 'quota'
+                      ? copy.teamBoard
+                      : effectiveTeamBoardMode === 'cost'
+                        ? copy.teamCostBoard
+                        : copy.teamTokenBoard}
                   </h2>
                 </div>
                 <button
@@ -1695,26 +1725,30 @@ function App(): React.JSX.Element {
                 </button>
               </div>
 
-              {effectiveTeamBoardMode === 'tokens' ? (
+              {isTeamUsageBoard ? (
                 <>
                   <div className="team-window-switch">
                     <SegmentedControl
-                      onChange={handleTeamTokenWindowChange}
+                      onChange={handleTeamUsageWindowChange}
                       options={[
                         { label: copy.usage1d, value: '1d' },
                         { label: copy.usage7d, value: '7d' },
                         { label: copy.usage30d, value: '30d' }
                       ]}
-                      value={teamTokenWindow}
+                      value={teamUsageWindow}
                     />
                   </div>
-                  {teamTokenPeers.length > 0 ? (
-                    <div className="team-board" key={`tokens-${teamTokenWindow}`}>
-                      {teamTokenPeers.map((peer, index) => {
-                        const showLikes = teamTokenWindow === '1d'
+                  {teamUsagePeers.length > 0 ? (
+                    <div
+                      className="team-board"
+                      key={`${effectiveTeamBoardMode}-${teamUsageWindow}`}
+                    >
+                      {teamUsagePeers.map((peer, index) => {
+                        const showLikes =
+                          effectiveTeamBoardMode === 'tokens' && teamUsageWindow === '1d'
                         const like = showLikes ? aggregateReactions(peer.id) : undefined
                         return (
-                          <TokenRow
+                          <TeamUsageRow
                             appVersion={peer.appVersion}
                             isLatestVersion={
                               peer.appVersion !== undefined && maxAppVersion !== undefined
@@ -1725,21 +1759,26 @@ function App(): React.JSX.Element {
                             key={peer.id}
                             likeCount={like?.count}
                             locale={settings.locale}
-                            maxTokens={teamTokenMax}
+                            maxValue={teamUsageMax}
                             nickname={peer.nickname || copy.teamAnonymous}
                             onLike={
                               showLikes ? () => void handleReactionToggle(peer.id) : undefined
                             }
                             rank={index + 1}
                             selfLiked={like?.selfLiked}
-                            tokens={peer.tokenUsage?.[teamTokenWindow]}
-                            tokensByAgent={peer.tokenUsageByAgent?.[teamTokenWindow]}
+                            valueMode={effectiveTeamBoardMode === 'cost' ? 'cost' : 'tokens'}
+                            cost={peer.costUsage?.[teamUsageWindow]}
+                            tokens={peer.tokenUsage?.[teamUsageWindow]}
+                            tokensByAgent={peer.tokenUsageByAgent?.[teamUsageWindow]}
                           />
                         )
                       })}
                     </div>
                   ) : (
-                    <p className="team-empty" key={`tokens-empty-${teamTokenWindow}`}>
+                    <p
+                      className="team-empty"
+                      key={`${effectiveTeamBoardMode}-empty-${teamUsageWindow}`}
+                    >
                       {copy.teamEmpty}
                     </p>
                   )}

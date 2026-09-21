@@ -4,7 +4,7 @@ import '../src/renderer/src/assets/main.css'
 import '../src/renderer/src/assets/themes.css'
 import './capsule-minimal-preview.css'
 import { MinimalCapsule } from '../src/renderer/src/MinimalCapsule'
-import { fitFontSize, formatCapsuleTokens } from '../src/renderer/src/formatters'
+import { fitFontSize, formatCompactTokensDisplay } from '../src/renderer/src/formatters'
 import { resolveMinimalMetricColor } from '../src/renderer/src/minimal-quota'
 
 const MINIMAL_BALL_SIZE = 40
@@ -47,14 +47,14 @@ const previewCases = [
   {
     theme: 'cyber',
     state: 'api-10k',
-    valueText: formatCapsuleTokens(120000, 'zh-CN'),
+    valueText: formatCompactTokensDisplay(120000, 'zh-CN'),
     progress: undefined,
     isApiMode: true
   },
   {
     theme: 'cyber',
     state: 'api-100m',
-    valueText: formatCapsuleTokens(123456789, 'zh-CN'),
+    valueText: formatCompactTokensDisplay(123456789, 'zh-CN'),
     progress: undefined,
     isApiMode: true
   }

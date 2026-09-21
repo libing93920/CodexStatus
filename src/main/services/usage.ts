@@ -69,6 +69,8 @@ const cacheByAgent = new Map<AgentId, CacheEntry>()
 const inflightByAgent = new Map<AgentId, Promise<ScannedData>>()
 // 最近一次算出的每窗口每工具 token 总数,供 LAN 广播(peer 排行榜分段)同步读取
 let lastAgentTotals: Partial<Record<UsageWindow, Partial<Record<AgentId, number>>>> | undefined
+// 最近一次算出的三工具每窗口花费总额,供 LAN 广播(peer 排行榜)同步读取
+let lastCostTotals: Partial<Record<UsageWindow, number>> | undefined
 
 /**
  * 获取 1/7/30 天 token 用量与估算花费。
@@ -157,30 +159,39 @@ export function getCachedTokenTotals(): Partial<Record<UsageWindow, number>> | u
   return totals
 }
 
+/** 同步返回每窗口估算花费总额(USD);从未算过则 undefined */
+export function getCachedCostTotals(): Partial<Record<UsageWindow, number>> | undefined {
+  return lastCostTotals
+}
+
 /** 切换 agentId 时清缓存:避免旧工具的日桶/事件/每窗口总数串味 */
 export function invalidateUsageCache(): void {
   cacheByAgent.clear()
   lastAgentTotals = undefined
+  lastCostTotals = undefined
 }
 
 const ALL_AGENTS: readonly AgentId[] = ['codex', 'claude', 'opencode']
 const ALL_WINDOWS: readonly UsageWindow[] = ['1d', '7d', '30d']
 
-/** 预热三个工具的每窗口 token 总数并缓存,供团队榜总量排名与分段展示 */
-export async function warmAllAgentTokenTotals(): Promise<
+/** 预热三个工具的每窗口 token 与花费总数并缓存,供团队榜排名与分段展示 */
+export async function warmAllAgentUsageTotals(): Promise<
   Partial<Record<UsageWindow, Partial<Record<AgentId, number>>>>
 > {
   const totals: Partial<Record<UsageWindow, Partial<Record<AgentId, number>>>> = {}
+  const costs: Partial<Record<UsageWindow, number>> = {}
   for (const agentId of ALL_AGENTS) {
     const days = await loadDays(agentId)
     for (const window of ALL_WINDOWS) {
-      const total = computeTotals(buildSeries(days, window)).total
+      const summary = computeTotals(buildSeries(days, window))
       const byAgent = totals[window] ?? {}
-      byAgent[agentId] = total
+      byAgent[agentId] = summary.total
       totals[window] = byAgent
+      costs[window] = roundCost((costs[window] ?? 0) + summary.cost)
     }
   }
   lastAgentTotals = totals
+  lastCostTotals = costs
   return totals
 }
 
@@ -458,8 +469,12 @@ function computeTotals(days: TokenUsageDay[]): TokenUsageOverview['totals'] {
     totals.total += day.input + day.output
     totals.cost += day.cost
   }
-  totals.cost = Math.round(totals.cost * 10000) / 10000
+  totals.cost = roundCost(totals.cost)
   return totals
+}
+
+function roundCost(cost: number): number {
+  return Math.round(cost * 10000) / 10000
 }
 
 const WINDOW_DAYS: Record<UsageWindow, number> = { '1d': 1, '7d': 7, '30d': 30 }
