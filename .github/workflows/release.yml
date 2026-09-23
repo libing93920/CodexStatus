@@ -83,22 +83,9 @@ jobs:
           gh release create "${TAG_NAME}" --draft --title "${TAG_NAME}" --generate-notes --target "${GITHUB_SHA}" "${PRERELEASE_FLAG[@]}"
 
   build:
-    name: Build ${{ matrix.name }}
+    name: Build Windows
     needs: prepare
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: windows
-            os: windows-latest
-            target: --win
-          - name: macos
-            os: macos-latest
-            target: --mac
-          - name: linux
-            os: ubuntu-latest
-            target: --linux
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -114,11 +101,10 @@ jobs:
 
       - name: Build renderer and main process
         run: npm run build
-
-      - name: Package installers
+      - name: Package Windows installer
         env:
           GH_TOKEN: ${{ github.token }}
-        run: npx electron-builder ${{ matrix.target }} --publish always
+        run: npx electron-builder --win --publish always
 
   release:
     name: Publish GitHub Release

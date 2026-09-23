@@ -25,6 +25,8 @@ __pycache__/
 /design-previews/
 docs/superpowers/
 
+# 本地设计与诊断文档，不提交到仓库
+/local-docs/
 # 本地规划和临时运行数据
 /.planning/
 /.tmp-capture-userdata/
