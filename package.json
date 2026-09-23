@@ -1,6 +1,6 @@
 {
   "name": "codex-status",
-  "version": "1.3.20",
+  "version": "1.3.21",
   "description": "CodexStatus - Codex 额度悬浮监控",
   "main": "./out/main/index.js",
   "author": "codex-status",
@@ -9,7 +9,7 @@
     "format": "prettier --write .",
     "lint": "eslint --cache .",
     "test": "npm run test:unit && npm run test:panel-open && npm run test:cockpit && npm run test:minimal && npm run test:island",
-    "test:unit": "node --experimental-strip-types --test scripts/announcement.test.mjs scripts/codex-hook-ingress.test.mjs scripts/codex-hook-installer.test.mjs scripts/codex-ipc-client.test.mjs scripts/codex-thread-catalog.test.mjs scripts/island-state.test.mjs scripts/quota-recheck.test.mjs scripts/quota-tail-read.test.mjs scripts/usage-align.test.mjs scripts/window-keeper.test.mjs scripts/windows-fullscreen.test.mjs scripts/island-performance.test.mjs scripts/diag-log.test.mjs scripts/island-diagnostics.test.mjs scripts/island-diagnostics-main.test.mjs scripts/codex-session-parser-incremental.test.mjs scripts/capsule-minimal.test.mjs",
+    "test:unit": "node --experimental-strip-types --test scripts/announcement.test.mjs scripts/codex-hook-ingress.test.mjs scripts/codex-hook-installer.test.mjs scripts/codex-ipc-client.test.mjs scripts/codex-thread-catalog.test.mjs scripts/island-state.test.mjs scripts/quota-recheck.test.mjs scripts/quota-tail-read.test.mjs scripts/usage-align.test.mjs scripts/window-keeper.test.mjs scripts/windows-fullscreen.test.mjs scripts/island-performance.test.mjs scripts/diag-log.test.mjs scripts/island-diagnostics.test.mjs scripts/island-diagnostics-main.test.mjs scripts/codex-session-parser-incremental.test.mjs scripts/capsule-minimal.test.mjs scripts/capsule-window-diagnostics.test.mjs scripts/capsule-native-probe.test.mjs",
     "test:quota": "node --experimental-strip-types --test scripts/quota-recheck.test.mjs",
     "test:panel-open": "node --test scripts/panel-open-flicker.test.mjs",
     "test:cockpit": "electron scripts/cockpit-animation.test.mjs",

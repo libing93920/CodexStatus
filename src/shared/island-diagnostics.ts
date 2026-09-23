@@ -42,7 +42,15 @@ export const ISLAND_DIAG_FIELDS = [
   'firstRequest',
   'lastRequest',
   'interactive',
+  'previousInteractive',
+  'hitInside',
+  'domInside',
+  'relatedInside',
+  'pendingHitTest',
+  'pointValid',
+  'expansion',
   'expandedHeight',
+  'expandedAge',
   'satellite',
   'reducedMotion',
   'ignore',
@@ -84,7 +92,15 @@ export interface IslandDiagFields {
   firstRequest?: number
   lastRequest?: number
   interactive?: boolean
+  previousInteractive?: boolean
+  hitInside?: boolean
+  domInside?: boolean
+  relatedInside?: boolean
+  pendingHitTest?: boolean
+  pointValid?: boolean
+  expansion?: number
   expandedHeight?: number
+  expandedAge?: number
   satellite?: boolean
   reducedMotion?: boolean
   ignore?: boolean
@@ -157,6 +173,12 @@ const BOOLEAN_FIELDS = new Set<IslandDiagFieldName>([
   'focused',
   'documentFocused',
   'interactive',
+  'previousInteractive',
+  'hitInside',
+  'domInside',
+  'relatedInside',
+  'pendingHitTest',
+  'pointValid',
   'satellite',
   'reducedMotion',
   'ignore',

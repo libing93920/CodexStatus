@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import {
   createEmptyIslandSnapshot,
   getDisplayStatus,
@@ -11,6 +11,7 @@ import {
 } from '../../../shared/island'
 import './island.css'
 import { useIslandDiagnostics } from './use-island-diagnostics'
+import type { IslandDiagFields } from '../../../shared/island-diagnostics'
 
 type IslandMode = 'hidden' | 'compact' | 'alert' | 'expanded'
 
@@ -30,6 +31,7 @@ const ALERT_STATUSES: readonly IslandDisplayStatus[] = [
 ]
 const HOLD_DURATION_MS = 450
 const EXIT_DURATION_MS = 340
+const SINGLE_TASK_HEIGHT = 200
 
 export default function Island(): React.JSX.Element {
   const [snapshot, setSnapshot] = useState<IslandSnapshot>(createEmptyIslandSnapshot)
@@ -49,9 +51,15 @@ export default function Island(): React.JSX.Element {
   const exitTimer = useRef<number | undefined>(undefined)
   const hovering = useRef(false)
   const focused = useRef(false)
+  const expandedHeightRef = useRef(SINGLE_TASK_HEIGHT)
+  const satelliteRef = useRef(false)
+  const interactiveRef = useRef(false)
+  const pendingHitTestRef = useRef(false)
+  const latestPointer = useRef({ x: 0, y: 0, timeStamp: 0, valid: false })
   const holdTimer = useRef<number | undefined>(undefined)
   const modeRef = useRef<IslandMode>('hidden')
   const alertRef = useRef<HTMLDivElement>(null)
+  const islandRef = useRef<HTMLElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
   const startReminderRef = useRef<() => void>(() => undefined)
   const finishAlertRef = useRef<(reason: string) => void>(() => undefined)
@@ -59,17 +67,41 @@ export default function Island(): React.JSX.Element {
   const resumeReminderRef = useRef<() => void>(() => undefined)
   const presentationHandlerRef = useRef<(next: IslandPresentation) => void>(() => undefined)
   const cancelInteractiveFrameRef = useRef<() => void>(() => undefined)
+  const presentationFrame = useRef<number | undefined>(undefined)
   const alertEvent = alertTask ? alertEventId(alertTask) : undefined
-  const diagnostic = useIslandDiagnostics({ mode, modeRef, presentation, hovering, focused })
+  const activeTasks = useMemo(
+    () => snapshot.tasks.filter((task) => getDisplayStatus(task) !== 'stopped'),
+    [snapshot.tasks]
+  )
+  const pendingTasks = activeTasks.filter((task) =>
+    ['waiting-approval', 'waiting-input'].includes(getDisplayStatus(task))
+  )
+  const runningCount = activeTasks.filter((task) => getDisplayStatus(task) === 'running').length
+  const completedCount = activeTasks.filter((task) => getDisplayStatus(task) === 'completed').length
+  const failedCount = activeTasks.filter((task) => getDisplayStatus(task) === 'failed').length
+  const leadingTask = activeTasks[0]
+  const compactTask = leadingTask ?? alertTask
+  const compactStatus = compactTask ? getDisplayStatus(compactTask) : undefined
+  const satelliteStatus = getSatelliteStatus(pendingTasks)
+  const expandedHeight =
+    activeTasks.length <= 1 ? SINGLE_TASK_HEIGHT : activeTasks.length === 2 ? 281 : 362
+  const diagnostic = useIslandDiagnostics({
+    mode,
+    modeRef,
+    presentation,
+    hovering,
+    focused,
+    interactive: interactiveRef,
+    pendingHitTest: pendingHitTestRef,
+    point: latestPointer,
+    expandedHeight,
+    satellite: satelliteStatus !== undefined
+  })
 
   function setMode(next: IslandMode, reason: string): void {
     diagnostic.request(next, reason)
     setModeState(next)
   }
-
-  useEffect(() => {
-    modeRef.current = mode
-  }, [mode])
 
   useEffect(() => {
     let active = true
@@ -96,6 +128,9 @@ export default function Island(): React.JSX.Element {
       disposeIsland()
       disposePresentation()
       stopReminder('unmount')
+      cancelInteractiveFrameRef.current()
+      if (presentationFrame.current !== undefined) cancelAnimationFrame(presentationFrame.current)
+      setIslandInteractive(false, 'unmount')
       diagnostic.trace('window', { reason: 'unmount' })
       diagnostic.buffer.flush()
       window.clearTimeout(exitTimer.current)
@@ -181,25 +216,30 @@ export default function Island(): React.JSX.Element {
     )
   }, [alertEvent, mode, presentation.visible])
 
-  const activeTasks = useMemo(
-    () => snapshot.tasks.filter((task) => getDisplayStatus(task) !== 'stopped'),
-    [snapshot.tasks]
-  )
-  const pendingTasks = activeTasks.filter((task) =>
-    ['waiting-approval', 'waiting-input'].includes(getDisplayStatus(task))
-  )
-  const runningCount = activeTasks.filter((task) => getDisplayStatus(task) === 'running').length
-  const completedCount = activeTasks.filter((task) => getDisplayStatus(task) === 'completed').length
-  const failedCount = activeTasks.filter((task) => getDisplayStatus(task) === 'failed').length
-  const leadingTask = activeTasks[0]
-  const compactTask = leadingTask ?? alertTask
-  const compactStatus = compactTask ? getDisplayStatus(compactTask) : undefined
-  const satelliteStatus = getSatelliteStatus(pendingTasks)
-  const expandedHeight = activeTasks.length <= 1 ? 200 : activeTasks.length === 2 ? 281 : 362
+  useLayoutEffect(() => {
+    const from = modeRef.current
+    modeRef.current = mode
+    expandedHeightRef.current = expandedHeight
+    satelliteRef.current = satelliteStatus !== undefined
+    diagnostic.trace('effect', { reason: 'geometry-change', from, to: mode })
+    cancelInteractiveFrameRef.current()
+    if (!presentation.visible || !latestPointer.current.valid) return
+    const point = latestPointer.current
+    const inside = isPointInIsland(
+      point.x,
+      point.y,
+      mode,
+      expandedHeight,
+      satelliteStatus !== undefined
+    )
+    setIslandInteractive(inside, 'geometry-change')
+    // 只在提交后重算一次当前指针，避免模式切换清理交互状态。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedHeight, mode, presentation.visible, satelliteStatus])
 
   useEffect(() => {
     if (!presentation.visible) return
-    let interactive = false
+    const pointer = latestPointer.current
     const effect = ++diagnostic.counters.current.effect
     diagnostic.trace('effect', {
       reason: 'setup',
@@ -210,41 +250,44 @@ export default function Island(): React.JSX.Element {
     // rAF 节流:forward 转发的鼠标移动每秒可达数百次,命中检测每帧至多一次
     let pendingEvent: MouseEvent | undefined
     let frameId: number | undefined
-    const updateInteractive = (next: boolean, reason: string): void => {
-      if (next === interactive) return
-      interactive = next
-      setIslandInteractive(next, reason, effect)
-    }
     const cancelPendingHitTest = (): void => {
       if (frameId !== undefined) cancelAnimationFrame(frameId)
       frameId = undefined
       pendingEvent = undefined
+      pendingHitTestRef.current = false
     }
     const runHitTest = (): void => {
       frameId = undefined
       const event = pendingEvent
       pendingEvent = undefined
-      if (!event) return
-      diagnostic.samplePoint(event)
-      updateInteractive(
+      pendingHitTestRef.current = false
+      if (!event || !presentationRef.current) return
+      setIslandInteractive(
         isPointInIsland(
           event.clientX,
           event.clientY,
-          mode,
-          expandedHeight,
-          satelliteStatus !== undefined
+          modeRef.current,
+          expandedHeightRef.current,
+          satelliteRef.current
         ),
-        'hit-test'
+        'hit-test',
+        effect
       )
     }
     const handlePointerMove = (event: MouseEvent): void => {
+      if (!presentationRef.current) return
+      rememberPointer(event)
       pendingEvent = event
-      if (frameId === undefined) frameId = requestAnimationFrame(runHitTest)
+      if (frameId === undefined) {
+        pendingHitTestRef.current = true
+        frameId = requestAnimationFrame(runHitTest)
+      }
     }
-    const handleMouseLeave = (): void => {
-      diagnostic.trace('pointer', { reason: 'document-leave', effect })
+    const handleMouseLeave = (event: MouseEvent): void => {
+      tracePointerLeave('document-leave', event)
       cancelPendingHitTest()
-      updateInteractive(false, 'document-leave')
+      latestPointer.current.valid = false
+      setIslandInteractive(false, 'document-leave', effect)
     }
     cancelInteractiveFrameRef.current = cancelPendingHitTest
     // pointermove/mousemove 在 Chromium 同源派发,双注册只会双倍命中检测,留 pointermove
@@ -254,9 +297,10 @@ export default function Island(): React.JSX.Element {
       diagnostic.trace('effect', {
         reason: 'cleanup',
         effect,
-        interactive,
-        expandedHeight,
-        satellite: satelliteStatus !== undefined
+        interactive: interactiveRef.current,
+        pendingHitTest: pendingHitTestRef.current,
+        expandedHeight: expandedHeightRef.current,
+        satellite: satelliteRef.current
       })
       document.removeEventListener('pointermove', handlePointerMove)
       document.removeEventListener('mouseleave', handleMouseLeave)
@@ -264,11 +308,12 @@ export default function Island(): React.JSX.Element {
       if (cancelInteractiveFrameRef.current === cancelPendingHitTest) {
         cancelInteractiveFrameRef.current = () => undefined
       }
-      updateInteractive(false, 'effect-cleanup')
+      pointer.valid = false
+      setIslandInteractive(false, 'visibility-cleanup', effect)
     }
-    // 包装函数只访问稳定诊断对象；加入依赖会让日志触发额外穿透切换。
+    // 监听生命周期只跟随窗口显隐；模式变化不再 cleanup 并短暂开启鼠标穿透。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expandedHeight, mode, presentation.visible, satelliteStatus])
+  }, [presentation.visible])
 
   function handlePresentation(next: IslandPresentation): void {
     diagnostic.trace('presentation', {
@@ -279,13 +324,22 @@ export default function Island(): React.JSX.Element {
     })
     diagnostic.counters.current.exit = 0
     window.clearTimeout(exitTimer.current)
+    window.clearTimeout(holdTimer.current)
+    if (presentationFrame.current !== undefined) cancelAnimationFrame(presentationFrame.current)
+    presentationFrame.current = undefined
+    cancelInteractiveFrameRef.current()
+    latestPointer.current.valid = false
+    hovering.current = false
     presentationRef.current = next.visible
+    setIslandInteractive(false, next.visible ? 'presentation-reset' : 'presentation-hide')
     setPresentation(next)
     if (next.visible) {
       setSnapshot(latestSnapshot.current)
       stopReminder('presentation-show')
       setMode('hidden', 'presentation-show')
-      requestAnimationFrame(() => {
+      presentationFrame.current = requestAnimationFrame(() => {
+        presentationFrame.current = undefined
+        if (!presentationRef.current) return
         diagnostic.request('compact', 'presentation-frame-unless-active')
         setModeState((current) =>
           current === 'alert' || current === 'expanded' ? current : 'compact'
@@ -357,6 +411,7 @@ export default function Island(): React.JSX.Element {
   }
 
   function handlePointerEnter(event: React.PointerEvent): void {
+    rememberPointer(event)
     hovering.current = true
     diagnostic.pointer('pointer-enter', event)
     setIslandInteractive(true, 'pointer-enter')
@@ -365,16 +420,55 @@ export default function Island(): React.JSX.Element {
 
   function handlePointerLeave(event: React.PointerEvent): void {
     hovering.current = false
-    diagnostic.pointer('pointer-leave', event)
+    tracePointerLeave('pointer-leave', event)
     cancelInteractiveFrameRef.current()
+    latestPointer.current.valid = false
     setIslandInteractive(false, 'pointer-leave')
     if (modeRef.current === 'alert') resumeReminder()
     if (modeRef.current === 'expanded' && !focused.current) setMode('compact', 'pointer-leave')
   }
 
+  function rememberPointer(event: { clientX: number; clientY: number; timeStamp: number }): void {
+    if (!presentationRef.current) return
+    latestPointer.current.x = event.clientX
+    latestPointer.current.y = event.clientY
+    latestPointer.current.timeStamp = event.timeStamp
+    latestPointer.current.valid = true
+  }
+
+  function tracePointerLeave(reason: string, event: React.PointerEvent | MouseEvent): void {
+    if (!diagnostic.buffer.enabled) return
+    const relatedInside =
+      event.relatedTarget instanceof Node &&
+      stageRef.current?.contains(event.relatedTarget) === true
+    const rect = islandRef.current?.getBoundingClientRect()
+    const fields: IslandDiagFields = {
+      relatedInside,
+      hitInside: isPointInIsland(
+        event.clientX,
+        event.clientY,
+        modeRef.current,
+        expandedHeightRef.current,
+        satelliteRef.current
+      )
+    }
+    if (rect)
+      fields.domInside =
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom
+    diagnostic.pointer(reason, event, fields)
+  }
+
   function setIslandInteractive(interactive: boolean, reason: string, effect?: number): void {
+    interactive = interactive && presentationRef.current
+    const previousInteractive = interactiveRef.current
+    if (interactive === previousInteractive) return
+    interactiveRef.current = interactive
     const request = diagnostic.trace('interactive', {
       interactive,
+      previousInteractive,
       reason,
       ...(effect && { effect })
     })
@@ -414,6 +508,7 @@ export default function Island(): React.JSX.Element {
   }
 
   function handleCompactPointerDown(event: React.PointerEvent<HTMLButtonElement>): void {
+    rememberPointer(event)
     diagnostic.pointer('compact-down', event)
     if (event.button !== 0) return
     holdTimer.current = window.setTimeout(() => setMode('expanded', 'hold-fired'), HOLD_DURATION_MS)
@@ -446,6 +541,7 @@ export default function Island(): React.JSX.Element {
           aria-label="Codex 任务活动"
           className="island"
           data-mode={displayMode}
+          ref={islandRef}
           data-status={compactStatus}
           style={
             {
@@ -461,6 +557,7 @@ export default function Island(): React.JSX.Element {
             className="compact layer"
             inert={mode !== 'compact'}
             onClick={(event) => {
+              if (event.detail > 0) rememberPointer(event)
               diagnostic.pointer('compact-click', event)
               setMode('expanded', 'compact-click')
             }}

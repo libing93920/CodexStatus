@@ -91,6 +91,7 @@ import {
   type IslandSnapshot
 } from '../shared/island'
 import { CodexActivityService } from './services/codex-activity'
+import { CapsuleWindowDiagnostics } from './services/capsule-window-diagnostics'
 import {
   formatDiagError,
   logDiag,
@@ -161,6 +162,7 @@ const SINGLE_CAPSULE_WINDOW_WIDTH = 160
 const SINGLE_ORB_WINDOW_HEIGHT = 96
 
 let mainWindow: BrowserWindow | null = null
+let capsuleDiagnostics: CapsuleWindowDiagnostics | undefined
 let panelWindow: BrowserWindow | null = null
 let islandWindow: BrowserWindow | null = null
 let panelRevealPending = false
@@ -240,6 +242,9 @@ function createCapsuleWindow(): BrowserWindow {
       sandbox: false
     }
   })
+
+  capsuleDiagnostics?.stop()
+  capsuleDiagnostics = new CapsuleWindowDiagnostics(window)
 
   // 不在 ready-to-show 直接 show:胶囊需等首次有数据后再显示,
   // 避免启动时以最大尺寸空壳先露一帧、数据回来再缩小的"由大变小"闪烁。
@@ -535,6 +540,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true
+  capsuleDiagnostics?.stop()
   clearRefreshTimer()
   clearCodexAuthWatcher()
   windowKeeper?.stop()
@@ -1124,6 +1130,7 @@ function openTeamFromTray(): void {
 
 function prepareToQuit(): void {
   isQuitting = true
+  capsuleDiagnostics?.stop()
   islandRendererReady = false
   islandPresentationVisible = false
   clearRefreshTimer()

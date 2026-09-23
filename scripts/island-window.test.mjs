@@ -47,6 +47,7 @@ let presentationRevision = 0
 let currentPresentation = { revision: 0, visible: false }
 let islandDiagnosticsEnabled = true
 const diagnosticBatches = []
+let rendererFailure
 const readyPromise = new Promise((resolveReady) => (ready = resolveReady))
 
 async function verifyIslandWindow() {
@@ -67,6 +68,7 @@ async function verifyIslandWindow() {
       backgroundThrottling: false
     }
   })
+  const rendererListeners = attachRendererFailureListeners(window)
   try {
     const windowBounds = window.getBounds()
     assert.equal(windowBounds.width, 464)
@@ -89,12 +91,20 @@ async function verifyIslandWindow() {
       assert.equal(reducedMotion, true)
       sendPresentation(window, true)
       await retry(async () => assert.equal((await inspect(window)).mode, 'compact'))
+      await verifyInteractionRegression(window, true)
       const hidden = waitForHidden()
       const startedAt = Date.now()
       const revision = sendPresentation(window, false)
       await hidden
       assert.equal(hiddenRevision, revision)
       assert.ok(Date.now() - startedAt < 250)
+      islandDiagnosticsEnabled = false
+      await verifyRecreate(window, false)
+      await verifyInteractionRegression(window, false)
+      const finalHidden = waitForHidden()
+      const finalRevision = sendPresentation(window, false)
+      await finalHidden
+      assert.equal(hiddenRevision, finalRevision)
       return
     }
 
@@ -136,6 +146,7 @@ async function verifyIslandWindow() {
     await retry(() => assert.equal(interactions.at(-1), false))
     await verifyStableCompactUpdates(window)
     await verifyPointerMoveDiagnostics(window)
+    await verifyInteractionRegression(window, true)
 
     window.webContents.send(CHANNELS.islandUpdated, snapshot('waiting-approval'))
     await delay(700)
@@ -246,11 +257,13 @@ async function verifyIslandWindow() {
     verifyDiagnosticProtocol()
     await verifyDiagnosticsDisabled(window)
   } finally {
+    detachRendererFailureListeners(window, rendererListeners)
     window.destroy()
   }
 }
 
 async function verifyExit(window) {
+  const before = diagnosticEvents().length
   const hidden = waitForHidden()
   const revision = sendPresentation(window, false)
   window.webContents.send(CHANNELS.islandUpdated, snapshot('running', 0))
@@ -258,6 +271,147 @@ async function verifyExit(window) {
   assert.equal((await inspect(window)).taskRows, 4)
   await hidden
   assert.equal(hiddenRevision, revision)
+  await retry(() => {
+    const exit = diagnosticEvents()
+      .slice(before)
+      .find((event) => event.event === 'effect' && event.fields?.reason === 'expanded-exit')
+    assert.ok(exit)
+    assert.equal(exit.fields.to, 'hidden')
+    assert.equal(exit.fields.revision, revision)
+    assert.ok(exit.fields.expandedAge >= 0)
+  })
+}
+
+async function verifyInteractionRegression(window, diagnosticsEnabled) {
+  await retry(async () => assert.equal((await inspect(window)).mode, 'compact'))
+  await delay(100)
+  const diagnosticStart = diagnosticEvents().length
+  const lifecycleEffectsBefore = islandLifecycleEffectCount()
+
+  await dispatchPointerEnter(window, 222, 15)
+  await retry(() => assert.equal(interactions.at(-1), true))
+  await installGeometryProbe(window)
+  await resetGeometryProbe(window)
+  await dispatchPointerLeave(window)
+  const leaveGeometryReads = await readGeometryProbe(window)
+  await removeGeometryProbe(window)
+  if (diagnosticsEnabled) assert.ok(leaveGeometryReads > 0)
+  else assert.equal(leaveGeometryReads, 0)
+  await retry(() => assert.equal(interactions.at(-1), false))
+
+  const duplicateStart = interactions.length
+  await dispatchPointerEnter(window, 222, 15)
+  await dispatchPointerEnter(window, 222, 15)
+  await dispatchPointerMove(window, 222, 15)
+  await retry(() => assert.equal(interactions.at(-1), true))
+  await delay(50)
+  assert.deepEqual(interactions.slice(duplicateStart), [true])
+
+  const expandedStart = interactions.length
+  await dispatchClickAt(window, '.compact', 222, 15)
+  await retry(async () => assert.equal((await inspect(window)).mode, 'expanded'))
+  await delay(100)
+  assert.equal(interactions.slice(expandedStart).includes(false), false)
+
+  for (const count of [2, 4]) {
+    window.webContents.send(CHANNELS.islandUpdated, snapshot('running', count))
+    await retry(async () => {
+      const current = await inspect(window)
+      assert.equal(current.mode, 'expanded')
+      assert.equal(current.taskRows, count)
+    })
+    assert.equal(interactions.slice(expandedStart).includes(false), false)
+  }
+
+  const waitingInput = snapshot('waiting-input')
+  waitingInput.viewedEventIds = ['request-input']
+  window.webContents.send(CHANNELS.islandUpdated, waitingInput)
+  await retry(async () => {
+    const current = await inspect(window)
+    assert.equal(current.mode, 'expanded')
+    assert.equal(current.stageMultiple, 'true')
+  })
+  assert.equal(interactions.slice(expandedStart).includes(false), false)
+  assert.equal(islandLifecycleEffectCount(), lifecycleEffectsBefore)
+
+  await dispatchPointerLeave(window)
+  await retry(async () => assert.equal((await inspect(window)).mode, 'compact'))
+  await retry(() => assert.equal(interactions.at(-1), false))
+
+  await dispatchClickAt(window, '.compact', 222, 15)
+  await retry(async () => assert.equal((await inspect(window)).mode, 'expanded'))
+  await window.webContents.executeJavaScript(
+    "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))"
+  )
+  await retry(async () => assert.equal((await inspect(window)).mode, 'compact'))
+
+  await dispatchPointerLeave(window)
+  await retry(() => assert.equal(interactions.at(-1), false))
+  const staleInteractionStart = interactions.length
+  await installAnimationFrameProbe(window)
+  await dispatchPointerMove(window, 222, 15)
+  const hidden = waitForHidden()
+  const revision = sendPresentation(window, false)
+  await hidden
+  assert.equal(hiddenRevision, revision)
+  const frameProbe = await removeAnimationFrameProbe(window)
+  assert.equal(frameProbe.pending, 0)
+  assert.ok(frameProbe.cancelled > 0)
+  assert.equal(interactions.slice(staleInteractionStart).includes(true), false)
+
+  sendPresentation(window, true)
+  await retry(async () => assert.equal((await inspect(window)).mode, 'compact'))
+  assert.equal(interactions.slice(staleInteractionStart).includes(true), false)
+
+  window.webContents.send(CHANNELS.islandUpdated, snapshot('running'))
+  await retry(async () => {
+    const current = await inspect(window)
+    assert.equal(current.mode, 'compact')
+    assert.equal(current.stageMultiple, 'false')
+  })
+  await delay(100)
+
+  const regressionEvents = diagnosticEvents().slice(diagnosticStart)
+  if (!diagnosticsEnabled) {
+    assert.equal(regressionEvents.length, 0)
+    return
+  }
+  assert.ok(
+    regressionEvents.some(
+      (event) =>
+        event.event === 'interactive' &&
+        typeof event.fields?.interactive === 'boolean' &&
+        typeof event.fields?.previousInteractive === 'boolean' &&
+        typeof event.fields?.pendingHitTest === 'boolean' &&
+        typeof event.fields?.pointValid === 'boolean'
+    )
+  )
+  const expanded = regressionEvents.filter(
+    (event) => event.event === 'mode-commit' && event.fields?.to === 'expanded'
+  )
+  assert.equal(expanded.length, 2)
+  assert.ok(expanded[1].fields.expansion > expanded[0].fields.expansion)
+  for (const commit of expanded) {
+    assert.ok(commit.fields.expandedAge >= 0)
+    const exit = regressionEvents.find(
+      (event) =>
+        event.fields?.reason === 'expanded-exit' &&
+        event.fields.expansion === commit.fields.expansion
+    )
+    assert.ok(exit)
+    assert.equal(exit.fields.to, 'compact')
+    assert.ok(exit.fields.expandedAge >= commit.fields.expandedAge)
+  }
+  assert.ok(
+    regressionEvents.some(
+      (event) =>
+        event.event === 'pointer' &&
+        event.fields?.reason === 'pointer-leave' &&
+        typeof event.fields?.hitInside === 'boolean' &&
+        typeof event.fields?.domInside === 'boolean' &&
+        typeof event.fields?.relatedInside === 'boolean'
+    )
+  )
 }
 
 async function verifyStaleAndRevive(window) {
@@ -388,25 +542,151 @@ async function verifyRecreate(window, expectDiagnostics = true) {
   }
 }
 
+function attachRendererFailureListeners(window) {
+  rendererFailure = undefined
+  const onGone = (_event, details) => {
+    if (details.reason === 'clean-exit') return
+    rememberRendererFailure(
+      new Error(`Island renderer exited: ${details.reason ?? 'unknown'} ${details.exitCode ?? ''}`)
+    )
+  }
+  const onConsoleMessage = ({ level, message, lineNumber, sourceId }) => {
+    if (level !== 'error') return
+    rememberRendererFailure(
+      new Error(`Island renderer console error: ${message} (${sourceId}:${lineNumber})`)
+    )
+  }
+  const onFailLoad = (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return
+    rememberRendererFailure(
+      new Error(`Island renderer load failed: ${errorCode} ${errorDescription} ${validatedURL}`)
+    )
+  }
+  window.webContents.on('render-process-gone', onGone)
+  window.webContents.on('console-message', onConsoleMessage)
+  window.webContents.on('did-fail-load', onFailLoad)
+  return { onGone, onConsoleMessage, onFailLoad }
+}
+
+function detachRendererFailureListeners(window, listeners) {
+  window.webContents.removeListener('render-process-gone', listeners.onGone)
+  window.webContents.removeListener('console-message', listeners.onConsoleMessage)
+  window.webContents.removeListener('did-fail-load', listeners.onFailLoad)
+}
+
+function rememberRendererFailure(error) {
+  rendererFailure ??= error
+}
+
+function assertRendererHealthy() {
+  if (rendererFailure) throw rendererFailure
+}
+
+function islandLifecycleEffectCount() {
+  return diagnosticEvents().filter(
+    (event) =>
+      event.event === 'effect' &&
+      ['setup', 'cleanup', 'visibility-cleanup'].includes(event.fields?.reason)
+  ).length
+}
+
+async function installGeometryProbe(window) {
+  await window.webContents.executeJavaScript(`(() => {
+    if (window.__islandGeometryProbe) return
+    const original = Element.prototype.getBoundingClientRect
+    const state = { count: 0, original }
+    Element.prototype.getBoundingClientRect = function (...args) {
+      state.count++
+      return original.apply(this, args)
+    }
+    window.__islandGeometryProbe = state
+  })()`)
+}
+
+async function resetGeometryProbe(window) {
+  await window.webContents.executeJavaScript(
+    'if (window.__islandGeometryProbe) window.__islandGeometryProbe.count = 0'
+  )
+}
+
+async function readGeometryProbe(window) {
+  return window.webContents.executeJavaScript(
+    'window.__islandGeometryProbe ? window.__islandGeometryProbe.count : 0'
+  )
+}
+
+async function removeGeometryProbe(window) {
+  await window.webContents.executeJavaScript(`(() => {
+    const state = window.__islandGeometryProbe
+    if (!state) return 0
+    Element.prototype.getBoundingClientRect = state.original
+    delete window.__islandGeometryProbe
+    return state.count
+  })()`)
+}
+
+async function installAnimationFrameProbe(window) {
+  await window.webContents.executeJavaScript(`(() => {
+    if (window.__islandAnimationFrameProbe) return
+    const state = {
+      next: 1,
+      pending: new Set(),
+      cancelled: 0,
+      nativeRequest: window.requestAnimationFrame,
+      nativeCancel: window.cancelAnimationFrame
+    }
+    window.requestAnimationFrame = () => {
+      const id = state.next++
+      state.pending.add(id)
+      return id
+    }
+    window.cancelAnimationFrame = (id) => {
+      if (state.pending.delete(id)) state.cancelled++
+    }
+    window.__islandAnimationFrameProbe = state
+  })()`)
+}
+
+async function removeAnimationFrameProbe(window) {
+  return window.webContents.executeJavaScript(`(() => {
+    const state = window.__islandAnimationFrameProbe
+    if (!state) return { pending: 0, cancelled: 0 }
+    window.requestAnimationFrame = state.nativeRequest
+    window.cancelAnimationFrame = state.nativeCancel
+    const result = { pending: state.pending.size, cancelled: state.cancelled }
+    delete window.__islandAnimationFrameProbe
+    return result
+  })()`)
+}
+
 async function verifyPointerMoveDiagnostics(window) {
   await dispatchPointerMove(window, 232, 24)
   await retry(() => assert.equal(interactions.at(-1), true))
   await delay(100)
   const before = diagnosticEvents()
   const beforeBatchCount = diagnosticBatches.length
+  const beforeInteractionCount = interactions.length
+  await installGeometryProbe(window)
+  await resetGeometryProbe(window)
   const startedAt = Date.now()
   await dispatchPointerMovesAcrossFrames(window, 232, 24, POINTER_MOVE_COUNT, 20)
   const dispatchMs = Date.now() - startedAt
   await delay(100)
   const after = diagnosticEvents()
+  const geometryReads = await readGeometryProbe(window)
+  await removeGeometryProbe(window)
   assert.equal(after.length, before.length)
   assert.equal(diagnosticBatches.length, beforeBatchCount)
+  assert.equal(interactions.length, beforeInteractionCount)
+  assert.equal(geometryReads, 0)
   console.log(
     JSON.stringify({
       islandDiagnostics: 'on',
       pointerMoveCount: POINTER_MOVE_COUNT,
       diagnosticBatches: diagnosticBatches.length - beforeBatchCount,
       diagnosticEvents: after.length - before.length,
+      interactiveIpc: interactions.length - beforeInteractionCount,
+      geometryReads,
       diagnosticBatchesTotal: diagnosticBatches.length,
       diagnosticEventsTotal: after.length,
       dispatchMs
@@ -441,6 +721,23 @@ function verifyDiagnosticProtocol() {
       true
     )
   }
+  const events = diagnosticEvents()
+  const expandedCommit = events.find(
+    (event) => event.event === 'mode-commit' && event.fields?.to === 'expanded'
+  )
+  assert.ok(expandedCommit)
+  assert.equal(typeof expandedCommit.fields.expansion, 'number')
+  assert.ok(events.some((event) => typeof event.fields?.expandedAge === 'number'))
+  assert.ok(
+    events.some(
+      (event) =>
+        event.event === 'interactive' &&
+        typeof event.fields?.interactive === 'boolean' &&
+        typeof event.fields?.previousInteractive === 'boolean' &&
+        typeof event.fields?.pendingHitTest === 'boolean' &&
+        typeof event.fields?.pointValid === 'boolean'
+    )
+  )
 }
 
 async function verifyDiagnosticsDisabled(window) {
@@ -449,24 +746,32 @@ async function verifyDiagnosticsDisabled(window) {
   const previousEventCount = diagnosticEvents().length
   islandDiagnosticsEnabled = false
   await verifyRecreate(window, false)
-  await window.webContents.executeJavaScript("document.querySelector('.compact').click()")
-  await delay(700)
-  assert.equal((await inspect(window)).mode, 'expanded')
-  await window.webContents.executeJavaScript("document.querySelector('.collapse').click()")
-  await delay(700)
-  assert.equal((await inspect(window)).mode, 'compact')
+  await verifyInteractionRegression(window, false)
+  const beforeInteractionCount = interactions.length
+  await dispatchPointerMove(window, 232, 24)
+  await retry(() => assert.equal(interactions.at(-1), true))
+  const stableInteractionCount = interactions.length
+  await installGeometryProbe(window)
+  await resetGeometryProbe(window)
   const startedAt = Date.now()
   await dispatchPointerMovesAcrossFrames(window, 232, 24, POINTER_MOVE_COUNT, 20)
   const dispatchMs = Date.now() - startedAt
   await delay(100)
+  const geometryReads = await readGeometryProbe(window)
+  await removeGeometryProbe(window)
   assert.equal(diagnosticBatches.length, previousBatchCount)
   assert.equal(diagnosticEvents().length, previousEventCount)
+  assert.equal(interactions.length, stableInteractionCount)
+  assert.equal(interactions.length - beforeInteractionCount, 1)
+  assert.equal(geometryReads, 0)
   console.log(
     JSON.stringify({
       islandDiagnostics: 'off',
       pointerMoveCount: POINTER_MOVE_COUNT,
       diagnosticBatches: diagnosticBatches.length - previousBatchCount,
       diagnosticEvents: diagnosticEvents().length - previousEventCount,
+      interactiveIpc: interactions.length - stableInteractionCount,
+      geometryReads,
       diagnosticBatchesTotal: diagnosticBatches.length,
       diagnosticEventsTotal: previousEventCount,
       dispatchMs
@@ -687,7 +992,8 @@ function snapshot(status, count = 1, suffix = '') {
 }
 
 async function inspect(window) {
-  return window.webContents.executeJavaScript(`(() => {
+  assertRendererHealthy()
+  const result = await window.webContents.executeJavaScript(`(() => {
     const island = document.querySelector('.island')
     const bounds = island.getBoundingClientRect()
     const style = getComputedStyle(island)
@@ -758,9 +1064,12 @@ async function inspect(window) {
       taskWaveforms
     }
   })()`)
+  assertRendererHealthy()
+  return result
 }
 
 async function inspectPixels(window) {
+  assertRendererHealthy()
   const image = await window.webContents.capturePage()
   const size = image.getSize()
   const bitmap = image.toBitmap()
@@ -773,12 +1082,15 @@ async function inspectPixels(window) {
 }
 
 async function dispatchPointerMove(window, x, y) {
+  assertRendererHealthy()
   await window.webContents.executeJavaScript(
     `document.dispatchEvent(new PointerEvent('pointermove', { clientX: ${x}, clientY: ${y}, bubbles: true }))`
   )
+  assertRendererHealthy()
 }
 
 async function dispatchPointerMovesAcrossFrames(window, x, y, count, frameCount) {
+  assertRendererHealthy()
   await window.webContents.executeJavaScript(`(async () => {
     const perFrame = Math.ceil(${count} / ${frameCount})
     for (let frame = 0; frame < ${frameCount}; frame++) {
@@ -792,6 +1104,33 @@ async function dispatchPointerMovesAcrossFrames(window, x, y, count, frameCount)
       }
       await new Promise((resolveFrame) => requestAnimationFrame(resolveFrame))
     }
+  })()`)
+  assertRendererHealthy()
+}
+
+async function dispatchClickAt(window, selector, x, y) {
+  await window.webContents.executeJavaScript(`(() => {
+    const target = document.querySelector(${JSON.stringify(selector)})
+    target.dispatchEvent(new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      detail: 1,
+      clientX: ${x},
+      clientY: ${y}
+    }))
+  })()`)
+}
+
+async function dispatchPointerEnter(window, x, y) {
+  await window.webContents.executeJavaScript(`(() => {
+    const stage = document.querySelector('.island-stage')
+    stage.dispatchEvent(new PointerEvent('pointerover', {
+      bubbles: true,
+      clientX: ${x},
+      clientY: ${y},
+      relatedTarget: null
+    }))
   })()`)
 }
 
@@ -835,7 +1174,16 @@ async function retry(check) {
 }
 
 function delay(ms) {
-  return new Promise((resolveDelay) => setTimeout(resolveDelay, ms))
+  return new Promise((resolveDelay, rejectDelay) =>
+    setTimeout(() => {
+      try {
+        assertRendererHealthy()
+        resolveDelay()
+      } catch (error) {
+        rejectDelay(error)
+      }
+    }, ms)
+  )
 }
 
 function targetLayout(value) {

@@ -188,3 +188,67 @@ test('validateIslandDiagBatch 拒绝未知字段、正文、超限和坏值', ()
     false
   )
 })
+
+test('validateIslandDiagBatch 接受交互与展开字段并拒绝错误类型和非有限数', () => {
+  const fields = {
+    reason: 'interactive-applied',
+    mode: 'expanded',
+    previousInteractive: false,
+    hitInside: true,
+    domInside: true,
+    relatedInside: false,
+    pendingHitTest: false,
+    pointValid: true,
+    expansion: 2,
+    expandedAge: 125.5
+  }
+  const valid = { events: [validEvent({ fields })], dropped: 0 }
+  assert.equal(validateIslandDiagBatch(valid), true)
+
+  for (const field of [
+    'previousInteractive',
+    'hitInside',
+    'domInside',
+    'relatedInside',
+    'pendingHitTest',
+    'pointValid'
+  ]) {
+    assert.equal(
+      validateIslandDiagBatch({
+        events: [validEvent({ fields: { ...fields, [field]: 1 } })],
+        dropped: 0
+      }),
+      false,
+      `${field} 必须是布尔值`
+    )
+  }
+
+  for (const field of ['expansion', 'expandedAge']) {
+    assert.equal(
+      validateIslandDiagBatch({
+        events: [validEvent({ fields: { ...fields, [field]: '125.5' } })],
+        dropped: 0
+      }),
+      false,
+      `${field} 必须是数值`
+    )
+    for (const value of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      assert.equal(
+        validateIslandDiagBatch({
+          events: [validEvent({ fields: { ...fields, [field]: value } })],
+          dropped: 0
+        }),
+        false,
+        `${field} 不得为非有限数`
+      )
+    }
+  }
+
+  assert.equal(
+    validateIslandDiagBatch({
+      events: [validEvent({ fields: { ...fields, unknownDiagnosticField: true } })],
+      dropped: 0
+    }),
+    false
+  )
+})

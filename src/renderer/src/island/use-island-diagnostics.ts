@@ -21,6 +21,11 @@ interface Context {
   presentation: { revision: number; visible: boolean }
   hovering: { current: boolean }
   focused: { current: boolean }
+  interactive: { current: boolean }
+  pendingHitTest: { current: boolean }
+  point: { current: { x: number; y: number; timeStamp: number; valid: boolean } }
+  expandedHeight: number
+  satellite: boolean
 }
 
 interface Counters {
@@ -34,9 +39,12 @@ interface Counters {
 interface IslandDiagnostics {
   buffer: IslandDiagBuffer
   trace: (event: IslandDiagEventName, fields?: IslandDiagFields) => number | undefined
-  pointer: (reason: string, event: React.MouseEvent | React.PointerEvent) => void
-  samplePoint: (event: { clientX: number; clientY: number; timeStamp: number }) => void
-  request: (to: Mode, reason: string) => void
+  pointer: (
+    reason: string,
+    event: React.MouseEvent | React.PointerEvent | MouseEvent,
+    fields?: IslandDiagFields
+  ) => void
+  request: (to: Mode, reason: string, fields?: IslandDiagFields) => void
   counters: RefObject<Counters>
 }
 
@@ -58,12 +66,16 @@ export function useIslandDiagnostics(context: Context): IslandDiagnostics {
     exit: 0
   })
   const previousMode = useRef<Mode>('hidden')
-  const point = useRef({ x: 0, y: 0, at: 0, valid: false })
+  const previousDisplayMode = useRef<Mode>('hidden')
+  const expansion = useRef(0)
+  const expandedStartedAt = useRef<number | undefined>(undefined)
 
   const trace = useCallback(
     (event: IslandDiagEventName, fields: IslandDiagFields = {}): number | undefined => {
       if (!buffer.enabled) return undefined
       const current = contextRef.current
+      const point = current.point.current
+      const now = performance.now()
       return buffer.record(event, {
         mode: current.mode,
         modeRef: current.modeRef.current,
@@ -74,10 +86,19 @@ export function useIslandDiagnostics(context: Context): IslandDiagnostics {
         focused: current.focused.current,
         documentFocused: document.hasFocus(),
         interaction: counters.current.interaction,
-        ...(point.current.valid && {
-          x: point.current.x,
-          y: point.current.y,
-          pointAge: Math.max(0, performance.now() - point.current.at)
+        interactive: current.interactive.current,
+        pendingHitTest: current.pendingHitTest.current,
+        expandedHeight: current.expandedHeight,
+        satellite: current.satellite,
+        pointValid: point.valid,
+        ...(point.valid && {
+          x: point.x,
+          y: point.y,
+          pointAge: Math.max(0, now - point.timeStamp)
+        }),
+        ...(expansion.current > 0 && { expansion: expansion.current }),
+        ...(expandedStartedAt.current !== undefined && {
+          expandedAge: Math.max(0, now - expandedStartedAt.current)
         }),
         ...fields
       })
@@ -85,47 +106,62 @@ export function useIslandDiagnostics(context: Context): IslandDiagnostics {
     [buffer]
   )
 
-  const samplePoint = useCallback(
-    (event: { clientX: number; clientY: number; timeStamp: number }): void => {
-      if (!buffer.enabled) return
-      // 复用事件时间，不为每次鼠标移动读时钟、生成日志或访问布局。
-      point.current.x = event.clientX
-      point.current.y = event.clientY
-      point.current.at = event.timeStamp
-      point.current.valid = true
-    },
-    [buffer]
-  )
-
   const pointer = useCallback(
-    (reason: string, event: React.MouseEvent | React.PointerEvent): void => {
+    (
+      reason: string,
+      event: React.MouseEvent | React.PointerEvent | MouseEvent,
+      fields: IslandDiagFields = {}
+    ): void => {
       if (!buffer.enabled) return
-      samplePoint(event)
       if (reason === 'compact-down') counters.current.interaction++
-      trace('pointer', { reason, button: event.button })
-    },
-    [buffer, samplePoint, trace]
-  )
-
-  const request = useCallback(
-    (to: Mode, reason: string): void => {
-      if (!buffer.enabled) return
-      trace('mode-request', { to, reason, request: ++counters.current.request })
+      trace('pointer', {
+        reason,
+        button: event.button,
+        x: event.clientX,
+        y: event.clientY,
+        pointAge: Math.max(0, performance.now() - event.timeStamp),
+        ...fields
+      })
     },
     [buffer, trace]
   )
 
-  useEffect(() => {
-    trace('mode-commit', {
-      from: previousMode.current,
-      to: context.mode,
-      firstRequest: counters.current.committed + 1,
-      lastRequest: counters.current.request
-    })
+  const request = useCallback(
+    (to: Mode, reason: string, fields: IslandDiagFields = {}): void => {
+      if (!buffer.enabled) return
+      trace('mode-request', { to, reason, request: ++counters.current.request, ...fields })
+    },
+    [buffer, trace]
+  )
+
+  useLayoutEffect(() => {
+    const displayMode = context.presentation.visible ? context.mode : 'hidden'
+    if (
+      displayMode === 'expanded' &&
+      previousDisplayMode.current !== 'expanded' &&
+      buffer.enabled
+    ) {
+      expansion.current++
+      expandedStartedAt.current = performance.now()
+    }
+    if (context.mode !== previousMode.current) {
+      trace('mode-commit', {
+        from: previousMode.current,
+        to: context.mode,
+        firstRequest: counters.current.committed + 1,
+        lastRequest: counters.current.request,
+        modeRef: context.mode
+      })
+      counters.current.committed = counters.current.request
+    }
+    if (previousDisplayMode.current === 'expanded' && displayMode !== 'expanded') {
+      trace('effect', { reason: 'expanded-exit', from: 'expanded', to: displayMode })
+      expandedStartedAt.current = undefined
+    }
     previousMode.current = context.mode
-    counters.current.committed = counters.current.request
+    previousDisplayMode.current = displayMode
     if (context.mode === 'hidden') buffer.flush()
-  }, [context.mode, buffer, trace])
+  }, [context.mode, context.presentation.visible, buffer, trace])
 
   useEffect(() => {
     const flush = (): void => buffer.flush()
@@ -136,7 +172,7 @@ export function useIslandDiagnostics(context: Context): IslandDiagnostics {
   }, [buffer])
 
   return useMemo(
-    () => ({ buffer, trace, pointer, samplePoint, request, counters }),
-    [buffer, trace, pointer, samplePoint, request]
+    () => ({ buffer, trace, pointer, request, counters }),
+    [buffer, trace, pointer, request]
   )
 }
