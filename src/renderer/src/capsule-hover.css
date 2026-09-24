@@ -1,0 +1,52 @@
+.quota-hover-root {
+  width: 100%;
+  height: 100%;
+}
+
+.quota-hover-theme.panel {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  clip-path: none;
+  overflow: visible;
+  animation: none;
+}
+
+[data-theme] .team-row__tooltip.quota-hover-tooltip {
+  position: static;
+  width: 100%;
+  height: 100%;
+  padding: 3px 7px;
+  border-radius: 4px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+  gap: 8px;
+  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+  line-height: 1;
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: none;
+}
+
+.quota-hover__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.quota-hover__group .team-row__tooltip-label {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.quota-hover__value {
+  color: var(--metric-accent);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}

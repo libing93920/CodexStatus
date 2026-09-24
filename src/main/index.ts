@@ -127,6 +127,8 @@ const CHANNELS = {
   openExternal: 'codex-status:open-external',
   panelReady: 'codex-status:panel-ready',
   capsuleReady: 'codex-status:capsule-ready',
+  capsuleHoverVisible: 'codex-status:capsule-hover-visible',
+  capsuleHoverReady: 'codex-status:capsule-hover-ready',
   showPanel: 'codex-status:show-panel',
   snapshotUpdated: 'codex-status:snapshot-updated',
   preferencesUpdated: 'codex-status:preferences-updated',
@@ -160,8 +162,13 @@ const CHANNELS = {
 
 const SINGLE_CAPSULE_WINDOW_WIDTH = 160
 const SINGLE_ORB_WINDOW_HEIGHT = 96
+const CAPSULE_HOVER_SIZE = { width: 120, height: 26 } as const
+const CAPSULE_HOVER_GAP = 8
 
 let mainWindow: BrowserWindow | null = null
+let capsuleHoverWindow: BrowserWindow | null = null
+let capsuleHoverReady = false
+let capsuleHoverRequested = false
 let capsuleDiagnostics: CapsuleWindowDiagnostics | undefined
 let panelWindow: BrowserWindow | null = null
 let islandWindow: BrowserWindow | null = null
@@ -261,13 +268,16 @@ function createCapsuleWindow(): BrowserWindow {
       }
     }
     queuePersistState()
+    positionCapsuleHoverWindow()
   })
+  window.on('resize', positionCapsuleHoverWindow)
 
   window.on('show', () => {
     refreshTrayMenu()
   })
 
   window.on('hide', () => {
+    hideCapsuleHoverWindow()
     refreshTrayMenu()
   })
 
@@ -294,6 +304,85 @@ function createCapsuleWindow(): BrowserWindow {
   loadRenderer(window, 'capsule')
 
   return window
+}
+
+function ensureCapsuleHoverWindow(): BrowserWindow {
+  if (capsuleHoverWindow && !capsuleHoverWindow.isDestroyed()) return capsuleHoverWindow
+  const window = new BrowserWindow({
+    width: CAPSULE_HOVER_SIZE.width,
+    height: CAPSULE_HOVER_SIZE.height,
+    parent: mainWindow ?? undefined,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    resizable: false,
+    focusable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false
+    }
+  })
+  // 纯展示窗口无需鼠标转发，避免 Windows 全局鼠标钩子常驻。
+  window.setIgnoreMouseEvents(true)
+  window.on('closed', () => {
+    capsuleHoverWindow = null
+    capsuleHoverReady = false
+  })
+  window.webContents.on('render-process-gone', () => window.destroy())
+  capsuleHoverWindow = window
+  loadRenderer(window, 'hover')
+  return window
+}
+
+function hideCapsuleHoverWindow(): void {
+  capsuleHoverRequested = false
+  if (!capsuleHoverWindow || capsuleHoverWindow.isDestroyed()) return
+  capsuleHoverWindow.hide()
+  capsuleHoverWindow.webContents.setBackgroundThrottling(true)
+}
+
+function positionCapsuleHoverWindow(): void {
+  if (!mainWindow || !capsuleHoverWindow || capsuleHoverWindow.isDestroyed()) return
+  const capsule = mainWindow.getBounds()
+  const workArea = getTargetWorkArea(capsule.x + capsule.width / 2, capsule.y + capsule.height / 2)
+  const right = workArea.x + workArea.width
+  const bottom = workArea.y + workArea.height
+  const { width, height } = CAPSULE_HOVER_SIZE
+  const orb = persistedState.window.viewMode === 'orb'
+  const preferredX = orb
+    ? capsule.x + capsule.width + CAPSULE_HOVER_GAP + width <= right
+      ? capsule.x + capsule.width + CAPSULE_HOVER_GAP
+      : capsule.x - width - CAPSULE_HOVER_GAP
+    : capsule.x + (capsule.width - width) / 2
+  const preferredY = orb
+    ? capsule.y + (capsule.height - height) / 2
+    : capsule.y + capsule.height + CAPSULE_HOVER_GAP + height <= bottom
+      ? capsule.y + capsule.height + CAPSULE_HOVER_GAP
+      : capsule.y - height - CAPSULE_HOVER_GAP
+  capsuleHoverWindow.setBounds({
+    x: Math.round(clamp(preferredX, workArea.x, right - width)),
+    y: Math.round(clamp(preferredY, workArea.y, bottom - height)),
+    width,
+    height
+  })
+}
+
+function showCapsuleHoverWindow(): void {
+  if (
+    !capsuleHoverRequested ||
+    !capsuleHoverReady ||
+    !mainWindow?.isVisible() ||
+    !capsuleHoverWindow ||
+    capsuleHoverWindow.isDestroyed()
+  )
+    return
+  positionCapsuleHoverWindow()
+  capsuleHoverWindow.webContents.setBackgroundThrottling(false)
+  capsuleHoverWindow.showInactive()
 }
 
 function createPanelWindow(): BrowserWindow {
@@ -693,9 +782,25 @@ function registerIpcHandlers(): void {
       showWindow()
     }
   })
+  ipcMain.handle(CHANNELS.capsuleHoverVisible, async (event, visible: boolean) => {
+    if (event.sender.id !== mainWindow?.webContents.id) return
+    capsuleHoverRequested = visible === true
+    if (!capsuleHoverRequested) {
+      hideCapsuleHoverWindow()
+      return
+    }
+    ensureCapsuleHoverWindow()
+    showCapsuleHoverWindow()
+  })
+  ipcMain.handle(CHANNELS.capsuleHoverReady, async (event) => {
+    if (event.sender.id !== capsuleHoverWindow?.webContents.id) return
+    capsuleHoverReady = true
+    showCapsuleHoverWindow()
+  })
 
   // 普通点击沿用显隐切换;提醒跳转用 forceOpen 保证 panel 显示、聚焦并定位目标区域
   ipcMain.handle(CHANNELS.showPanel, async (_, rawView: unknown, rawOptions?: unknown) => {
+    hideCapsuleHoverWindow()
     if (!isPanelView(rawView)) {
       return
     }
@@ -2050,12 +2155,14 @@ function resolvePanelBounds(x?: number, y?: number): Rectangle {
 
 function sendToRenderers(channel: string, payload: unknown): void {
   mainWindow?.webContents.send(channel, payload)
+  capsuleHoverWindow?.webContents.send(channel, payload)
   panelWindow?.webContents.send(channel, payload)
   islandWindow?.webContents.send(channel, payload)
 }
 
 function resolveRendererRole(webContentsId: number): RendererWindowRole {
   if (islandWindow?.webContents.id === webContentsId) return 'island'
+  if (capsuleHoverWindow?.webContents.id === webContentsId) return 'hover'
   return panelWindow?.webContents.id === webContentsId ? 'panel' : 'capsule'
 }
 

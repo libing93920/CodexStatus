@@ -15,7 +15,7 @@ export type AuthMode = 'chatgpt' | 'api' | 'none'
 export type AgentId = 'codex' | 'claude' | 'opencode'
 export type PanelView = 'details' | 'settings' | 'team'
 
-export type RendererWindowRole = 'capsule' | 'panel' | 'island'
+export type RendererWindowRole = 'capsule' | 'panel' | 'island' | 'hover'
 export type CapsuleViewMode = 'capsule' | 'orb'
 export type DockEdge = 'left' | 'right'
 export type RendererCommandType = 'show-panel-view'
@@ -355,6 +355,8 @@ export interface CodexStatusApi {
   notifyPanelReady: () => Promise<void>
   /** 胶囊有数据后通知主进程显示窗口(无数据不显示,避免先大后小闪烁) */
   notifyCapsuleReady: () => Promise<void>
+  setCapsuleHoverVisible: (visible: boolean) => Promise<void>
+  notifyCapsuleHoverReady: () => Promise<void>
   /** 胶囊窗口点击打开 panel 指定视图(主进程复用 openPanelWindow);focusUpdate 定位到检查更新区 */
   showPanel: (view: PanelView, options?: ShowPanelOptions) => Promise<void>
   /** 手动检查 GitHub Releases 是否有新版本 */

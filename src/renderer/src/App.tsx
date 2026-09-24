@@ -905,6 +905,33 @@ function App(): React.JSX.Element {
   }, [canEnterMinimal])
 
   useEffect(() => {
+    if (!ready || windowRole !== 'capsule') return
+    if (
+      !pointerInsideCapsule ||
+      capsulePointerActive ||
+      isApiMode ||
+      rateLimitWindows.length === 0
+    ) {
+      void window.codexStatus.setCapsuleHoverVisible(false)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      void window.codexStatus.setCapsuleHoverVisible(true)
+    }, 320)
+    return () => {
+      window.clearTimeout(timer)
+      void window.codexStatus.setCapsuleHoverVisible(false)
+    }
+  }, [
+    ready,
+    windowRole,
+    pointerInsideCapsule,
+    capsulePointerActive,
+    isApiMode,
+    rateLimitWindows.length
+  ])
+
+  useEffect(() => {
     if (capsuleMessage === null) return
     if (minimalStageRef.current === 'collapsing') cancelCapsuleCollapse()
     else if (minimalStageRef.current !== 'full') startCapsuleExpand()
@@ -1051,6 +1078,7 @@ function App(): React.JSX.Element {
   }
 
   function handleCapsulePointerDown(event: React.PointerEvent<HTMLElement>): void {
+    void window.codexStatus.setCapsuleHoverVisible(false)
     if (event.button !== 0) {
       return
     }
@@ -1120,6 +1148,7 @@ function App(): React.JSX.Element {
 
   function handleCapsulePointerLeave(): void {
     setPointerInsideCapsule(false)
+    void window.codexStatus.setCapsuleHoverVisible(false)
   }
 
   // 排除上一次形态,避免随机连续重复让特效库显得单调
