@@ -200,6 +200,34 @@ test('tab 卡片和内部信息使用两层错峰的 Quick Snap', () => {
   assert.match(appSource, /const PANEL_TAB_MOTION_CLEAR_MS = 800/)
 })
 
+test('公告已知按钮交互态保留垂直居中定位', () => {
+  const buttonRule = cssSource.match(/^\.team-announcement__acknowledge\s*\{([^}]*)\}/m)?.[1]
+  assert.ok(buttonRule, 'missing announcement acknowledge button rule')
+  assert.match(buttonRule, /top:\s*50%;/)
+  assert.match(buttonRule, /transform:\s*translateY\(-50%\);/)
+
+  const interactionRules = [
+    ["[data-theme='greenhouse'] .team-announcement__acknowledge:hover", /scale:\s*1\.04;/],
+    ["[data-theme='greenhouse'] .team-announcement__acknowledge:active", /scale:\s*0\.94;/],
+    ["[data-theme='swiss'] .team-announcement__acknowledge:active", /translate:\s*2px 2px;/],
+    ["[data-theme='memphis'] .team-announcement__acknowledge:active", /translate:\s*2px 2px;/],
+    ["[data-theme='cockpit'] .team-announcement__acknowledge:active", /translate:\s*0 2px;/]
+  ]
+
+  for (const [selector, interaction] of interactionRules) {
+    const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const rule = cssSource.match(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`))?.[1]
+    assert.ok(rule, `missing ${selector} rule`)
+    assert.match(rule, interaction, `missing expected interaction for ${selector}`)
+    assert.doesNotMatch(rule, /transform\s*:/, `${selector} overrides the button centering transform`)
+  }
+
+  const titanHoverRule = cssSource.match(/\[data-theme='titan'\] \.team-announcement__acknowledge:hover\s*\{([^}]*)\}/)?.[1]
+  assert.ok(titanHoverRule, 'missing Titan announcement hover rule')
+  assert.match(titanHoverRule, /box-shadow:/)
+  assert.doesNotMatch(titanHoverRule, /(?:transform|translate)\s*:/, 'Titan hover should not move the button')
+})
+
 test('tab 栏和页面标题不参与窗口拖拽，避免重叠时拦截点击', () => {
   assert.match(cssSource, /\.panel__tabs\s*{[^}]*-webkit-app-region:\s*no-drag/s)
   assert.match(cssSource, /\.panel__header\s*{[^}]*-webkit-app-region:\s*no-drag/s)

@@ -1200,7 +1200,7 @@
 }
 
 [data-theme='swiss'] .team-announcement__acknowledge:active {
-  transform: translate(2px, 2px);
+  translate: 2px 2px;
   box-shadow: 0 0 0 rgba(16, 16, 18, 0.4);
 }
 

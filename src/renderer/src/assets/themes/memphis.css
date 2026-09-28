@@ -1215,7 +1215,7 @@
 }
 
 [data-theme='memphis'] .team-announcement__acknowledge:active {
-  transform: translate(2px, 2px);
+  translate: 2px 2px;
   box-shadow: 1px 1px 0 #1c1a17;
 }
 

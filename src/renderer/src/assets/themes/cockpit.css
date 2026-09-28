@@ -1240,7 +1240,7 @@
 }
 
 [data-theme='cockpit'] .team-announcement__acknowledge:active {
-  transform: translateY(2px);
+  translate: 0 2px;
 }
 
 /* 团队广播消息:电传记录,钢黑底 + 左色条 */

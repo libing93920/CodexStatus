@@ -1095,11 +1095,11 @@
 
 [data-theme='greenhouse'] .team-announcement__acknowledge:hover {
   filter: brightness(1.04);
-  transform: scale(1.04);
+  scale: 1.04;
 }
 
 [data-theme='greenhouse'] .team-announcement__acknowledge:active {
-  transform: scale(0.94);
+  scale: 0.94;
 }
 
 /* ---------- team-row:园丁合作社(丰收叶形名次徽章) ---------- */
