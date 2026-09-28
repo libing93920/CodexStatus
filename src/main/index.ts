@@ -170,6 +170,7 @@ let capsuleHoverWindow: BrowserWindow | null = null
 let capsuleHoverReady = false
 let capsuleHoverRequested = false
 let capsuleDiagnostics: CapsuleWindowDiagnostics | undefined
+let islandWindowDiagnostics: CapsuleWindowDiagnostics | undefined
 let panelWindow: BrowserWindow | null = null
 let islandWindow: BrowserWindow | null = null
 let panelRevealPending = false
@@ -251,7 +252,10 @@ function createCapsuleWindow(): BrowserWindow {
   })
 
   capsuleDiagnostics?.stop()
-  capsuleDiagnostics = new CapsuleWindowDiagnostics(window)
+  capsuleDiagnostics = new CapsuleWindowDiagnostics(window, {
+    role: 'capsule',
+    canRecover: () => !isQuitting && !userHidCapsule
+  })
 
   // 不在 ready-to-show 直接 show:胶囊需等首次有数据后再显示,
   // 避免启动时以最大尺寸空壳先露一帧、数据回来再缩小的"由大变小"闪烁。
@@ -458,6 +462,12 @@ function ensureIslandWindow(): BrowserWindow {
     preloadPath: join(__dirname, '../preload/index.js'),
     loadRenderer: (target) => loadRenderer(target, 'island')
   })
+  islandWindowDiagnostics?.stop()
+  islandWindowDiagnostics = new CapsuleWindowDiagnostics(window, {
+    role: 'island',
+    canRecover: () =>
+      !isQuitting && islandRendererReady && islandPresentationVisible && shouldShowIsland()
+  })
   window.on('closed', () => {
     if (islandWindow !== window) return
     islandWindow = null
@@ -630,6 +640,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   isQuitting = true
   capsuleDiagnostics?.stop()
+  islandWindowDiagnostics?.stop()
   clearRefreshTimer()
   clearCodexAuthWatcher()
   windowKeeper?.stop()
@@ -1236,6 +1247,7 @@ function openTeamFromTray(): void {
 function prepareToQuit(): void {
   isQuitting = true
   capsuleDiagnostics?.stop()
+  islandWindowDiagnostics?.stop()
   islandRendererReady = false
   islandPresentationVisible = false
   clearRefreshTimer()

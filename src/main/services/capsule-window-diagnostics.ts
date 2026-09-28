@@ -8,10 +8,12 @@ const SAMPLE_INTERVAL_MS = 2_000
 const STARTUP_TIMEOUT_MS = 30_000
 const REQUEST_TIMEOUT_MS = 15_000
 const MAX_STARTUP_RETRIES = 1
+const MAX_RUNTIME_RETRIES = 1
 const HEARTBEAT_INTERVAL_MS = 60_000
 const MAX_PENDING_WRITES = 2
 const MAX_NATIVE_LINE_LENGTH = 16_384
 const MAX_ERROR_LENGTH = 500
+const RECOVERY_COOLDOWN_MS = 30_000
 const WINDOW_EVENTS = [
   'show',
   'hide',
@@ -30,11 +32,21 @@ interface EventSummary {
 }
 
 interface Dependencies {
+  role: 'capsule' | 'island'
+  canRecover: () => boolean
   write?: typeof writeDiagBatch
   launch?: () => ChildProcessWithoutNullStreams
 }
 
-/** 只观察，不调用 show/focus/置顶修复；事件合并后由低频采样统一落盘。 */
+interface NativeSnapshot extends Record<string, unknown> {
+  overlapCandidates: unknown[]
+  reachedCapsule?: boolean
+  normalOccluder?: { hwnd: string; topmost: boolean } | null
+  topmostOccluder?: unknown
+  recovery?: { status: string } | null
+}
+
+/** 胶囊与灵动岛共用低频采样和有条件恢复；日志开关不影响防御功能。 */
 export class CapsuleWindowDiagnostics {
   private readonly window: BrowserWindow
   private readonly write: typeof writeDiagBatch
@@ -44,6 +56,7 @@ export class CapsuleWindowDiagnostics {
   private lines?: Interface
   private launch?: () => ChildProcessWithoutNullStreams
   private startupRetries = 0
+  private runtimeFailures = 0
   private timer?: ReturnType<typeof setInterval>
   private timeout?: ReturnType<typeof setTimeout>
   private status: 'starting' | 'ready' | 'unavailable' | 'stopped' = 'starting'
@@ -56,12 +69,18 @@ export class CapsuleWindowDiagnostics {
   private lastWrittenAt = 0
   private probeError?: string
   private readonly hwnd: string
+  private readonly options: Dependencies
+  private lastSampleAt = 0
+  private requestAction: 'sample' | 'recover' = 'sample'
+  private previousOccluder?: string
+  private lastRecoveryAt = -Infinity
 
-  constructor(window: BrowserWindow, dependencies: Dependencies = {}) {
+  constructor(window: BrowserWindow, dependencies: Dependencies) {
     this.window = window
+    this.options = dependencies
     this.write = dependencies.write ?? writeDiagBatch
     this.hwnd = ''
-    if (process.platform !== 'win32' || !resolveDiagEnabled()) {
+    if (process.platform !== 'win32') {
       this.stopped = true
       return
     }
@@ -98,6 +117,8 @@ export class CapsuleWindowDiagnostics {
   }
 
   private record(event: string): void {
+    if (event === 'hide' || event === 'minimize') this.previousOccluder = undefined
+    if (!resolveDiagEnabled()) return
     const now = Date.now()
     const summary = this.events[event] ?? { count: 0, firstAt: now, lastAt: now }
     summary.count++
@@ -130,14 +151,25 @@ export class CapsuleWindowDiagnostics {
 
   private sample(): void {
     if (this.stopped) return
-    if (!resolveDiagEnabled() || this.window.isDestroyed()) return this.stop()
+    if (this.window.isDestroyed()) return this.stop()
     if (this.status === 'starting' || this.requestedAt !== undefined) return
     if (this.status === 'unavailable') return this.emit()
-    if (!this.window.isVisible() && !Object.keys(this.events).length && !this.heartbeatDue()) return
+    if (
+      !this.window.isVisible() &&
+      !Object.keys(this.events).length &&
+      Date.now() - this.lastSampleAt < HEARTBEAT_INTERVAL_MS
+    )
+      return
+    this.request('sample')
+  }
+
+  private request(action: 'sample' | 'recover'): void {
     this.requestedAt = Date.now()
+    this.lastSampleAt = this.requestedAt
+    this.requestAction = action
     this.armTimeout(REQUEST_TIMEOUT_MS)
     // 一次只保留一个在途请求，子进程或管道变慢时不堆积采样任务。
-    this.child?.stdin.write(`${this.hwnd}\n`)
+    this.child?.stdin.write(`${JSON.stringify({ action, hwnd: this.hwnd, pid: process.pid })}\n`)
   }
 
   private receive(line: string): void {
@@ -153,22 +185,60 @@ export class CapsuleWindowDiagnostics {
     if (this.requestedAt === undefined) return this.failProbe('unexpected-output')
     if (line.length > MAX_NATIVE_LINE_LENGTH) return this.failProbe('oversized-output')
     try {
-      const native = JSON.parse(line) as Record<string, unknown>
+      const native = JSON.parse(line) as NativeSnapshot
       if (!native || typeof native !== 'object' || !Array.isArray(native.overlapCandidates)) {
         return this.failProbe('invalid-output')
       }
       this.clearTimeout()
+      this.runtimeFailures = 0
+      const wasRecovery = this.requestAction === 'recover'
+      if (wasRecovery) this.record('recovery-result')
       this.emit(native)
       this.requestedAt = undefined
+      if (!wasRecovery) this.considerRecovery(native)
     } catch {
       this.failProbe('invalid-json')
     }
   }
 
+  private recoveryAllowed(): boolean {
+    return (
+      !this.window.isDestroyed() &&
+      this.window.isVisible() &&
+      !this.window.isMinimized() &&
+      this.options.canRecover()
+    )
+  }
+
+  private considerRecovery(native: NativeSnapshot): void {
+    const occluder = native.normalOccluder
+    if (
+      !this.recoveryAllowed() ||
+      !native.reachedCapsule ||
+      native.topmostOccluder ||
+      occluder?.topmost !== false
+    ) {
+      this.previousOccluder = undefined
+      return
+    }
+    const confirmed = this.previousOccluder === occluder.hwnd
+    this.previousOccluder = occluder.hwnd
+    if (!confirmed || Date.now() - this.lastRecoveryAt < RECOVERY_COOLDOWN_MS) return
+    this.previousOccluder = undefined
+    this.lastRecoveryAt = Date.now()
+    this.record('recovery-request')
+    this.emit(native)
+    // 响应到达后再次检查显示意图；原生端执行前还会重新采样，不能仅凭旧快照置顶。
+    this.request('recover')
+  }
+
   private failProbe(message: string): void {
     if (this.stopped || this.status === 'unavailable') return
-    if (this.status === 'starting' && this.startupRetries < MAX_STARTUP_RETRIES) {
-      this.startupRetries++
+    const retryStartup = this.status === 'starting' && this.startupRetries < MAX_STARTUP_RETRIES
+    const retryRuntime = this.status === 'ready' && this.runtimeFailures < MAX_RUNTIME_RETRIES
+    if (retryStartup || retryRuntime) {
+      if (retryStartup) this.startupRetries++
+      else this.runtimeFailures++
       this.probeError = message.replace(/[\r\n]+/g, ' ').slice(0, MAX_ERROR_LENGTH)
       this.record('probe-retry')
       this.stopProbe()
@@ -199,7 +269,6 @@ export class CapsuleWindowDiagnostics {
     child?.stdin.end()
     child?.kill()
   }
-
 
   private clearTimeout(): void {
     if (this.timeout) clearTimeout(this.timeout)
@@ -235,6 +304,7 @@ export class CapsuleWindowDiagnostics {
     }
     const now = Date.now()
     const payload = {
+      role: this.options.role,
       hwnd: this.hwnd,
       seq: ++this.sequence,
       at: now,
@@ -248,9 +318,11 @@ export class CapsuleWindowDiagnostics {
       requestedAt: this.requestedAt,
       nativeElapsedMs: this.requestedAt === undefined ? undefined : now - this.requestedAt,
       probeError: this.probeError,
+      recoveryAllowed: this.recoveryAllowed(),
       ...state
     }
-    const message = `capsule-diag ${JSON.stringify(payload)}`
+    const prefix = this.options.role === 'capsule' ? 'capsule-diag' : 'island-window-diag'
+    const message = `${prefix} ${JSON.stringify(payload)}`
     for (const event of Object.keys(this.events)) delete this.events[event]
     this.dropped = 0
     this.lastSignature = signature

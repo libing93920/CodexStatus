@@ -1,4 +1,4 @@
-/** 独立进程只读 Win32 状态，避免原生枚举和 PowerShell 启动阻塞 Electron。 */
+/** 独立进程采样 Win32 层级，仅在主进程授权且原生复核异常后重新置顶。 */
 export const CAPSULE_NATIVE_PROBE = String.raw`
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
@@ -12,10 +12,11 @@ public static class CapsuleWindowProbe {
   const int ExtendedStyle = -20;
   const int TopmostStyle = 0x00000008;
   const int CloakedAttribute = 14;
-  const int MaxWindows = 512;
+  const int MaxWindows = 4096;
   const int MaxCandidates = 3;
   const int ClassNameCapacity = 128;
-  delegate bool EnumProc(IntPtr hwnd, IntPtr param);
+  const uint NextWindow = 2;
+  const uint NoSize = 0x0001, NoMove = 0x0002, NoActivate = 0x0010, NoOwnerZOrder = 0x0200;
   [StructLayout(LayoutKind.Sequential)] struct Rect { public int Left, Top, Right, Bottom; }
   public class WindowInfo {
     public string hwnd;
@@ -27,12 +28,21 @@ public static class CapsuleWindowProbe {
     public int? cloaked;
     public string exStyle;
     public int[] boundsPx;
+    public int? zOrder;
   }
   public class Snapshot {
     public WindowInfo capsule, foreground, taskbar;
     public WindowInfo[] overlapCandidates;
+    public WindowInfo normalOccluder;
+    public WindowInfo topmostOccluder;
     public int scanned;
     public bool reachedCapsule;
+    public Recovery recovery;
+  }
+  public class Recovery {
+    public string status;
+    public int error;
+    public Snapshot before;
   }
   [DllImport("user32.dll")] static extern bool IsWindow(IntPtr hwnd);
   [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
@@ -44,7 +54,9 @@ public static class CapsuleWindowProbe {
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr hwnd, StringBuilder text, int count);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern IntPtr FindWindow(string name, string title);
   [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
-  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc callback, IntPtr param);
+  [DllImport("user32.dll")] static extern IntPtr GetTopWindow(IntPtr hwnd);
+  [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr hwnd, uint command);
+  [DllImport("user32.dll", SetLastError=true)] static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int width, int height, uint flags);
   [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
   [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out int value, int size);
 
@@ -86,19 +98,50 @@ public static class CapsuleWindowProbe {
     };
     if (state.capsule == null || !state.capsule.visible || state.capsule.minimized) return state;
     var candidates = new List<WindowInfo>();
-    EnumWindows((other, unused) => {
-      if (other == hwnd) { state.reachedCapsule = true; return false; }
-      if (!IsWindowVisible(other) || IsIconic(other)) return true;
-      if (state.scanned >= MaxWindows) return false;
-      state.scanned++;
-      if (candidates.Count >= MaxCandidates) return true;
+    var visited = new HashSet<IntPtr>();
+    // GetWindow 显式读取 Z 序；有界遍历避免窗口销毁/重排导致循环。
+    for (var other = GetTopWindow(IntPtr.Zero);
+         other != IntPtr.Zero && state.scanned < MaxWindows && visited.Add(other);
+         other = GetWindow(other, NextWindow)) {
+      int rank = state.scanned++;
+      if (other == hwnd) { state.reachedCapsule = true; state.capsule.zOrder = rank; break; }
+      if (!IsWindowVisible(other) || IsIconic(other)) continue;
       var info = ReadWindow(other);
-      if (info != null && (!info.cloaked.HasValue || info.cloaked.Value == 0)
-          && Overlaps(state.capsule.boundsPx, info.boundsPx)) candidates.Add(info);
-      return true;
-    }, IntPtr.Zero);
+      if (info == null || info.cloaked != 0 || !Overlaps(state.capsule.boundsPx, info.boundsPx)) continue;
+      info.zOrder = rank;
+      if (candidates.Count < MaxCandidates) candidates.Add(info);
+      // 候选日志最多三项，但不能因此漏掉排在它们后面的普通遮挡窗口。
+      if (state.normalOccluder == null && info.topmost == false && info.pid != state.capsule.pid)
+        state.normalOccluder = info;
+      // 置顶状态读取失败也暂缓恢复，避免越过未知层级的覆盖窗口。
+      if (state.topmostOccluder == null && info.topmost != false)
+        state.topmostOccluder = info;
+    }
     state.overlapCandidates = candidates.ToArray();
     return state;
+  }
+
+  public static Snapshot Recover(long handle, uint expectedPid) {
+    var before = Sample(handle);
+    var target = before.capsule;
+    if (target == null || target.pid != expectedPid || !target.visible || target.minimized
+        || target.cloaked != 0 || !before.reachedCapsule || before.normalOccluder == null
+        || before.topmostOccluder != null) {
+      before.recovery = new Recovery { status = "skipped" };
+      return before;
+    }
+    // 不使用 SHOWWINDOW，也不激活、移动、缩放；隐藏中的窗口不会被重新显示。
+    bool success = SetWindowPos(new IntPtr(handle), new IntPtr(-1), 0, 0, 0, 0,
+      NoSize | NoMove | NoActivate | NoOwnerZOrder);
+    int error = success ? 0 : Marshal.GetLastWin32Error();
+    var after = Sample(handle);
+    bool verified = after.capsule != null && after.capsule.pid == expectedPid
+      && after.capsule.visible && !after.capsule.minimized && after.capsule.cloaked == 0
+      && after.capsule.topmost == true && after.reachedCapsule && after.normalOccluder == null;
+    after.recovery = new Recovery {
+      status = !success ? "failed" : verified ? "restored" : "unverified", error = error, before = before
+    };
+    return after;
   }
 }
 '@
@@ -109,8 +152,13 @@ if ([CapsuleWindowProbe]::SetThreadDpiAwarenessContext([IntPtr](-4)) -eq [IntPtr
 [Console]::WriteLine('ready')
 [Console]::Out.Flush()
 while ($null -ne ($request = [Console]::ReadLine())) {
-  $snapshot = [CapsuleWindowProbe]::Sample([long]::Parse($request))
-  [Console]::WriteLine((ConvertTo-Json -InputObject $snapshot -Depth 5 -Compress))
+  $command = ConvertFrom-Json -InputObject $request
+  $snapshot = if ($command.action -eq 'recover') {
+    [CapsuleWindowProbe]::Recover([long]$command.hwnd, [uint32]$command.pid)
+  } else {
+    [CapsuleWindowProbe]::Sample([long]$command.hwnd)
+  }
+  [Console]::WriteLine((ConvertTo-Json -InputObject $snapshot -Depth 8 -Compress))
   [Console]::Out.Flush()
 }
 `
