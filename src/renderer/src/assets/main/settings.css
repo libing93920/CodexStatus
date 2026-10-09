@@ -253,6 +253,34 @@
   margin-top: 5px;
 }
 
+.inline-input.window-keeper-start-time {
+  grid-template-columns: minmax(0, 1fr) minmax(96px, auto);
+  gap: 10px;
+  width: min(100%, 280px);
+  min-height: 36px;
+  margin-top: 9px;
+  padding: 0 12px;
+}
+
+.window-keeper-start-time input[type='time'] {
+  min-width: 0;
+  max-width: 118px;
+  color-scheme: dark;
+  text-align: right;
+}
+
+.window-keeper-start-time__hint {
+  display: block;
+  margin-top: 4px;
+}
+
+[data-theme='poster'] .window-keeper-start-time input[type='time'],
+[data-theme='memphis'] .window-keeper-start-time input[type='time'],
+[data-theme='swiss'] .window-keeper-start-time input[type='time'],
+[data-theme='greenhouse'] .window-keeper-start-time input[type='time'],
+[data-theme='inksong'] .window-keeper-start-time input[type='time'] {
+  color-scheme: light;
+}
 .tool-setting-status {
   color: var(--panel-text-2);
 }

@@ -518,6 +518,7 @@ if (hasSingleInstanceLock) {
     currentSnapshot = createEmptySnapshot()
     windowKeeper = new WindowKeeper({
       enabled: persistedState.settings.autoKeep5hWindow,
+      startTime: persistedState.settings.autoKeep5hWindowStartTime,
       persisted: persistedState.windowKeeper,
       onRefresh: async () => {
         const previousGeneratedAt = currentSnapshot.generatedAt
@@ -693,7 +694,7 @@ function registerIpcHandlers(): void {
     }
 
     queuePersistState()
-    windowKeeper?.setEnabled(nextSettings.autoKeep5hWindow)
+    windowKeeper?.setEnabled(nextSettings.autoKeep5hWindow, nextSettings.autoKeep5hWindowStartTime)
     syncRefreshTimer()
     refreshTrayMenu()
     broadcastPreferences()

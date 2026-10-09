@@ -147,6 +147,9 @@ export const COPY = {
     themeHint: '切换胶囊与面板的整体风格',
     minimalMode: '极简模式',
     autoKeep5hWindow: '自动保持 5h 窗口',
+    autoKeep5hWindowHint: '当前 5h 窗口到期后，按现有逻辑自动判定下一窗口',
+    windowKeeperStartTime: '每日开始时间',
+    windowKeeperStartTimeHint: '到达该时间后按已有同步/到期逻辑判定，不强制每日请求',
     windowKeeper: '自动保持 5h 窗口',
     windowKeeperState: '运行状态',
     windowKeeperNextAction: '下次动作时间',
@@ -160,6 +163,7 @@ export const COPY = {
     windowKeeperTriggering: '正在触发',
     windowKeeperVerifying: '正在验证额度',
     windowKeeperRetrying: '重试中',
+    windowKeeperWaitingStartTime: '等待每日开始时间',
     windowKeeperError: '异常'
   },
   'en-US': {
@@ -275,6 +279,11 @@ export const COPY = {
     themeHint: 'Switch the overall capsule and panel style',
     minimalMode: 'Minimal mode',
     autoKeep5hWindow: 'Keep 5h window active',
+    autoKeep5hWindowHint:
+      'After the current 5h window expires, use the existing logic to decide the next window',
+    windowKeeperStartTime: 'Daily start time',
+    windowKeeperStartTimeHint:
+      'After this time, use the existing sync/expiry logic; this does not force a daily request',
     windowKeeper: 'Keep 5h Window Active',
     windowKeeperState: 'State',
     windowKeeperNextAction: 'Next action',
@@ -288,6 +297,7 @@ export const COPY = {
     windowKeeperTriggering: 'Triggering',
     windowKeeperVerifying: 'Verifying quota',
     windowKeeperRetrying: 'Retrying',
+    windowKeeperWaitingStartTime: 'Waiting for daily start time',
     windowKeeperError: 'Error'
   }
 } as const

@@ -10,6 +10,12 @@ import {
   calculateWindowKeeperPlan
 } from '../src/main/services/window-keeper.ts'
 import * as windowKeeperRunner from '../src/main/services/window-keeper-runner.ts'
+import {
+  DEFAULT_WINDOW_KEEPER_START_TIME,
+  getNextWindowKeeperAllowedTime,
+  isWindowKeeperStartTime,
+  normalizeWindowKeeperStartTime
+} from '../src/shared/window-keeper-time.ts'
 
 const BASE_NOW = Date.parse('2026-09-04T00:00:00.000Z')
 
@@ -368,12 +374,13 @@ async function flush() {
   await new Promise((resolve) => setImmediate(resolve))
 }
 
-function createKeeper({ clock, runner, persisted, onRefresh, onExhausted } = {}) {
+function createKeeper({ clock, runner, persisted, onRefresh, onExhausted, startTime } = {}) {
   const effectiveClock = clock ?? new FakeClock(BASE_NOW)
   const statuses = []
   const persistedChanges = []
   const keeper = new WindowKeeper({
     enabled: true,
+    startTime,
     now: () => effectiveClock.nowMs,
     setTimeout: (callback, delayMs) => effectiveClock.setTimeout(callback, delayMs),
     clearTimeout: (timer) => effectiveClock.clearTimeout(timer),
@@ -1661,3 +1668,522 @@ test('验证额度期间关闭开关会取消验证 timer', async () => {
   assert.equal(persistedChanges.length, 0)
   assert.equal(statuses.at(-1).state, 'disabled')
 })
+
+function localTime(hours, minutes = 0, dayOffset = 0, seconds = 0) {
+  return new Date(2026, 9, 9 + dayOffset, hours, minutes, seconds).getTime()
+}
+
+function snapshotWithResetAt(resetAtMs) {
+  return usageSnapshot({
+    rateLimits: [fiveHourWindow({ resetAt: new Date(resetAtMs).toISOString() })]
+  })
+}
+
+test('开始时间严格使用 HH:mm，缺失或非法值恢复全天运行默认值', () => {
+  assert.equal(DEFAULT_WINDOW_KEEPER_START_TIME, '00:00')
+  for (const value of ['00:00', '08:30', '12:59', '23:59']) {
+    assert.equal(isWindowKeeperStartTime(value), true)
+    assert.equal(normalizeWindowKeeperStartTime(value), value)
+  }
+  for (const value of [undefined, null, '', '8:30', '24:00', '08:60', '08:30:00', ' 08:30', 830]) {
+    assert.equal(isWindowKeeperStartTime(value), false)
+    assert.equal(normalizeWindowKeeperStartTime(value), '00:00')
+  }
+})
+
+test('时间门槛使用候选时间的本地日期，包含开始分钟与次日', () => {
+  assert.equal(getNextWindowKeeperAllowedTime(localTime(8, 29), '08:30'), localTime(8, 30))
+  assert.equal(getNextWindowKeeperAllowedTime(localTime(8, 30), '08:30'), localTime(8, 30))
+  assert.equal(getNextWindowKeeperAllowedTime(localTime(9), '08:30'), localTime(9))
+  assert.equal(getNextWindowKeeperAllowedTime(localTime(6, 30, 1), '08:30'), localTime(8, 30, 1))
+  assert.equal(getNextWindowKeeperAllowedTime(localTime(0), '00:00'), localTime(0))
+  assert.equal(getNextWindowKeeperAllowedTime(localTime(23, 59), '00:00'), localTime(23, 59))
+})
+
+test('开始前不发保活请求，到点先刷新额度再沿用 10 秒缓冲', async () => {
+  const clock = new FakeClock(localTime(8))
+  const runner = createRunner()
+  const snapshot = snapshotWithResetAt(localTime(7))
+  let refreshCount = 0
+  const { keeper } = createKeeper({
+    clock,
+    runner,
+    startTime: '08:30',
+    onRefresh: async () => {
+      refreshCount++
+      return snapshot
+    }
+  })
+  keeper.updateSnapshot(snapshot)
+  const waitingTimer = clock.activeTimers()[0]
+  for (let index = 0; index < 5; index++) keeper.updateSnapshot(snapshot)
+  assert.equal(clock.activeTimers().length, 1)
+  assert.equal(clock.activeTimers()[0], waitingTimer)
+  assert.equal(keeper.getStatus().state, 'waiting-start-time')
+  assert.equal(keeper.getStatus().nextActionAt, new Date(localTime(8, 30)).toISOString())
+  clock.advance(localTime(8, 30) - clock.nowMs - 1)
+  await flush()
+  assert.equal(refreshCount, 0)
+  assert.equal(runner.calls.length, 0)
+  clock.advance(1)
+  await flush()
+  assert.equal(refreshCount, 1)
+  assert.equal(runner.calls.length, 0)
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  assert.equal(runner.calls.length, 1)
+  keeper.stop()
+})
+
+test('开始时间后才启动不漏触发，默认时间仍保持原有行为', async () => {
+  for (const startTime of ['08:30', '00:00', undefined]) {
+    const clock = new FakeClock(localTime(9))
+    const runner = createRunner()
+    const { keeper } = createKeeper({ clock, runner, startTime })
+    keeper.updateSnapshot(snapshotWithResetAt(localTime(7)))
+    clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+    await flush()
+    assert.equal(runner.calls.length, 1)
+    keeper.stop()
+  }
+})
+
+test('放行时刷新发现已确认的有效窗口，不额外补发请求', async () => {
+  const clock = new FakeClock(localTime(8))
+  const runner = createRunner()
+  const resetAtMs = localTime(11, 30)
+  const freshSnapshot = snapshotWithResetAt(resetAtMs)
+  const { keeper, persistedChanges } = createKeeper({
+    clock,
+    runner,
+    startTime: '08:30',
+    persisted: { windowId: 'primary', resetAt: new Date(resetAtMs).toISOString(), verified: true },
+    onRefresh: async () => freshSnapshot
+  })
+  keeper.updateSnapshot(snapshotWithResetAt(localTime(7)))
+  clock.advance(localTime(8, 30) - clock.nowMs)
+  await flush()
+  assert.equal(runner.calls.length, 0)
+  assert.equal(persistedChanges.length, 0)
+  assert.equal(clock.activeTimers()[0].dueAt, resetAtMs + WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  keeper.stop()
+})
+
+test('开始后未知但稳定的未来窗口仍先观察同步，不写假成功记录', async () => {
+  const clock = new FakeClock(localTime(8))
+  const runner = createRunner()
+  const snapshot = snapshotWithResetAt(localTime(11, 30))
+  const { keeper, persistedChanges } = createKeeper({
+    clock,
+    runner,
+    startTime: '08:30',
+    onRefresh: async () => snapshot
+  })
+  keeper.updateSnapshot(snapshot)
+  clock.advance(localTime(8, 30) - clock.nowMs)
+  await flush()
+  assert.equal(keeper.getStatus().state, 'verifying')
+  clock.advance(WINDOW_KEEPER_VERIFY_DELAY_MS)
+  await flush()
+  assert.equal(runner.calls.length, 0)
+  assert.equal(persistedChanges.length, 0)
+  assert.equal(clock.activeTimers()[0].dueAt, localTime(11, 30) + WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  keeper.stop()
+})
+
+test('次日 06:30 到期延后至 08:30，等待数小时不会提前消耗重试期限', async () => {
+  const clock = new FakeClock(localTime(23, 30))
+  const runner = createRunner()
+  const expiredSnapshot = snapshotWithResetAt(localTime(6, 30, 1))
+  const { keeper, persistedChanges } = createKeeper({
+    clock,
+    runner,
+    startTime: '08:30',
+    persisted: {
+      windowId: 'primary',
+      resetAt: expiredSnapshot.rateLimits[0].resetsAt,
+      verified: true
+    },
+    onRefresh: async () =>
+      runner.calls.length ? snapshotWithResetAt(localTime(13, 30, 1)) : expiredSnapshot
+  })
+  keeper.updateSnapshot(expiredSnapshot)
+  assert.equal(keeper.getStatus().state, 'waiting-start-time')
+  assert.equal(clock.activeTimers()[0].dueAt, localTime(8, 30, 1))
+  clock.advance(localTime(6, 30, 1) - clock.nowMs)
+  await flush()
+  assert.equal(runner.calls.length, 0)
+  clock.advance(localTime(8, 30, 1) - clock.nowMs)
+  await flush()
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  assert.equal(runner.calls.length, 1)
+  clock.advance(WINDOW_KEEPER_VERIFY_DELAY_MS)
+  await flush()
+  assert.equal(persistedChanges.length, 1)
+  assert.equal(keeper.getStatus().state, 'waiting-reset')
+  const persisted = persistedChanges[0]
+  keeper.stop()
+  const { keeper: restarted } = createKeeper({ clock, runner, startTime: '08:30', persisted })
+  restarted.updateSnapshot(snapshotWithResetAt(localTime(13, 30, 1)))
+  assert.equal(
+    clock.activeTimers()[0].dueAt,
+    localTime(13, 30, 1) + WINDOW_KEEPER_TRIGGER_BUFFER_MS
+  )
+  assert.equal(runner.calls.length, 1)
+  restarted.stop()
+})
+
+test('过期回调在午夜后执行时重查开始时间，不提前发请求', async () => {
+  const clock = new FakeClock(localTime(23, 59, 0, 40))
+  const runner = createRunner()
+  const snapshot = snapshotWithResetAt(localTime(23, 58))
+  const { keeper } = createKeeper({
+    clock,
+    runner,
+    startTime: '08:30',
+    onRefresh: async () => snapshot
+  })
+  keeper.updateSnapshot(snapshot)
+  clock.advance(localTime(0, 0, 1) - clock.nowMs)
+  await flush()
+  assert.equal(runner.calls.length, 0)
+  assert.equal(keeper.getStatus().state, 'waiting-start-time')
+  assert.equal(clock.activeTimers()[0].dueAt, localTime(8, 30, 1))
+  clock.advance(localTime(8, 30, 1) - clock.nowMs)
+  await flush()
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  assert.equal(runner.calls.length, 1)
+  keeper.stop()
+})
+
+test('午夜后的请求重试禁止发送，仍按原截止时间失败且不会被同窗口重新开启', async () => {
+  const clock = new FakeClock(localTime(23, 59, 0, 40))
+  const runner = createRunner([new Error('offline')])
+  const snapshot = snapshotWithResetAt(localTime(23, 58))
+  const { keeper } = createKeeper({
+    clock,
+    runner,
+    startTime: '08:30',
+    onRefresh: async () => snapshot
+  })
+  keeper.updateSnapshot(snapshot)
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  assert.equal(runner.calls.length, 1)
+  const deadlineAtMs = clock.nowMs + WINDOW_KEEPER_MAX_RETRY_DURATION_MS
+  assert.equal(clock.activeTimers()[0].dueAt, deadlineAtMs)
+  assert.equal(keeper.getStatus().state, 'waiting-start-time')
+  clock.advance(deadlineAtMs - clock.nowMs)
+  await flush()
+  assert.equal(keeper.getStatus().state, 'error')
+  assert.equal(runner.calls.length, 1)
+  clock.advance(localTime(8, 30, 1) - clock.nowMs)
+  keeper.updateSnapshot(snapshot)
+  assert.equal(clock.activeTimers().length, 0)
+  assert.equal(runner.calls.length, 1)
+  keeper.stop()
+})
+
+test('已发出的请求可以跨午夜完成只读验证，不在禁用时段重发', async () => {
+  const clock = new FakeClock(localTime(23, 59, 0, 30))
+  const runner = createRunner()
+  const { keeper, persistedChanges } = createKeeper({
+    clock,
+    runner,
+    startTime: '08:30',
+    onRefresh: async () => snapshotWithResetAt(localTime(4, 59, 1))
+  })
+  keeper.updateSnapshot(snapshotWithResetAt(localTime(23, 58)))
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  clock.advance(WINDOW_KEEPER_VERIFY_DELAY_MS)
+  await flush()
+  assert.equal(persistedChanges.length, 1)
+  assert.equal(runner.calls.length, 1)
+  assert.equal(keeper.getStatus().state, 'waiting-start-time')
+  assert.equal(clock.activeTimers()[0].dueAt, localTime(8, 30, 1))
+  keeper.stop()
+})
+
+test('修改开始时间清理旧 timer，相同设置不重建 timer，关闭后保留配置', async () => {
+  const clock = new FakeClock(localTime(8))
+  const runner = createRunner()
+  const snapshot = snapshotWithResetAt(localTime(7))
+  const { keeper } = createKeeper({
+    clock,
+    runner,
+    startTime: '08:30',
+    onRefresh: async () => snapshot
+  })
+  keeper.updateSnapshot(snapshot)
+  const oldTimer = clock.activeTimers()[0]
+  keeper.setEnabled(true, '09:15')
+  assert.equal(oldTimer.cleared, true)
+  const updatedTimer = clock.activeTimers()[0]
+  assert.equal(updatedTimer.dueAt, localTime(9, 15))
+  keeper.setEnabled(true, '09:15')
+  assert.equal(clock.activeTimers()[0], updatedTimer)
+  keeper.setEnabled(false)
+  assert.equal(clock.activeTimers().length, 0)
+  keeper.setEnabled(true)
+  assert.equal(clock.activeTimers()[0].dueAt, localTime(9, 15))
+  clock.advance(localTime(8, 30) - clock.nowMs)
+  await flush()
+  assert.equal(runner.calls.length, 0)
+  clock.advance(localTime(9, 15) - clock.nowMs)
+  await flush()
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  assert.equal(runner.calls.length, 1)
+  keeper.stop()
+})
+
+for (const action of ['disable', 'stop', 'change-time']) {
+  test(`放行刷新返回前 ${action}，旧异步返回不能恢复调度`, async () => {
+    const clock = new FakeClock(localTime(8))
+    const runner = createRunner()
+    const snapshot = snapshotWithResetAt(localTime(7))
+    let resolveRefresh
+    const { keeper } = createKeeper({
+      clock,
+      runner,
+      startTime: '08:30',
+      onRefresh: () =>
+        new Promise((resolve) => {
+          resolveRefresh = resolve
+        })
+    })
+    keeper.updateSnapshot(snapshot)
+    clock.advance(localTime(8, 30) - clock.nowMs)
+    if (action === 'disable') keeper.setEnabled(false)
+    else if (action === 'stop') keeper.stop()
+    else keeper.setEnabled(true, '10:00')
+    resolveRefresh(snapshot)
+    await flush()
+    assert.equal(runner.calls.length, 0)
+    if (action === 'change-time') {
+      assert.equal(clock.activeTimers().length, 1)
+      assert.equal(clock.activeTimers()[0].dueAt, localTime(10))
+    } else {
+      assert.equal(clock.activeTimers().length, 0)
+    }
+    keeper.stop()
+  })
+}
+
+test('旧放行刷新拒绝后，不覆盖重新启用的新调度状态', async () => {
+  const clock = new FakeClock(localTime(8))
+  const snapshot = snapshotWithResetAt(localTime(7))
+  let rejectRefresh
+  const { keeper } = createKeeper({
+    clock,
+    startTime: '08:30',
+    onRefresh: () =>
+      new Promise((_, reject) => {
+        rejectRefresh = reject
+      })
+  })
+  keeper.updateSnapshot(snapshot)
+  clock.advance(localTime(8, 30) - clock.nowMs)
+  keeper.setEnabled(false)
+  keeper.setEnabled(true, '00:00')
+  const newTimer = clock.activeTimers()[0]
+  rejectRefresh(new Error('old refresh failed'))
+  await flush()
+  assert.equal(keeper.getStatus().state, 'waiting-start-time')
+  assert.equal(keeper.getStatus().recentError, undefined)
+  assert.equal(clock.activeTimers()[0], newTimer)
+  keeper.stop()
+})
+
+test('修改开始时间不会延长已开始的请求重试周期', async () => {
+  const clock = new FakeClock(localTime(9))
+  const runner = createRunner([new Error('offline')])
+  const snapshot = snapshotWithResetAt(localTime(7))
+  const { keeper } = createKeeper({
+    clock,
+    runner,
+    startTime: '08:30',
+    onRefresh: async () => snapshot
+  })
+  keeper.updateSnapshot(snapshot)
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  const deadlineAtMs = clock.nowMs + WINDOW_KEEPER_MAX_RETRY_DURATION_MS
+  keeper.setEnabled(true, '10:00')
+  assert.equal(clock.activeTimers()[0].dueAt, deadlineAtMs)
+  keeper.updateSnapshot(snapshot)
+  assert.equal(clock.activeTimers()[0].dueAt, deadlineAtMs)
+  clock.advance(deadlineAtMs - clock.nowMs)
+  await flush()
+  assert.equal(runner.calls.length, 1)
+  assert.equal(keeper.getStatus().state, 'error')
+  keeper.stop()
+})
+
+for (const outcome of ['failure', 'no-fresh-snapshot']) {
+  test(`放行刷新 ${outcome} 时等待新额度，不使用旧快照发送请求`, async () => {
+    const clock = new FakeClock(localTime(8))
+    const runner = createRunner()
+    const { keeper } = createKeeper({
+      clock,
+      runner,
+      startTime: '08:30',
+      onRefresh: async () => {
+        if (outcome === 'failure') throw new Error('offline')
+      }
+    })
+    keeper.updateSnapshot(snapshotWithResetAt(localTime(7)))
+    clock.advance(localTime(8, 30) - clock.nowMs)
+    await flush()
+    assert.equal(keeper.getStatus().state, 'waiting-data')
+    assert.equal(clock.activeTimers().length, 0)
+    assert.equal(runner.calls.length, 0)
+    keeper.stop()
+  })
+}
+
+test('快照更新发现已超过开始时间时主动放行，不等待旧时钟 timer', async () => {
+  const clock = new FakeClock(localTime(8))
+  const runner = createRunner()
+  const snapshot = snapshotWithResetAt(localTime(7))
+  const { keeper } = createKeeper({
+    clock,
+    runner,
+    startTime: '08:30',
+    onRefresh: async () => snapshot
+  })
+  keeper.updateSnapshot(snapshot)
+  const oldTimer = clock.activeTimers()[0]
+  clock.nowMs = localTime(9)
+  keeper.updateSnapshot(snapshot)
+  await flush()
+  assert.equal(oldTimer.cleared, true)
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  assert.equal(runner.calls.length, 1)
+  keeper.stop()
+})
+
+test('自定义时间不绕过登录方式、官方数据和周额度限制', async () => {
+  const expiredWindow = fiveHourWindow({ resetAt: new Date(localTime(7)).toISOString() })
+  const snapshots = [
+    usageSnapshot({ authMode: 'api', rateLimits: [expiredWindow] }),
+    usageSnapshot({ rateLimitSource: 'local', rateLimits: [expiredWindow] }),
+    usageSnapshot({
+      rateLimits: [
+        expiredWindow,
+        weeklyWindowWith({ remainingPercent: 0, resetsAt: new Date(localTime(12)).toISOString() })
+      ]
+    })
+  ]
+  for (const snapshot of snapshots) {
+    const clock = new FakeClock(localTime(9))
+    const runner = createRunner()
+    const { keeper } = createKeeper({ clock, runner, startTime: '08:30' })
+    keeper.updateSnapshot(snapshot)
+    clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+    await flush()
+    assert.equal(runner.calls.length, 0)
+    keeper.stop()
+  }
+})
+
+test('尚未发请求的观察重试跨午夜后重新等待门槛，不创建立即重复回调', async () => {
+  const clock = new FakeClock(localTime(23, 58, 0, 30))
+  const runner = createRunner()
+  let refreshCount = 0
+  const { keeper } = createKeeper({
+    clock,
+    runner,
+    startTime: '08:30',
+    onRefresh: async () => {
+      if (++refreshCount === 1) throw new Error('offline')
+      return snapshotWithResetAt(localTime(23, 58))
+    }
+  })
+  keeper.updateSnapshot(snapshotWithResetAt(localTime(1, 0, 1)))
+  clock.advance(WINDOW_KEEPER_VERIFY_DELAY_MS)
+  await flush()
+  assert.equal(keeper.getStatus().state, 'retrying')
+  clock.advance(RETRY_DELAYS_MS[0])
+  await flush()
+  clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+  await flush()
+  assert.equal(runner.calls.length, 0)
+  assert.equal(keeper.getStatus().state, 'waiting-start-time')
+  assert.equal(clock.activeTimers().length, 1)
+  assert.equal(clock.activeTimers()[0].dueAt, localTime(8, 30, 1))
+  keeper.stop()
+})
+
+for (const outcome of ['refresh-failed', 'refreshing-snapshot-only']) {
+  test(`放行 ${outcome} 后旧轮询快照不能绕过新鲜额度门闩`, async () => {
+    const clock = new FakeClock(localTime(8))
+    const runner = createRunner()
+    const snapshot = snapshotWithResetAt(localTime(7))
+    let keeper
+    ;({ keeper } = createKeeper({
+      clock,
+      runner,
+      startTime: '08:30',
+      onRefresh: async () => {
+        if (outcome === 'refresh-failed') throw new Error('offline')
+        keeper.updateSnapshot({ ...snapshot, isRefreshing: true })
+      }
+    }))
+    keeper.updateSnapshot(snapshot)
+    clock.advance(localTime(8, 30) - clock.nowMs)
+    await flush()
+    keeper.updateSnapshot({ ...snapshot, isRefreshing: true })
+    clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS * 2)
+    await flush()
+    keeper.updateSnapshot({ ...snapshot, isRefreshing: false })
+    assert.equal(runner.calls.length, 0)
+    assert.equal(keeper.getStatus().state, 'waiting-data')
+    assert.equal(clock.activeTimers().length, 0)
+    const fresh = { ...snapshot, generatedAt: new Date(clock.nowMs).toISOString() }
+    keeper.updateSnapshot({ ...fresh, isRefreshing: true })
+    assert.equal(clock.activeTimers().length, 0)
+    keeper.updateSnapshot(fresh)
+    clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+    await flush()
+    assert.equal(runner.calls.length, 1)
+    keeper.stop()
+  })
+}
+
+for (const action of ['change-time', 're-enable']) {
+  test(`${action} 在允许时段打开门槛时先读新额度，慢刷新不使用旧快照`, async () => {
+    const clock = new FakeClock(localTime(9))
+    const runner = createRunner()
+    const snapshot = snapshotWithResetAt(localTime(7))
+    let resolveRefresh
+    const { keeper } = createKeeper({
+      clock,
+      runner,
+      startTime: action === 'change-time' ? '10:00' : '08:30',
+      onRefresh: () =>
+        new Promise((resolve) => {
+          resolveRefresh = resolve
+        })
+    })
+    keeper.updateSnapshot(snapshot)
+    if (action === 're-enable') keeper.setEnabled(false)
+    keeper.setEnabled(true, '08:30')
+    clock.advance(0)
+    keeper.updateSnapshot({ ...snapshot, isRefreshing: true })
+    clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS * 2)
+    await flush()
+    assert.equal(runner.calls.length, 0)
+    resolveRefresh({ ...snapshot, generatedAt: new Date(clock.nowMs).toISOString() })
+    await flush()
+    assert.equal(runner.calls.length, 0)
+    clock.advance(WINDOW_KEEPER_TRIGGER_BUFFER_MS)
+    await flush()
+    assert.equal(runner.calls.length, 1)
+    keeper.stop()
+  })
+}

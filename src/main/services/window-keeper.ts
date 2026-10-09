@@ -5,6 +5,11 @@ import type {
   WindowKeeperStatus
 } from '../../shared/capsule'
 import {
+  DEFAULT_WINDOW_KEEPER_START_TIME,
+  getNextWindowKeeperAllowedTime,
+  normalizeWindowKeeperStartTime
+} from '../../shared/window-keeper-time.ts'
+import {
   createCodexCliRunner,
   type CodexCliRequest,
   type CodexCliRunner
@@ -26,6 +31,7 @@ const CODEX_CLI_REQUEST: CodexCliRequest = {
 
 export interface WindowKeeperOptions {
   enabled: boolean
+  startTime?: string
   persisted?: WindowKeeperPersistedState
   runner?: CodexCliRunner
   onRefresh: () => Promise<UsageSnapshot | void>
@@ -86,6 +92,8 @@ interface ActiveEvent {
   timer?: unknown
   timerEndsEvent: boolean
   controller?: AbortController
+  timerAtMs?: number
+  requested?: boolean
   running: boolean
   verifying: boolean
   triggeredAt?: string
@@ -200,10 +208,13 @@ export class WindowKeeper {
   private observedWindow: WindowKeeperPersistedState | undefined
   private persisted: WindowKeeperPersistedState
   private enabled: boolean
+  private startTime: string
   private stopped = false
   private snapshot: UsageSnapshot | undefined
   private activeEvent: ActiveEvent | undefined
   private weeklyTimer: { key: string; handle: unknown } | undefined
+  private startTimer: { triggerAtMs: number; handle?: unknown } | undefined
+  private startRefreshBarrier: { generatedAt?: string } | undefined
   private finishedEventKey: string | undefined
   private status: WindowKeeperStatus
 
@@ -215,6 +226,7 @@ export class WindowKeeper {
     this.onExhausted = options.onExhausted
     this.persisted = { ...options.persisted }
     this.enabled = options.enabled
+    this.startTime = normalizeWindowKeeperStartTime(options.startTime)
     this.timer = {
       now: options.now ?? Date.now,
       setTimeout: options.setTimeout ?? ((callback, delayMs) => setTimeout(callback, delayMs)),
@@ -231,17 +243,28 @@ export class WindowKeeper {
     return { ...this.status }
   }
 
-  setEnabled(enabled: boolean): void {
-    if (this.stopped) {
+  setEnabled(enabled: boolean, startTime: string = this.startTime): void {
+    const normalizedStartTime = normalizeWindowKeeperStartTime(startTime)
+    if (this.stopped || (this.enabled === enabled && this.startTime === normalizedStartTime)) {
       return
     }
-    if (this.enabled === enabled) {
-      return
-    }
+    const enabledChanged = this.enabled !== enabled
+    const needsFreshSnapshot =
+      enabled &&
+      (this.startTime !== DEFAULT_WINDOW_KEEPER_START_TIME ||
+        normalizedStartTime !== DEFAULT_WINDOW_KEEPER_START_TIME ||
+        this.startRefreshBarrier !== undefined)
     this.enabled = enabled
-    this.cancelActiveEvent()
+    this.startTime = normalizedStartTime
+    this.cancelStartTimer()
     this.cancelWeeklyTimer()
-    this.finishedEventKey = undefined
+    // 改时间不能重开已开始的重试周期，也不能延长其截止时间。
+    if (enabledChanged || (!this.activeEvent?.requested && !this.activeEvent?.retryIndex)) {
+      this.cancelActiveEvent()
+    } else {
+      this.rescheduleActiveRequest()
+    }
+    if (enabledChanged) this.finishedEventKey = undefined
     if (!enabled) {
       this.setStatus({
         state: 'disabled',
@@ -250,7 +273,27 @@ export class WindowKeeper {
       })
       return
     }
+    if (needsFreshSnapshot && !this.activeEvent) {
+      this.waitForStartTime(getNextWindowKeeperAllowedTime(this.timer.now(), this.startTime))
+      return
+    }
     this.reconcile()
+  }
+
+  private rescheduleActiveRequest(): void {
+    const event = this.activeEvent
+    if (!event || event.running || event.verifying || event.timerAtMs === undefined) return
+    if (event.timer !== undefined) this.timer.clearTimeout(event.timer)
+    const candidateAtMs = Math.max(this.timer.now(), event.timerAtMs)
+    const scheduledAtMs = this.scheduleTimer(
+      event,
+      candidateAtMs - this.timer.now(),
+      event.timerEndsEvent
+    )
+    this.setStatus({
+      state: scheduledAtMs > candidateAtMs ? 'waiting-start-time' : 'retrying',
+      nextActionAt: new Date(scheduledAtMs).toISOString()
+    })
   }
 
   updateSnapshot(snapshot: UsageSnapshot): void {
@@ -258,6 +301,15 @@ export class WindowKeeper {
       return
     }
     this.snapshot = snapshot
+    if (
+      this.startRefreshBarrier &&
+      !snapshot.isRefreshing &&
+      snapshot.generatedAt &&
+      snapshot.generatedAt !== this.startRefreshBarrier.generatedAt &&
+      getNextWindowKeeperAllowedTime(this.timer.now(), this.startTime) === this.timer.now()
+    ) {
+      this.startRefreshBarrier = undefined
+    }
     if (this.enabled && this.activeEvent?.verifying !== true) {
       this.reconcile()
     }
@@ -267,12 +319,21 @@ export class WindowKeeper {
     this.stopped = true
     this.cancelActiveEvent()
     this.cancelWeeklyTimer()
+    this.cancelStartTimer()
   }
 
   private reconcile(): void {
+    if (
+      !this.enabled ||
+      this.stopped ||
+      (this.startTimer && this.startTimer.handle === undefined)
+    ) {
+      return
+    }
     if (!this.snapshot) {
       this.cancelActiveEvent()
       this.cancelWeeklyTimer()
+      this.cancelStartTimer()
       this.setStatus({
         state: 'waiting-data',
         nextActionAt: undefined,
@@ -289,6 +350,7 @@ export class WindowKeeper {
     if (plan.kind === 'wait-data') {
       this.cancelActiveEvent()
       this.cancelWeeklyTimer()
+      this.cancelStartTimer()
       this.setStatus({
         state: 'waiting-data',
         nextActionAt: undefined,
@@ -298,6 +360,7 @@ export class WindowKeeper {
     }
     if (plan.kind === 'waiting-weekly-reset') {
       this.cancelActiveEvent()
+      this.cancelStartTimer()
       const weeklyKey = createEventKey(plan.windowId, plan.resetAt)
       if (this.weeklyTimer !== undefined && this.weeklyTimer.key !== weeklyKey) {
         this.cancelWeeklyTimer()
@@ -335,6 +398,7 @@ export class WindowKeeper {
     this.cancelWeeklyTimer()
     if (plan.kind === 'skip') {
       this.cancelActiveEvent()
+      this.cancelStartTimer()
       this.finishedEventKey = undefined
       this.setStatus({
         state: 'waiting-reset',
@@ -362,6 +426,23 @@ export class WindowKeeper {
       })
       return
     }
+    const nowMs = this.timer.now()
+    const allowedAtMs = getNextWindowKeeperAllowedTime(nowMs, this.startTime)
+    if (allowedAtMs > nowMs) {
+      this.waitForStartTime(allowedAtMs)
+      return
+    }
+    if (this.startTimer && this.startTimer.triggerAtMs <= nowMs) {
+      if (this.startTimer.handle !== undefined) this.timer.clearTimeout(this.startTimer.handle)
+      this.startTimer.handle = undefined
+      void this.refreshAtStartTime(this.startTimer)
+      return
+    }
+    if (this.startRefreshBarrier && !this.startTimer) {
+      this.cancelActiveEvent()
+      this.setStatus({ state: 'waiting-data', nextActionAt: undefined })
+      return
+    }
     if (this.activeEvent?.key === eventKey) {
       return
     }
@@ -375,6 +456,12 @@ export class WindowKeeper {
     plan: Extract<WindowKeeperPlan, { kind: 'wait-start' | 'observe' | 'wait-reset' }>,
     key: string
   ): void {
+    const allowedAtMs = getNextWindowKeeperAllowedTime(plan.triggerAtMs, this.startTime)
+    if (allowedAtMs > plan.triggerAtMs) {
+      this.waitForStartTime(allowedAtMs)
+      return
+    }
+    this.cancelStartTimer()
     const event: ActiveEvent = {
       key,
       windowId: plan.windowId,
@@ -400,7 +487,15 @@ export class WindowKeeper {
     })
   }
 
-  private scheduleTimer(event: ActiveEvent, delayMs: number, endsEvent: boolean): void {
+  private scheduleTimer(event: ActiveEvent, delayMs: number, endsEvent: boolean): number {
+    const candidateAtMs = this.timer.now() + Math.max(0, delayMs)
+    const allowedAtMs =
+      event.requested && !event.observing && !endsEvent
+        ? getNextWindowKeeperAllowedTime(candidateAtMs, this.startTime)
+        : candidateAtMs
+    const scheduledAtMs = Math.min(allowedAtMs, event.deadlineAtMs)
+    const expires = endsEvent || allowedAtMs >= event.deadlineAtMs
+    event.timerAtMs = candidateAtMs
     event.timerEndsEvent = endsEvent
     event.timer = this.timer.setTimeout(
       () => {
@@ -408,14 +503,15 @@ export class WindowKeeper {
         if (this.activeEvent !== event) {
           return
         }
-        if (event.timerEndsEvent) {
+        if (expires) {
           this.finishError(event)
           return
         }
         void (event.observing ? this.observeWindow(event) : this.triggerEvent(event))
       },
-      Math.max(0, delayMs)
+      Math.max(0, scheduledAtMs - this.timer.now())
     )
+    return scheduledAtMs
   }
 
   private async observeWindow(event: ActiveEvent): Promise<void> {
@@ -458,13 +554,27 @@ export class WindowKeeper {
     if (this.activeEvent !== event || !this.enabled || this.stopped || event.running) {
       return
     }
+    const allowedAtMs = getNextWindowKeeperAllowedTime(this.timer.now(), this.startTime)
+    if (allowedAtMs > this.timer.now() && !event.requested) {
+      this.waitForStartTime(allowedAtMs)
+      return
+    }
     if (this.timer.now() >= event.deadlineAtMs) {
       this.finishError(event)
+      return
+    }
+    if (allowedAtMs > this.timer.now()) {
+      const scheduledAtMs = this.scheduleTimer(event, 0, false)
+      this.setStatus({
+        state: 'waiting-start-time',
+        nextActionAt: new Date(scheduledAtMs).toISOString()
+      })
       return
     }
 
     event.requesting = true
     event.running = true
+    event.requested = true
     const controller = new AbortController()
     event.controller = controller
     this.setStatus({
@@ -594,6 +704,7 @@ export class WindowKeeper {
   private async refreshForEvent(event: ActiveEvent): Promise<UsageSnapshot | undefined> {
     try {
       const refreshed = await this.onRefresh()
+      if (this.activeEvent !== event || !this.enabled || this.stopped) return undefined
       if (refreshed) {
         this.snapshot = refreshed
       }
@@ -640,6 +751,7 @@ export class WindowKeeper {
   private async refreshBeforeRetry(event: ActiveEvent): Promise<void> {
     try {
       const refreshed = await this.onRefresh()
+      if (this.activeEvent !== event || !this.enabled || this.stopped) return
       if (refreshed) {
         this.snapshot = refreshed
       }
@@ -718,10 +830,11 @@ export class WindowKeeper {
       return
     }
 
-    this.scheduleTimer(event, retryDelayMs, false)
+    const candidateAtMs = nowMs + retryDelayMs
+    const scheduledAtMs = this.scheduleTimer(event, retryDelayMs, false)
     this.setStatus({
-      state: 'retrying',
-      nextActionAt: new Date(nowMs + retryDelayMs).toISOString(),
+      state: scheduledAtMs > candidateAtMs ? 'waiting-start-time' : 'retrying',
+      nextActionAt: new Date(scheduledAtMs).toISOString(),
       recentError: event.lastError
     })
   }
@@ -773,6 +886,73 @@ export class WindowKeeper {
     }
     event.controller?.abort()
     this.activeEvent = undefined
+  }
+
+  private waitForStartTime(triggerAtMs: number): void {
+    this.cancelActiveEvent()
+    this.cancelWeeklyTimer()
+    if (this.startTimer?.triggerAtMs !== triggerAtMs) {
+      this.cancelStartTimer()
+      this.startRefreshBarrier = { generatedAt: this.snapshot?.generatedAt }
+      const waiting: NonNullable<WindowKeeper['startTimer']> = { triggerAtMs }
+      this.startTimer = waiting
+      waiting.handle = this.timer.setTimeout(
+        () => {
+          if (this.startTimer !== waiting) return
+          waiting.handle = undefined
+          void this.refreshAtStartTime(waiting)
+        },
+        Math.max(0, triggerAtMs - this.timer.now())
+      )
+    }
+    this.setStatus({
+      state: 'waiting-start-time',
+      nextActionAt: new Date(triggerAtMs).toISOString(),
+      recentError: undefined
+    })
+  }
+
+  private async refreshAtStartTime(
+    waiting: NonNullable<WindowKeeper['startTimer']>
+  ): Promise<void> {
+    if (this.startTimer !== waiting || !this.enabled || this.stopped) return
+    const allowedAtMs = getNextWindowKeeperAllowedTime(this.timer.now(), this.startTime)
+    if (allowedAtMs > this.timer.now()) {
+      this.cancelStartTimer()
+      this.waitForStartTime(allowedAtMs)
+      return
+    }
+    const previousSnapshot = this.snapshot
+    this.startRefreshBarrier = { generatedAt: previousSnapshot?.generatedAt }
+    try {
+      const refreshed = await this.onRefresh()
+      if (this.startTimer !== waiting || !this.enabled || this.stopped) return
+      if (refreshed) this.snapshot = refreshed
+      if (
+        this.snapshot?.isRefreshing ||
+        (!refreshed &&
+          (!this.snapshot?.generatedAt ||
+            this.snapshot.generatedAt === previousSnapshot?.generatedAt))
+      ) {
+        throw new Error('Quota refresh did not return a fresh snapshot')
+      }
+      this.startRefreshBarrier = undefined
+      this.cancelStartTimer()
+      this.reconcile()
+    } catch (error) {
+      if (this.startTimer !== waiting || !this.enabled || this.stopped) return
+      this.cancelStartTimer()
+      this.setStatus({
+        state: 'waiting-data',
+        nextActionAt: undefined,
+        recentError: normalizeError(error)
+      })
+    }
+  }
+
+  private cancelStartTimer(): void {
+    if (this.startTimer?.handle !== undefined) this.timer.clearTimeout(this.startTimer.handle)
+    this.startTimer = undefined
   }
 
   private cancelWeeklyTimer(): void {

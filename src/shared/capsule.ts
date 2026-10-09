@@ -6,6 +6,10 @@ import {
   type IslandSnapshot
 } from './island'
 import type { IslandDiagBatch } from './island-diagnostics'
+import {
+  DEFAULT_WINDOW_KEEPER_START_TIME,
+  normalizeWindowKeeperStartTime
+} from './window-keeper-time'
 
 export type PercentageMode = 'remaining' | 'used'
 export type RefreshMode = 'auto' | 'manual'
@@ -23,6 +27,7 @@ export type PanelFocusTarget = 'announcement' | 'messages'
 export type WindowKeeperState =
   | 'disabled'
   | 'waiting-data'
+  | 'waiting-start-time'
   | 'waiting-weekly-reset'
   | 'waiting-reset'
   | 'triggering'
@@ -264,6 +269,8 @@ export interface AppSettings {
   capsuleMinimalMode: boolean
   /** 5h 额度窗口重置后自动发送一次低成本 Codex 请求 */
   autoKeep5hWindow: boolean
+  /** 本地时间每日最早允许自动保活的时间，格式 HH:mm */
+  autoKeep5hWindowStartTime: string
   /** 独立 Codex 灵动岛设置；与额度胶囊无联动 */
   island: IslandPreferences
 }
@@ -463,6 +470,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'midnight',
   capsuleMinimalMode: true,
   autoKeep5hWindow: true,
+  autoKeep5hWindowStartTime: DEFAULT_WINDOW_KEEPER_START_TIME,
   island: { ...DEFAULT_ISLAND_PREFERENCES }
 }
 
@@ -528,6 +536,7 @@ export function normalizeSettings(input: Partial<AppSettings> | undefined): AppS
       typeof input?.autoKeep5hWindow === 'boolean'
         ? input.autoKeep5hWindow
         : DEFAULT_SETTINGS.autoKeep5hWindow,
+    autoKeep5hWindowStartTime: normalizeWindowKeeperStartTime(input?.autoKeep5hWindowStartTime),
     island: normalizeIslandPreferences(input?.island)
   }
 }

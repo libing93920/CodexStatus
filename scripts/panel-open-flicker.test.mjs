@@ -441,3 +441,37 @@ test('Window Keeper 只在 Codex ChatGPT 且存在 5h 窗口时显示', () => {
     /\{isWindowKeeperAvailable \? \(\s*<div className="setting-row tool-setting-row">/s
   )
 })
+
+test('5h 保活开始时间位于原开关卡内并保留草稿提交契约', () => {
+  const sectionStart = appSource.indexOf('{copy.groupAgent}')
+  const sectionEnd = appSource.indexOf('{copy.groupRefresh}', sectionStart)
+  const section = appSource.slice(sectionStart, sectionEnd)
+  const keeperStart = section.indexOf('className="setting-row tool-setting-row">')
+  const keeperEnd = section.indexOf('</div>\n                    ) : null}', keeperStart)
+  const keeper = section.slice(keeperStart, keeperEnd)
+
+  assert.notEqual(keeperStart, -1, 'missing Window Keeper setting row')
+  assert.ok(keeperEnd > keeperStart, 'missing Window Keeper setting row end')
+  assert.ok(keeper.indexOf('copy.autoKeep5hWindow') < keeper.indexOf('copy.windowKeeperStartTime'))
+  assert.match(keeper, /className=\{`inline-input window-keeper-start-time/)
+  assert.match(keeper, /type="time"/)
+  assert.match(keeper, /step=\{60\}/)
+  assert.match(keeper, /disabled=\{!settings\.autoKeep5hWindow\}/)
+  assert.match(keeper, /onBlur=\{commitWindowKeeperStartTime\}/)
+  assert.match(keeper, /setWindowKeeperStartTimeInput\(event\.target\.value\)/)
+  assert.match(keeper, /event\.key === 'Enter'/)
+  assert.match(appSource, /isWindowKeeperStartTime\(windowKeeperStartTimeInput\)/)
+  assert.match(
+    appSource,
+    /setWindowKeeperStartTimeInput\(settings\.autoKeep5hWindowStartTime\)\s*\}, \[settings\.autoKeep5hWindowStartTime\]\)/
+  )
+  assert.match(cssSource, /\.window-keeper-start-time\s*\{[^}]*grid-template-columns/s)
+  assert.match(
+    cssSource,
+    /\.window-keeper-start-time input\[type='time'\][^}]*color-scheme:\s*dark/s
+  )
+  assert.match(
+    cssSource,
+    /\[data-theme='memphis'\] \.window-keeper-start-time input\[type='time'\][^}]*color-scheme:\s*light/s
+  )
+})

@@ -162,6 +162,8 @@ function resolveWindowKeeperStateLabel(
   switch (state) {
     case 'disabled':
       return copy.windowKeeperDisabled
+    case 'waiting-start-time':
+      return copy.windowKeeperWaitingStartTime
     case 'waiting-data':
       return copy.windowKeeperWaitingData
     case 'waiting-weekly-reset':

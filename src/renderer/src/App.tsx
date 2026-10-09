@@ -24,6 +24,7 @@ import {
   type WindowPreferences
 } from '../../shared/capsule'
 import { formatAnnouncementTime, resolveCapsuleAlert } from '../../shared/announcement'
+import { isWindowKeeperStartTime } from '../../shared/window-keeper-time'
 import { createEmptyIslandSnapshot, type IslandSnapshot } from '../../shared/island'
 import { IslandSettingsCard } from './island/IslandSettingsCard'
 import { COPY, HEART_EFFECT_KINDS, THEME_OPTIONS, type HeartEffectKind } from './copy'
@@ -109,6 +110,10 @@ function App(): React.JSX.Element {
   )
   const [teamNicknameInput, setTeamNicknameInput] = useState(DEFAULT_SETTINGS.teamNickname ?? '')
   const [teamGroupInput, setTeamGroupInput] = useState(DEFAULT_SETTINGS.teamGroup ?? '')
+  const [windowKeeperStartTimeInput, setWindowKeeperStartTimeInput] = useState(
+    DEFAULT_SETTINGS.autoKeep5hWindowStartTime
+  )
+  // 仅按保存的时间字段回显，主题切换不会覆盖正在编辑的草稿。
   // 团队页排行榜模式:quota=额度, tokens=Token 消耗, cost=花费;用量模式共用窗口
   const [teamBoardMode, setTeamBoardMode] = useState<'quota' | 'tokens' | 'cost'>('quota')
   const [teamUsageWindow, setTeamUsageWindow] = useState<UsageWindow>('1d')
@@ -180,6 +185,11 @@ function App(): React.JSX.Element {
   useLayoutEffect(() => {
     panelContentRef.current?.scrollTo(0, 0)
   }, [panelView])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setWindowKeeperStartTimeInput(settings.autoKeep5hWindowStartTime)
+  }, [settings.autoKeep5hWindowStartTime])
 
   useEffect(() => {
     let active = true
@@ -1368,6 +1378,17 @@ function App(): React.JSX.Element {
     }
   }
 
+  function commitWindowKeeperStartTime(): void {
+    if (!settings.autoKeep5hWindow || !isWindowKeeperStartTime(windowKeeperStartTimeInput)) {
+      setWindowKeeperStartTimeInput(settings.autoKeep5hWindowStartTime)
+      return
+    }
+
+    if (windowKeeperStartTimeInput !== settings.autoKeep5hWindowStartTime) {
+      void handleSettingsPatch({ autoKeep5hWindowStartTime: windowKeeperStartTimeInput })
+    }
+  }
+
   function commitCustomRefreshInterval(): void {
     if (!canEditCustomRefresh) {
       setCustomRefreshInput(String(settings.refreshIntervalSeconds))
@@ -1958,10 +1979,30 @@ function App(): React.JSX.Element {
                       <div className="setting-row tool-setting-row">
                         <div className="tool-setting-copy">
                           <span className="setting-field__label">{copy.autoKeep5hWindow}</span>
-                          <small className="setting-field__hint">
-                            {settings.locale === 'zh-CN'
-                              ? '在当前 5h 窗口到期后自动启动下一窗口'
-                              : 'Start the next 5h window after the current window expires'}
+                          <small className="setting-field__hint">{copy.autoKeep5hWindowHint}</small>
+                          <label
+                            className={`inline-input window-keeper-start-time ${settings.autoKeep5hWindow ? '' : 'is-disabled'}`}
+                          >
+                            <span>{copy.windowKeeperStartTime}</span>
+                            <input
+                              aria-label={copy.windowKeeperStartTime}
+                              disabled={!settings.autoKeep5hWindow}
+                              onBlur={commitWindowKeeperStartTime}
+                              onChange={(event) => {
+                                setWindowKeeperStartTimeInput(event.target.value)
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                  event.currentTarget.blur()
+                                }
+                              }}
+                              step={60}
+                              type="time"
+                              value={windowKeeperStartTimeInput}
+                            />
+                          </label>
+                          <small className="setting-field__hint window-keeper-start-time__hint">
+                            {copy.windowKeeperStartTimeHint}
                           </small>
                         </div>
                         <ToggleSwitch
