@@ -475,3 +475,36 @@ test('5h 保活开始时间位于原开关卡内并保留草稿提交契约', ()
     /\[data-theme='memphis'\] \.window-keeper-start-time input\[type='time'\][^}]*color-scheme:\s*light/s
   )
 })
+
+test('下载中在原按钮行保留禁用按钮和实时百分比', () => {
+  const rowStart = appSource.indexOf('<div ref={aboutRowRef} className="setting-row about-row">')
+  assert.notEqual(rowStart, -1, 'missing update button row')
+  const rowEnd = appSource.indexOf('\n                  </div>', rowStart)
+  assert.ok(rowEnd > rowStart, 'missing update button row end')
+  const row = appSource.slice(rowStart, rowEnd)
+  const downloadingStart = row.indexOf("{updateState === 'downloading' && (")
+  const downloadedStart = row.indexOf("{updateState === 'downloaded' && (")
+
+  assert.notEqual(downloadingStart, -1, 'download feedback must stay in the original button row')
+  assert.ok(downloadedStart > downloadingStart)
+  const downloading = row.slice(downloadingStart, downloadedStart)
+  assert.match(
+    downloading,
+    /<button\s+className="ghost-button about-row__btn"\s+disabled\s+type="button">/
+  )
+  assert.match(downloading, /\{copy\.downloading\} \{updateProgress\}%/)
+  assert.doesNotMatch(downloading, /onClick=/)
+})
+
+test('点击下载先显示零进度反馈再等待下载响应', () => {
+  const start = appSource.indexOf('async function handleDownloadUpdate(')
+  assert.notEqual(start, -1, 'missing download handler')
+  const end = appSource.indexOf('\n  function handleInstallUpdate(', start)
+  assert.ok(end > start)
+  const handler = appSource.slice(start, end)
+
+  assert.match(
+    handler,
+    /setUpdateState\('downloading'\)\s+setUpdateProgress\(0\)\s+try \{\s+await window\.codexStatus\.downloadUpdate\(\)/
+  )
+})

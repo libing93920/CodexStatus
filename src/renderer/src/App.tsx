@@ -2231,6 +2231,11 @@ function App(): React.JSX.Element {
                         {copy.downloadNow} v{updateVersion}
                       </button>
                     )}
+                    {updateState === 'downloading' && (
+                      <button className="ghost-button about-row__btn" disabled type="button">
+                        {copy.downloading} {updateProgress}%
+                      </button>
+                    )}
                     {updateState === 'downloaded' && (
                       <button
                         className="ghost-button about-row__btn"
