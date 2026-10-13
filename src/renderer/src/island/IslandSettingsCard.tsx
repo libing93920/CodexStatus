@@ -20,11 +20,6 @@ export function IslandSettingsCard({
     <div className="setting-row tool-setting-row">
       <div className="tool-setting-copy">
         <span className="setting-field__label">{zh ? '灵动岛' : 'Dynamic Island'}</span>
-        <small className="setting-field__hint">
-          {zh
-            ? '主屏顶部显示，提醒 5 秒，查看任务后隐藏'
-            : 'Primary display, 5-second alerts, hidden after viewing'}
-        </small>
         {preferences.enabled ? (
           <small
             className={`setting-field__hint tool-setting-status ${snapshot.visibility === 'visible' ? 'is-visible' : ''}`}
@@ -32,11 +27,13 @@ export function IslandSettingsCard({
             {runtime}
           </small>
         ) : null}
-        <small className="setting-field__hint">
-          {zh
-            ? '首次开启后，请在 Codex /hooks 中审核 CodexStatus Hook。'
-            : 'After enabling for the first time, review the CodexStatus hook in Codex /hooks.'}
-        </small>
+        {!preferences.enabled ? (
+          <small className="setting-field__hint">
+            {zh
+              ? '首次开启后，请在 Codex /hooks 中审核 CodexStatus Hook。'
+              : 'After enabling for the first time, review the CodexStatus hook in Codex /hooks.'}
+          </small>
+        ) : null}
       </div>
       <button
         aria-checked={preferences.enabled}

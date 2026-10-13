@@ -1,0 +1,150 @@
+/* 外观直接复用设置和详情组件；这里只定义活动内容的布局。 */
+.activity {
+  display: grid;
+  gap: 16px;
+  padding-bottom: 16px;
+  min-width: 0;
+  color: var(--panel-text);
+  -webkit-app-region: no-drag;
+}
+.activity-tabs {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0 12px;
+}
+.activity-week__day {
+  min-width: 0;
+  white-space: nowrap;
+}
+.activity .activity-week__days > .activity-week__day {
+  padding-inline: 0;
+}
+.activity-week__day:disabled {
+  opacity: 0.35;
+}
+.activity :is(summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--panel-accent);
+  outline-offset: 2px;
+}
+.activity :is(p, li) {
+  overflow-wrap: anywhere;
+}
+.activity-error,
+.activity-load-error {
+  color: var(--panel-danger);
+}
+.activity-warning {
+  color: var(--panel-icon-amber);
+  font-size: 12px;
+}
+.activity-load-error {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+.activity-empty {
+  color: var(--panel-text-2);
+}
+.activity-detail > :is(.activity-empty, .activity-warning) {
+  margin-top: 10px;
+}
+.activity-members__heading {
+  margin-bottom: 10px;
+}
+.activity .activity-member__toggle {
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 0;
+  column-gap: 8px;
+  padding-block: 8px;
+}
+.activity-member__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.activity-member__inactive {
+  width: 11ch;
+  text-align: right;
+}
+.activity-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  color: var(--panel-text-2);
+  font-size: 12px;
+}
+.activity-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.activity-legend i {
+  display: inline-block;
+  width: 12px;
+  height: 10px;
+}
+.activity-timeline {
+  position: relative;
+  display: grid;
+  gap: 10px;
+}
+.activity-timeline__row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: start;
+}
+.activity-timeline__label {
+  padding-top: 4px;
+}
+.activity-timeline__plot {
+  min-width: 0;
+}
+.activity .activity-timeline__plot .activity-timeline__band {
+  position: relative;
+  height: 24px;
+}
+.activity-segment {
+  position: absolute;
+  top: 0;
+  height: 100%;
+}
+.activity .activity-segment:focus-visible {
+  outline-offset: -2px;
+  z-index: 1;
+}
+.activity-pattern--active {
+  background: var(--panel-success);
+}
+.activity-pattern--inactive {
+  background: repeating-linear-gradient(45deg, var(--panel-muted) 0 4px, transparent 4px 7px);
+}
+.activity-timeline__axis {
+  height: 20px;
+  position: relative;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.activity-timeline__axis > span {
+  position: absolute;
+  white-space: nowrap;
+}
+.activity-timeline__end {
+  right: 0;
+}
+.activity .activity-timeline__inspection {
+  top: 100%;
+  left: 0;
+  right: 0;
+  transform: none;
+}
+@media (max-width: 440px) {
+  .activity .activity-week .activity-week__days {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .activity-timeline__row {
+    grid-template-columns: 24px minmax(0, 1fr);
+    column-gap: 4px;
+  }
+}

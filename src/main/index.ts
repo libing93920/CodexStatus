@@ -73,7 +73,7 @@ import { setRateLookup } from './services/rate'
 import { fetchModelsDevRates, getPricingRate } from './services/pricing'
 import { getSpendUsage } from './services/billing'
 import { loadPersistedState, savePersistedState } from './services/state'
-import { LanService, type PeerSnapshot } from './services/lan'
+import { LanService, hashGroup, type PeerSnapshot } from './services/lan'
 import {
   initAutoUpdater,
   checkForUpdates,
@@ -116,6 +116,13 @@ import {
 import { resolveCodexExecutable } from './services/window-keeper-runner'
 import { createIslandWindow, positionIslandWindow } from './windows/island-window'
 import { WindowsFullscreenMonitor, type FullscreenState } from './services/windows-fullscreen'
+import { TeamActivityService } from './services/team-activity.ts'
+import { parseTeamIdentity } from '../shared/team-role.ts'
+import {
+  ACTIVITY_CHANNELS,
+  MIN_IDLE_THRESHOLD_MINUTES,
+  MAX_IDLE_THRESHOLD_MINUTES
+} from '../shared/activity.ts'
 
 const CHANNELS = {
   bootstrap: 'codex-status:bootstrap',
@@ -177,6 +184,7 @@ let panelRevealPending = false
 let tray: Tray | null = null
 let refreshTimer: NodeJS.Timeout | undefined
 let persistTimer: NodeJS.Timeout | undefined
+let settingsUpdateQueue: Promise<void> = Promise.resolve()
 let refreshPromise: Promise<void> | undefined
 let watchedCodexAuthPath: string | undefined
 let isQuitting = false
@@ -200,6 +208,10 @@ let islandFullscreenSuppressed = false
 let fullscreenAlertTimer: NodeJS.Timeout | undefined
 let lastIslandAttentionKey: string | undefined
 const lanService = new LanService()
+let teamActivity: TeamActivityService | undefined
+let teamActivityFailure: string | undefined
+let activityQuitPending = false
+let activityQuitReady = false
 let persistedState: PersistedState = {
   settings: { ...DEFAULT_SETTINGS },
   window: { ...DEFAULT_WINDOW_PREFERENCES },
@@ -540,6 +552,7 @@ if (hasSingleInstanceLock) {
     if (persistedState.settings.launchAtLogin !== loadedState.settings.launchAtLogin) {
       queuePersistState()
     }
+    await initializeTeamActivity()
 
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)
@@ -603,11 +616,15 @@ if (hasSingleInstanceLock) {
 
     // 系统从睡眠/锁屏恢复时，重新显示胶囊窗口（除非用户主动隐藏）
     powerMonitor.on('resume', () => {
+      handleActivitySystemEvent('resume')
       if (!userHidCapsule) showWindow()
     })
     powerMonitor.on('unlock-screen', () => {
+      handleActivitySystemEvent('unlock')
       if (!userHidCapsule) showWindow()
     })
+    powerMonitor.on('lock-screen', () => handleActivitySystemEvent('lock'))
+    powerMonitor.on('suspend', () => handleActivitySystemEvent('suspend'))
 
     // 显示器配置变更（拔插显示器/RDP/分辨率变化）时，修正窗口位置防止掉出屏幕
     screen.on('display-metrics-changed', () => {
@@ -638,8 +655,22 @@ app.on('window-all-closed', () => {
   return
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
   isQuitting = true
+  if (teamActivity && !activityQuitReady) {
+    event.preventDefault()
+    if (activityQuitPending) return
+    activityQuitPending = true
+    lanService.stop()
+    void teamActivity
+      .stop()
+      .catch((error: unknown) => logDiag(`activity stop failed ${formatDiagError(error)}`))
+      .finally(() => {
+        activityQuitReady = true
+        app.quit()
+      })
+    return
+  }
   capsuleDiagnostics?.stop()
   islandWindowDiagnostics?.stop()
   clearRefreshTimer()
@@ -652,6 +683,17 @@ app.on('before-quit', () => {
 })
 
 function registerIpcHandlers(): void {
+  ipcMain.handle(ACTIVITY_CHANNELS.board, (event, date: unknown) => {
+    requireActivityPanel(event)
+    if (!teamActivity) throw new Error(teamActivityFailure ?? '活动服务尚未就绪')
+    if (typeof date !== 'string') throw new Error('活动统计日期无效')
+    return teamActivity.getBoard(date)
+  })
+  ipcMain.handle(ACTIVITY_CHANNELS.calendarRefresh, async (event) => {
+    requireActivityPanel(event)
+    if (!teamActivity) throw new Error(teamActivityFailure ?? '活动服务尚未就绪')
+    return teamActivity.refreshCalendar()
+  })
   ipcMain.handle(CHANNELS.bootstrap, async (event) => {
     const role = resolveRendererRole(event.sender.id)
     return {
@@ -679,59 +721,96 @@ function registerIpcHandlers(): void {
     return currentSnapshot
   })
 
-  ipcMain.handle(CHANNELS.updateSettings, async (_, patch: Partial<AppSettings>) => {
-    const previousTeamGroup = persistedState.settings.teamGroup
-    const previousTeamNickname = persistedState.settings.teamNickname
-    const previousAgentId = persistedState.settings.agentId
-    const nextSettings = syncLaunchAtLoginPreference({
-      ...persistedState.settings,
-      ...patch
+  ipcMain.handle(CHANNELS.updateSettings, (event, patch: Partial<AppSettings>) =>
+    queueSettingsUpdate(async () => {
+      if (!patch || typeof patch !== 'object' || Array.isArray(patch))
+        throw new Error('设置格式无效')
+      if (patch.teamGroup !== undefined && !parseTeamIdentity(patch.teamGroup).valid)
+        throw new Error('管理员口令GM之前必须包含团队口令')
+      if (patch.activityEnabled !== undefined) {
+        requireActivityPanel(event, false)
+        if (typeof patch.activityEnabled !== 'boolean') throw new Error('采集开关无效')
+        if (
+          patch.activityEnabled &&
+          !parseTeamIdentity(patch.teamGroup ?? persistedState.settings.teamGroup).group
+        )
+          throw new Error('请先加入团队，再启用活动统计')
+      }
+      if (patch.activityIdleThresholdMinutes !== undefined) {
+        requireActivityPanel(event)
+        const minutes = patch.activityIdleThresholdMinutes
+        if (
+          !Number.isInteger(minutes) ||
+          minutes < MIN_IDLE_THRESHOLD_MINUTES ||
+          minutes > MAX_IDLE_THRESHOLD_MINUTES
+        )
+          throw new Error('空闲阈值须为1至60的整数分钟')
+      }
+      const previousSettings = persistedState.settings
+      const previousTeamGroup = persistedState.settings.teamGroup
+      const previousTeamNickname = persistedState.settings.teamNickname
+      const previousAgentId = persistedState.settings.agentId
+      const previousActivityEnabled = persistedState.settings.activityEnabled
+      const nextSettings = syncLaunchAtLoginPreference({
+        ...persistedState.settings,
+        ...patch
+      })
+
+      persistedState = {
+        ...persistedState,
+        settings: nextSettings
+      }
+
+      if (patch.activityEnabled !== undefined || patch.activityIdleThresholdMinutes !== undefined) {
+        try {
+          await savePersistedState(persistedState)
+        } catch (error) {
+          persistedState = { ...persistedState, settings: previousSettings }
+          queuePersistState()
+          throw error
+        }
+      } else {
+        queuePersistState()
+      }
+      windowKeeper?.setEnabled(
+        nextSettings.autoKeep5hWindow,
+        nextSettings.autoKeep5hWindowStartTime
+      )
+      syncRefreshTimer()
+      refreshTrayMenu()
+      broadcastPreferences()
+      if (patch.island !== undefined) queueSyncIslandService()
+
+      // 仅实际团队身份/采集能力变化重启连接，主题和阈值变化不重启LAN。
+      if (
+        nextSettings.teamGroup !== previousTeamGroup ||
+        nextSettings.teamNickname !== previousTeamNickname ||
+        nextSettings.activityEnabled !== previousActivityEnabled
+      ) {
+        syncLanService()
+      } else {
+        syncTeamActivity()
+      }
+
+      const agentIdChanged = patch.agentId !== undefined && patch.agentId !== previousAgentId
+
+      if (agentIdChanged) {
+        // 切换工具:清用量缓存,强制全量刷新
+        windowKeeper?.updateSnapshot(createApiModeSnapshot())
+        invalidateUsageCache()
+        invalidateQuotaCaches()
+        void refreshStatus({ forceCredentialCheck: true })
+      } else if (
+        patch.island === undefined &&
+        persistedState.settings.refreshMode === 'auto' &&
+        canRefreshStatus()
+      ) {
+        void refreshStatus()
+      }
+
+      return createPreferencesPayload()
     })
-
-    persistedState = {
-      ...persistedState,
-      settings: nextSettings
-    }
-
-    queuePersistState()
-    windowKeeper?.setEnabled(nextSettings.autoKeep5hWindow, nextSettings.autoKeep5hWindowStartTime)
-    syncRefreshTimer()
-    refreshTrayMenu()
-    broadcastPreferences()
-    if (patch.island !== undefined) queueSyncIslandService()
-
-    // 团队口令/昵称变更:重启 LAN service(更新发布信息或启停)
-    if (
-      (typeof patch.teamGroup === 'string' || patch.teamGroup === undefined) &&
-      patch.teamGroup !== previousTeamGroup
-    ) {
-      syncLanService()
-    } else if (
-      typeof patch.teamNickname === 'string' &&
-      patch.teamNickname !== previousTeamNickname
-    ) {
-      // 仅昵称变化也需重启(更新 mDNS txt 的 nick)
-      syncLanService()
-    }
-
-    const agentIdChanged = patch.agentId !== undefined && patch.agentId !== previousAgentId
-
-    if (agentIdChanged) {
-      // 切换工具:清用量缓存,强制全量刷新
-      windowKeeper?.updateSnapshot(createApiModeSnapshot())
-      invalidateUsageCache()
-      invalidateQuotaCaches()
-      void refreshStatus({ forceCredentialCheck: true })
-    } else if (
-      patch.island === undefined &&
-      persistedState.settings.refreshMode === 'auto' &&
-      canRefreshStatus()
-    ) {
-      void refreshStatus()
-    }
-
-    return createPreferencesPayload()
-  })
+  )
 
   ipcMain.handle(CHANNELS.closePanel, async () => {
     if (!panelWindow || panelWindow.isDestroyed()) {
@@ -1382,17 +1461,26 @@ function getLanSnapshot(): PeerSnapshot {
 
 // 团队口令非空时启动/重启 LAN service,空则停止
 function syncLanService(): void {
-  const group = persistedState.settings.teamGroup
-  if (!group || group.trim().length === 0) {
-    lanService.stop()
+  const group = persistedState.settings.teamGroup ?? ''
+  const identity = parseTeamIdentity(group)
+  lanService.stop()
+  if (!identity.valid || !identity.group) {
+    syncTeamActivity()
     return
   }
   lanService.start({
     peerId: persistedState.peerId ?? 'self',
     nickname: persistedState.settings.teamNickname ?? '我',
     group,
+    activityEnabled: persistedState.settings.activityEnabled,
+    onActivityMessage: (peerId, message) => {
+      void teamActivity
+        ?.receive(peerId, message)
+        .catch((error: unknown) => teamActivity?.report(error))
+    },
     getSnapshot: getLanSnapshot,
     onPeersChange: () => {
+      teamActivity?.onPeersChanged()
       // peer 变化时把最新 peer 表合并进 snapshot 并推送前端
       setCurrentSnapshot({
         ...currentSnapshot,
@@ -1407,6 +1495,7 @@ function syncLanService(): void {
       sendToRenderers(CHANNELS.reaction, reaction)
     }
   })
+  syncTeamActivity()
 }
 
 function handleBroadcastMessage(message: BroadcastMessage): void {
@@ -2194,12 +2283,77 @@ function getFiniteNumber(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
+function queueSettingsUpdate(
+  update: () => Promise<PreferencesPayload>
+): Promise<PreferencesPayload> {
+  const result = settingsUpdateQueue.then(update)
+  settingsUpdateQueue = result.then(
+    () => undefined,
+    () => undefined
+  )
+  return result
+}
+
 function queuePersistState(): void {
   if (persistTimer) {
     clearTimeout(persistTimer)
   }
 
   persistTimer = setTimeout(() => {
-    void savePersistedState(persistedState)
+    persistTimer = undefined
+    void savePersistedState(persistedState).catch((error: unknown) =>
+      logDiag(`state save failed ${formatDiagError(error)}`)
+    )
   }, 180)
+}
+
+async function initializeTeamActivity(): Promise<void> {
+  try {
+    const service = new TeamActivityService({
+      directory: join(app.getPath('userData'), 'activity'),
+      transport: lanService,
+      readInput: () => {
+        const state = powerMonitor.getSystemIdleState(1)
+        return {
+          idleSeconds: powerMonitor.getSystemIdleTime(),
+          kind: state === 'locked' ? 'locked' : state === 'unknown' ? 'unknown' : 'idle'
+        }
+      }
+    })
+    await service.initialize()
+    teamActivity = service
+  } catch (error) {
+    teamActivityFailure = `活动服务初始化失败：${error instanceof Error ? error.message : String(error)}`
+    logDiag(`activity initialize failed ${formatDiagError(error)}`)
+  }
+}
+
+function syncTeamActivity(): void {
+  const settings = persistedState.settings
+  const identity = parseTeamIdentity(settings.teamGroup)
+  teamActivity?.configure({
+    team: identity.valid && identity.group ? hashGroup(settings.teamGroup ?? '') : '',
+    peerId: persistedState.peerId!,
+    nickname: settings.teamNickname ?? '我',
+    enabled: settings.activityEnabled && process.platform === 'win32',
+    admin: identity.role === 'admin',
+    thresholdMinutes: settings.activityIdleThresholdMinutes
+  })
+}
+
+function requireActivityPanel(event: Electron.IpcMainInvokeEvent, admin = true): void {
+  if (
+    !panelWindow ||
+    panelWindow.isDestroyed() ||
+    event.sender.id !== panelWindow.webContents.id ||
+    event.senderFrame !== event.sender.mainFrame
+  )
+    throw new Error('活动接口仅允许主面板调用')
+  const identity = parseTeamIdentity(persistedState.settings.teamGroup)
+  if (admin && (!identity.valid || !identity.group || identity.role !== 'admin'))
+    throw new Error('仅团队管理员可以查看活动统计')
+}
+
+function handleActivitySystemEvent(event: 'lock' | 'unlock' | 'suspend' | 'resume'): void {
+  void teamActivity?.systemEvent(event).catch((error: unknown) => teamActivity?.report(error))
 }

@@ -13,8 +13,11 @@ import {
   type WindowKeeperPersistedState,
   type WindowPreferences
 } from '../../shared/capsule'
+import { isPeerId } from '../../shared/team-role.ts'
+import { writeAtomicJson } from './activity-store.ts'
 
 const STATE_FILE_NAME = 'codex-status-state.json'
+let pendingStateWrite: Promise<void> = Promise.resolve()
 
 export async function loadPersistedState(): Promise<PersistedState> {
   const filePath = getStateFilePath()
@@ -34,6 +37,7 @@ export async function loadPersistedState(): Promise<PersistedState> {
         getRecord(parsed?.panel) as Partial<PanelPreferences> | undefined
       ),
       windowKeeper: normalizeWindowKeeperState(getRecord(parsed?.windowKeeper)),
+      peerId: isPeerId(parsed?.peerId) ? parsed.peerId : undefined,
       islandViewedEventIds: normalizeEventIds(parsed?.islandViewedEventIds)
     }
   } catch {
@@ -43,8 +47,10 @@ export async function loadPersistedState(): Promise<PersistedState> {
 
 export async function savePersistedState(state: PersistedState): Promise<void> {
   const filePath = getStateFilePath()
-  await fs.mkdir(path.dirname(filePath), { recursive: true })
-  await fs.writeFile(filePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+  const value = structuredClone(state)
+  const write = pendingStateWrite.then(() => writeAtomicJson(filePath, value))
+  pendingStateWrite = write.catch(() => undefined)
+  await write
 }
 
 function createDefaultState(): PersistedState {

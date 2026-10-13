@@ -3,7 +3,8 @@ import { createServer, type Server } from 'node:http'
 import { isIPv4, type AddressInfo } from 'node:net'
 import { WebSocketServer, WebSocket } from 'ws'
 import Bonjour from 'bonjour-service'
-import { formatDiagError, logDiag } from './diag-log'
+import { formatDiagError, logDiag } from './diag-log.ts'
+import { ActivityConnectionAuth, type ActivityAuthHello } from './lan-activity-auth.ts'
 import type {
   AgentId,
   AuthMode,
@@ -13,7 +14,15 @@ import type {
   ReactionSendResult,
   TeamPeer,
   UsageWindow
-} from '../../shared/capsule'
+} from '../../shared/capsule.ts'
+import { parseTeamIdentity, isPeerId, type TeamRole } from '../../shared/team-role.ts'
+import {
+  ACTIVITY_PROTOCOL_VERSION,
+  ACTIVITY_MAX_MESSAGE_BYTES,
+  canExchangeActivity,
+  validateActivityMessage,
+  type ActivityMessage
+} from '../../shared/activity.ts'
 
 const SERVICE_TYPE = 'codex-status'
 const SERVICE_PROTOCOL = 'tcp' as const
@@ -23,6 +32,7 @@ const HELLO_RETRY_DELAY_MS = 3000
 // 广播消息约束:超长拒绝、过频丢弃(局域网无鉴权,防刷屏底线)
 const BROADCAST_MAX_TEXT_LENGTH = 200
 const BROADCAST_MIN_INTERVAL_MS = 2000
+const PEER_RECONNECT_DELAY_MS = 100
 
 /** peer 间互发的派生展示数据:绝不包含 Codex 凭据 */
 export interface PeerSnapshot {
@@ -67,6 +77,8 @@ interface StartOptions {
   peerId: string
   nickname: string
   group: string
+  activityEnabled?: boolean
+  onActivityMessage?: (peerId: string, message: ActivityMessage) => void
   /** 获取本机最新派生数据,用于广播给已连 peer */
   getSnapshot: () => PeerSnapshot
   /** peer 列表变化时回调,主进程据此刷新团队页 */
@@ -77,12 +89,15 @@ interface StartOptions {
   onReaction: (reaction: ReactionMessage) => void
 }
 
-interface HelloMessage {
+interface HelloMessage extends ActivityAuthHello {
   type: 'hello'
   peerId: string
   nickname: string
   groupHash: string
   snapshot?: PeerSnapshot
+  role?: TeamRole
+  activityVersion?: number
+  activityEnabled?: boolean
 }
 
 interface SnapshotMessage {
@@ -90,7 +105,12 @@ interface SnapshotMessage {
   snapshot?: PeerSnapshot
 }
 
-type PeerMessage = HelloMessage | SnapshotMessage | BroadcastMessage | ReactionMessage
+type PeerMessage =
+  | HelloMessage
+  | SnapshotMessage
+  | BroadcastMessage
+  | ReactionMessage
+  | ActivityMessage
 
 // mDNS 发现的远程服务信息
 interface DiscoveredService {
@@ -113,8 +133,14 @@ export class LanService {
   private publishedService: ReturnType<Bonjour['publish']> | undefined
   private browser: ReturnType<Bonjour['find']> | undefined
   private readonly connections = new Map<string, WebSocket>()
+  private readonly activityAuth = new ActivityConnectionAuth()
+  private readonly boundSockets = new WeakMap<WebSocket, string>()
   private readonly peers = new Map<string, PeerEntry>()
   private readonly discovered = new Map<string, DiscoveredService>()
+  private readonly activityCapabilities = new Map<
+    string,
+    { role: TeamRole; version: number; enabled: boolean }
+  >()
   // hello 重发定时器:连接 open 后若未及时收到对方 hello 则补发
   private readonly helloTimers = new Map<string, NodeJS.Timeout>()
   private options: StartOptions | undefined
@@ -122,11 +148,14 @@ export class LanService {
   private stopped = false
   /** 上次广播时间戳,用于间隔限频 */
   private lastBroadcastAt = 0
+  private lifecycleGeneration = 0
+  private readonly reconnectTimers = new Map<string, NodeJS.Timeout>()
 
   start(options: StartOptions): void {
     if (this.options) {
       this.stop()
     }
+    const generation = ++this.lifecycleGeneration
     this.stopped = false
     this.options = options
     this.groupHash = hashGroup(options.group)
@@ -134,23 +163,38 @@ export class LanService {
     this.discovered.clear()
 
     this.startServer().then(
-      () => this.startDiscovery(),
-      (error) => logDiag(`lan server start failed ${formatDiagError(error)}`)
+      () => {
+        if (generation !== this.lifecycleGeneration || this.stopped || !this.options) return
+        this.startDiscovery()
+      },
+      (error) => {
+        if (generation !== this.lifecycleGeneration || this.stopped) return
+        logDiag(`lan server start failed ${formatDiagError(error)}`)
+      }
     )
   }
 
   stop(): void {
+    this.lifecycleGeneration++
     this.stopped = true
     for (const timer of this.helloTimers.values()) {
       clearTimeout(timer)
     }
     this.helloTimers.clear()
+    for (const timer of this.reconnectTimers.values()) {
+      clearTimeout(timer)
+    }
+    this.reconnectTimers.clear()
     for (const socket of this.connections.values()) {
       socket.close()
+      // 进程退出/切换团队时不能等待 WebSocket 对端完成 close 握手。
+      socket.terminate()
     }
+    for (const socket of this.wss?.clients ?? []) socket.terminate()
     this.connections.clear()
     const peersChanged = this.peers.size > 0
     this.peers.clear()
+    this.activityCapabilities.clear()
     this.discovered.clear()
 
     this.browser?.stop()
@@ -182,8 +226,8 @@ export class LanService {
       type: 'snapshot',
       snapshot
     } satisfies SnapshotMessage)
-    for (const socket of this.connections.values()) {
-      if (socket.readyState === WebSocket.OPEN) {
+    for (const [peerId, socket] of this.connections) {
+      if (socket.readyState === WebSocket.OPEN && this.boundSockets.get(socket) === peerId) {
         socket.send(payload)
       }
     }
@@ -212,8 +256,8 @@ export class LanService {
       text: trimmed
     }
     const payload = JSON.stringify(message)
-    for (const socket of this.connections.values()) {
-      if (socket.readyState === WebSocket.OPEN) {
+    for (const [peerId, socket] of this.connections) {
+      if (socket.readyState === WebSocket.OPEN && this.boundSockets.get(socket) === peerId) {
         socket.send(payload)
       }
     }
@@ -234,12 +278,74 @@ export class LanService {
       sentAt: Date.now()
     }
     const payload = JSON.stringify(reaction)
-    for (const socket of this.connections.values()) {
-      if (socket.readyState === WebSocket.OPEN) {
+    for (const [peerId, socket] of this.connections) {
+      if (socket.readyState === WebSocket.OPEN && this.boundSockets.get(socket) === peerId) {
         socket.send(payload)
       }
     }
     return { ok: true, reaction }
+  }
+
+  getActivityAdminIds(): string[] {
+    return [...this.activityCapabilities.entries()]
+      .filter(
+        ([id, capability]) =>
+          this.peers.has(id) &&
+          this.activityAuth.isVerified(this.connections.get(id), id) &&
+          capability.role === 'admin' &&
+          capability.version === ACTIVITY_PROTOCOL_VERSION
+      )
+      .map(([id]) => id)
+  }
+
+  sendActivity(peerId: string, message: ActivityMessage): boolean {
+    const capability = this.activityCapabilities.get(peerId)
+    const socket = this.connections.get(peerId)
+    if (
+      !this.options ||
+      !this.peers.has(peerId) ||
+      capability?.version !== ACTIVITY_PROTOCOL_VERSION ||
+      socket?.readyState !== WebSocket.OPEN ||
+      !this.activityAuth.isVerified(socket, peerId)
+    )
+      return false
+    const localAdmin = parseTeamIdentity(this.options.group).role === 'admin'
+    if (
+      !canExchangeActivity(message.type, localAdmin, capability.role === 'admin', 'send') ||
+      !validateActivityMessage(message)
+    )
+      return false
+    const payload = JSON.stringify(message)
+    if (Buffer.byteLength(payload) > ACTIVITY_MAX_MESSAGE_BYTES) return false
+    socket.send(payload)
+    return true
+  }
+
+  private applyActivityCapabilities(message: HelloMessage, verified: boolean): void {
+    this.activityCapabilities.set(message.peerId, {
+      role: message.role === 'admin' ? 'admin' : 'member',
+      version:
+        verified && message.activityVersion === ACTIVITY_PROTOCOL_VERSION
+          ? ACTIVITY_PROTOCOL_VERSION
+          : 0,
+      enabled: message.activityEnabled === true
+    })
+  }
+
+  private receiveActivity(peerId: string, message: ActivityMessage, socket: WebSocket): void {
+    const capability = this.activityCapabilities.get(peerId)
+    if (
+      !this.options ||
+      !this.peers.has(peerId) ||
+      capability?.version !== ACTIVITY_PROTOCOL_VERSION ||
+      !this.activityAuth.isVerified(socket, peerId)
+    )
+      return
+    const localAdmin = parseTeamIdentity(this.options.group).role === 'admin'
+    if (!canExchangeActivity(message.type, localAdmin, capability.role === 'admin', 'receive'))
+      return
+    if (message.type === 'activity-day' && message.day.peerId !== peerId) return
+    this.options.onActivityMessage?.(peerId, message)
   }
 
   /** 当前 peer 列表(不含 self),供主进程合并 self 生成 teamPeers */
@@ -257,6 +363,9 @@ export class LanService {
       costUsage: entry.costUsage,
       tokenUsageByAgent: entry.tokenUsageByAgent,
       appVersion: entry.appVersion,
+      activitySupported:
+        this.activityCapabilities.get(entry.id)?.version === ACTIVITY_PROTOCOL_VERSION,
+      activityEnabled: this.activityCapabilities.get(entry.id)?.enabled,
       updatedAt: entry.updatedAt
     }))
   }
@@ -328,6 +437,7 @@ export class LanService {
   private handleServiceDown(service: { name?: string }): void {
     const peerId = service.name
     if (!peerId) return
+    this.clearReconnectTimer(peerId)
     this.discovered.delete(peerId)
     const socket = this.connections.get(peerId)
     if (socket) {
@@ -371,7 +481,6 @@ export class LanService {
     this.sendHello(socket)
     this.scheduleHelloRetry(peerId, socket)
   }
-
   // 出站连接关闭:若记录已被其他连接替换(说明该 peer 另有活连接),只清定时器,不算掉线
   private handleOutgoingClose(peerId: string, socket: WebSocket, fromIndex: number): void {
     const isCurrent = this.connections.get(peerId) === socket
@@ -383,10 +492,11 @@ export class LanService {
       return
     }
     if (this.peers.has(peerId)) {
-      // 已建立过双向连接,按正常掉线处理
+      // 已建立过双向连接,按正常掉线处理并使用已发现地址排队重连。
       if (this.peers.delete(peerId)) {
         this.emitPeersChange()
       }
+      this.scheduleReconnect(peerId)
       return
     }
     // 从未收到对方 hello:说明这条地址没通,试下一个
@@ -394,74 +504,104 @@ export class LanService {
   }
 
   private handleIncoming(socket: WebSocket): void {
-    // hello 有重发机制,入站可能收到多次 hello:只在第一次完整绑定,后续只更新快照
-    let bound = false
+    let boundPeerId: string | undefined
     socket.on('message', (raw) => {
       const message = parseMessage(raw.toString())
-      if (!message || message.type !== 'hello') return
-      // 入站连接:校验 groupHash,登记 peerId,绑定 socket
-      if (!this.groupHash || message.groupHash !== this.groupHash) {
+      if (!message) return
+      if (
+        message.type === 'hello' &&
+        (!isPeerId(message.peerId) || (boundPeerId !== undefined && message.peerId !== boundPeerId))
+      ) {
         socket.close()
         return
       }
-      if (bound) {
-        // 重发的 hello:走统一处理,更新快照并刷新记录,不重复绑定
-        this.handleMessage(socket, message.peerId, raw.toString())
-        return
-      }
-      bound = true
-      this.connections.set(message.peerId, socket)
-      this.applyPeerSnapshot(message.peerId, message.nickname, message.snapshot)
-      this.sendHello(socket)
-      // 被动方也补发保险:防止我方 hello 丢失导致对端单向
-      this.scheduleHelloRetry(message.peerId, socket)
-      // 后续消息(snapshot/广播/点赞)统一走 handleMessage,记录在活跃连接间切换;
-      // 入站也处理消息,避免"对方消息走我入站连接时被忽略"
-      socket.on('message', (later) => {
-        this.handleMessage(socket, message.peerId, later.toString())
-      })
-      // 仅当记录仍指向当前 socket 才清理,防止影子连接断开误删有效记录
-      socket.on('close', () => {
-        if (this.connections.get(message.peerId) === socket) {
-          this.handleSocketClose(message.peerId)
-        }
-      })
+      if (message.type === 'hello') boundPeerId = message.peerId
+      if (boundPeerId) this.handleMessage(socket, boundPeerId, raw.toString())
+    })
+    socket.on('close', () => {
+      if (boundPeerId && this.connections.get(boundPeerId) === socket)
+        this.handleSocketClose(boundPeerId)
     })
   }
 
-  private sendHello(socket: WebSocket): void {
+  private sendHello(socket: WebSocket, includeSnapshot = false): void {
     if (!this.options || !this.groupHash) return
     const hello: HelloMessage = {
       type: 'hello',
       peerId: this.options.peerId,
       nickname: this.options.nickname,
       groupHash: this.groupHash,
-      snapshot: this.options.getSnapshot()
+      role: parseTeamIdentity(this.options.group).role,
+      activityVersion: ACTIVITY_PROTOCOL_VERSION,
+      activityEnabled: this.options.activityEnabled === true,
+      ...(includeSnapshot ? { snapshot: this.options.getSnapshot() } : {})
     }
     if (socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(hello))
+      socket.send(
+        JSON.stringify(this.activityAuth.decorateHello(socket, this.options.group, hello))
+      )
     }
   }
 
   private handleMessage(socket: WebSocket, peerId: string, raw: string): void {
-    // 收到对方数据说明这条连接活跃,记录刷新指向它;断开的另一条会被数据流自然淘汰,
-    // 避免"记录指向已断连接导致我发不出、对方仍能发给我"的单向失效
-    this.connections.set(peerId, socket)
+    if (this.stopped || !this.options || socket.readyState !== WebSocket.OPEN) return
     const message = parseMessage(raw)
     if (!message) return
     if (message.type === 'hello') {
-      if (!this.groupHash || message.groupHash !== this.groupHash) {
-        socket.close()
-        return
-      }
-      this.applyPeerSnapshot(message.peerId, message.nickname, message.snapshot)
-    } else if (message.type === 'snapshot') {
+      this.handlePeerHello(socket, peerId, message)
+      return
+    }
+    if (this.boundSockets.get(socket) !== peerId) return
+    this.connections.set(peerId, socket)
+    if (message.type === 'snapshot') {
       this.applyPeerSnapshot(peerId, undefined, message.snapshot)
     } else if (message.type === 'message') {
       this.options?.onMessage(message)
     } else if (message.type === 'reaction') {
       this.options?.onReaction(message)
+    } else if (validateActivityMessage(message)) {
+      this.receiveActivity(peerId, message, socket)
     }
+  }
+
+  private handlePeerHello(socket: WebSocket, peerId: string, message: HelloMessage): void {
+    const options = this.options
+    if (
+      !options ||
+      !this.groupHash ||
+      message.groupHash !== this.groupHash ||
+      message.peerId !== peerId ||
+      !isPeerId(message.peerId)
+    ) {
+      socket.close()
+      return
+    }
+    const requiresActivityAuth =
+      message.activityVersion !== undefined ||
+      message.activityNonce !== undefined ||
+      message.activityProof !== undefined
+    if (
+      !requiresActivityAuth &&
+      this.activityAuth.isVerified(this.connections.get(peerId), peerId)
+    ) {
+      socket.close()
+      return
+    }
+    if (requiresActivityAuth) {
+      const result = this.activityAuth.receiveHello(socket, options.group, options.peerId, message)
+      if (result === 'invalid') {
+        socket.close()
+        return
+      }
+      if (this.activityAuth.needsReply(socket)) this.sendHello(socket)
+      if (result === 'pending') return
+    }
+    const alreadyBound = this.boundSockets.get(socket) === peerId
+    this.boundSockets.set(socket, peerId)
+    this.connections.set(peerId, socket)
+    this.applyActivityCapabilities(message, this.activityAuth.isVerified(socket, peerId))
+    this.applyPeerSnapshot(message.peerId, message.nickname, message.snapshot)
+    if (!alreadyBound) this.sendHello(socket, true)
   }
 
   private applyPeerSnapshot(
@@ -501,6 +641,41 @@ export class LanService {
     const removed = this.connections.delete(peerId)
     if (removed && this.peers.delete(peerId)) {
       this.emitPeersChange()
+      this.scheduleReconnect(peerId)
+    }
+  }
+
+  private scheduleReconnect(peerId: string): void {
+    if (
+      this.stopped ||
+      !this.options ||
+      !this.groupHash ||
+      !this.discovered.has(peerId) ||
+      this.connections.has(peerId) ||
+      this.reconnectTimers.has(peerId)
+    )
+      return
+    const timer = setTimeout(() => {
+      this.reconnectTimers.delete(peerId)
+      if (
+        this.stopped ||
+        !this.options ||
+        !this.groupHash ||
+        !this.discovered.has(peerId) ||
+        this.connections.has(peerId)
+      )
+        return
+      this.connectToPeer(peerId)
+    }, PEER_RECONNECT_DELAY_MS)
+    timer.unref()
+    this.reconnectTimers.set(peerId, timer)
+  }
+
+  private clearReconnectTimer(peerId: string): void {
+    const timer = this.reconnectTimers.get(peerId)
+    if (timer) {
+      clearTimeout(timer)
+      this.reconnectTimers.delete(peerId)
     }
   }
 
@@ -526,12 +701,17 @@ export class LanService {
 
   private emitPeersChange(): void {
     if (this.stopped || !this.options) return
+    for (const id of this.activityCapabilities.keys())
+      if (!this.peers.has(id)) this.activityCapabilities.delete(id)
     this.options.onPeersChange(this.getPeers())
   }
 }
 
-function hashGroup(group: string): string {
-  return createHash('sha256').update(group).digest('hex').slice(0, GROUP_HASH_LENGTH)
+export function hashGroup(group: string): string {
+  return createHash('sha256')
+    .update(parseTeamIdentity(group).group)
+    .digest('hex')
+    .slice(0, GROUP_HASH_LENGTH)
 }
 
 // 候选地址排序:IPv4 优先(IPv6 链路本地地址 fe80:: 要 zone id 且 URL 要方括号,坑多)
@@ -548,6 +728,7 @@ function formatWsHost(host: string): string {
 }
 
 function parseMessage(raw: string): PeerMessage | undefined {
+  if (Buffer.byteLength(raw) > ACTIVITY_MAX_MESSAGE_BYTES) return undefined
   try {
     return JSON.parse(raw) as PeerMessage
   } catch {

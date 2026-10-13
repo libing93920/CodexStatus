@@ -20,6 +20,8 @@ asarUnpack:
 extraResources:
   - from: resources/hooks
     to: hooks
+  - from: resources/holidays/LICENSE
+    to: holidays/LICENSE
 win:
   executableName: CodexStatus
   icon: build/icon.ico

@@ -20,6 +20,11 @@ import type {
   WindowPreferences
 } from '../shared/capsule'
 import type { IslandPresentation, IslandSnapshot } from '../shared/island'
+import {
+  ACTIVITY_CHANNELS,
+  type ActivityBoard,
+  type WorkCalendarStatus
+} from '../shared/activity.ts'
 
 const CHANNELS = {
   bootstrap: 'codex-status:bootstrap',
@@ -69,6 +74,10 @@ const api: CodexStatusApi = {
   refreshStatus: () => ipcRenderer.invoke(CHANNELS.refresh) as Promise<UsageSnapshot>,
   updateSettings: (patch: Partial<AppSettings>) =>
     ipcRenderer.invoke(CHANNELS.updateSettings, patch) as Promise<PreferencesPayload>,
+  getActivityBoard: (date: string) =>
+    ipcRenderer.invoke(ACTIVITY_CHANNELS.board, date) as Promise<ActivityBoard>,
+  refreshWorkCalendar: () =>
+    ipcRenderer.invoke(ACTIVITY_CHANNELS.calendarRefresh) as Promise<WorkCalendarStatus>,
   closePanel: () => ipcRenderer.invoke(CHANNELS.closePanel) as Promise<void>,
   moveCapsuleWindow: (payload: CapsuleDragMovePayload) =>
     ipcRenderer.invoke(CHANNELS.moveCapsuleWindow, payload) as Promise<WindowPreferences>,

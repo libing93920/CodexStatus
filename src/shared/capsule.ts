@@ -10,6 +10,11 @@ import {
   DEFAULT_WINDOW_KEEPER_START_TIME,
   normalizeWindowKeeperStartTime
 } from './window-keeper-time'
+import {
+  DEFAULT_IDLE_THRESHOLD_MINUTES,
+  type ActivityBoard,
+  type WorkCalendarStatus
+} from './activity.ts'
 
 export type PercentageMode = 'remaining' | 'used'
 export type RefreshMode = 'auto' | 'manual'
@@ -139,6 +144,9 @@ export interface TeamPeer {
   tokenUsageByAgent?: Partial<Record<UsageWindow, Partial<Record<AgentId, number>>>>
   /** 应用版本:排行榜以组内最高版本为基准标绿/黄点 */
   appVersion?: string
+  /** 仅声明活动协议能力，不包含输入活动明细。 */
+  activitySupported?: boolean
+  activityEnabled?: boolean
   /** 该 peer 最后更新时间(留作后续显示,本期 UI 不展示) */
   updatedAt?: string
 }
@@ -263,6 +271,10 @@ export interface AppSettings {
   teamNickname?: string
   /** 团队组口令(同口令的 peer 才互见);空表示未加入团队 */
   teamGroup?: string
+  /** 工作时段活动分享始终开启。 */
+  activityEnabled: boolean
+  /** 统一使用5分钟阈值，旧配置值不再生效。 */
+  activityIdleThresholdMinutes: number
   /** 外观主题;midnight=默认深色青蓝 */
   theme: ThemeId
   /** 胶囊极简模式:无交互 3s 收缩为悬浮球,交互即还原;默认开启 */
@@ -353,6 +365,8 @@ export interface CodexStatusApi {
   bootstrap: () => Promise<BootstrapPayload>
   refreshStatus: () => Promise<UsageSnapshot>
   updateSettings: (patch: Partial<AppSettings>) => Promise<PreferencesPayload>
+  getActivityBoard: (date: string) => Promise<ActivityBoard>
+  refreshWorkCalendar: () => Promise<WorkCalendarStatus>
   closePanel: () => Promise<void>
   moveCapsuleWindow: (payload: CapsuleDragMovePayload) => Promise<WindowPreferences>
   finishCapsuleWindowDrag: () => Promise<WindowPreferences>
@@ -467,6 +481,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   locale: 'zh-CN',
   agentId: 'codex',
   launchAtLogin: false,
+  activityEnabled: true,
+  activityIdleThresholdMinutes: DEFAULT_IDLE_THRESHOLD_MINUTES,
   theme: 'midnight',
   capsuleMinimalMode: true,
   autoKeep5hWindow: true,
@@ -527,6 +543,8 @@ export function normalizeSettings(input: Partial<AppSettings> | undefined): AppS
         : DEFAULT_SETTINGS.launchAtLogin,
     teamNickname: normalizeOptionalString(input?.teamNickname),
     teamGroup: normalizeOptionalString(input?.teamGroup),
+    activityEnabled: DEFAULT_SETTINGS.activityEnabled,
+    activityIdleThresholdMinutes: DEFAULT_IDLE_THRESHOLD_MINUTES,
     theme: isThemeId(input?.theme) ? input.theme : DEFAULT_SETTINGS.theme,
     capsuleMinimalMode:
       typeof input?.capsuleMinimalMode === 'boolean'

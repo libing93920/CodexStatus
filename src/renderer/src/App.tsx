@@ -27,6 +27,9 @@ import { formatAnnouncementTime, resolveCapsuleAlert } from '../../shared/announ
 import { isWindowKeeperStartTime } from '../../shared/window-keeper-time'
 import { createEmptyIslandSnapshot, type IslandSnapshot } from '../../shared/island'
 import { IslandSettingsCard } from './island/IslandSettingsCard'
+import { parseTeamIdentity } from '../../shared/team-role'
+import { ActivityPanel } from './activity/ActivityPanel'
+import { activityCopy } from './activity/copy'
 import { COPY, HEART_EFFECT_KINDS, THEME_OPTIONS, type HeartEffectKind } from './copy'
 import {
   CloseIcon,
@@ -117,6 +120,7 @@ function App(): React.JSX.Element {
   // 团队页排行榜模式:quota=额度, tokens=Token 消耗, cost=花费;用量模式共用窗口
   const [teamBoardMode, setTeamBoardMode] = useState<'quota' | 'tokens' | 'cost'>('quota')
   const [teamUsageWindow, setTeamUsageWindow] = useState<UsageWindow>('1d')
+  const [teamView, setTeamView] = useState<'rankings' | 'management'>('rankings')
   const [teamBoardMotionActive, setTeamBoardMotionActive] = useState(false)
   const [capsulePointerActive, setCapsulePointerActive] = useState(false)
   const [minimalStage, setMinimalStage] = useState<CapsuleMinimalStage>('full')
@@ -185,6 +189,12 @@ function App(): React.JSX.Element {
   useLayoutEffect(() => {
     panelContentRef.current?.scrollTo(0, 0)
   }, [panelView])
+
+  useEffect(() => {
+    // 团队或角色切换后，不保留上一个管理页的选择。
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTeamView('rankings')
+  }, [settings.teamGroup])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -420,6 +430,10 @@ function App(): React.JSX.Element {
   }, [windowRole, snapshot.authMode, snapshot.generatedAt])
 
   const copy = COPY[settings.locale]
+  const teamIdentity = parseTeamIdentity(settings.teamGroup)
+  const isTeamAdmin = teamIdentity.valid && !!teamIdentity.group && teamIdentity.role === 'admin'
+  const showActivityManagement = isTeamAdmin && teamView === 'management'
+  const activityLabels = activityCopy(settings.locale)
   const canRefresh = snapshot.canRefresh !== false
   const fixedRefreshValues = REFRESH_INTERVAL_OPTIONS.map((option) => String(option))
   const isCustomRefreshInterval = !fixedRefreshValues.includes(
@@ -1696,6 +1710,21 @@ function App(): React.JSX.Element {
                 labels={{ details: copy.details, team: copy.team, settings: copy.settings }}
                 onChange={handlePanelViewChange}
               />
+              {isTeamAdmin ? (
+                <div className="team-mode-switch activity-tabs" aria-label={copy.team}>
+                  <SegmentedControl
+                    value={teamView}
+                    options={[
+                      { label: activityLabels.ranking, value: 'rankings' },
+                      { label: activityLabels.management, value: 'management' }
+                    ]}
+                    onChange={(value) => {
+                      setTeamView(value as 'rankings' | 'management')
+                      panelContentRef.current?.scrollTo(0, 0)
+                    }}
+                  />
+                </div>
+              ) : null}
               {announcement ? (
                 <section
                   aria-label={announcement.unread ? copy.announcementUnread : copy.announcement}
@@ -1727,192 +1756,198 @@ function App(): React.JSX.Element {
                   </button>
                 </section>
               ) : null}
-              {isQuotaTeamBoardAvailable ? (
-                <div className="team-mode-switch">
-                  <SegmentedControl
-                    onChange={handleTeamBoardModeChange}
-                    options={[
-                      { label: copy.teamModeQuota, value: 'quota' },
-                      { label: copy.teamModeTokens, value: 'tokens' },
-                      { label: copy.teamModeCost, value: 'cost' }
-                    ]}
-                    value={effectiveTeamBoardMode}
-                  />
-                </div>
+              {showActivityManagement ? (
+                <ActivityPanel key={teamIdentity.group} settings={settings} />
               ) : (
-                <div className="team-mode-switch">
-                  <SegmentedControl
-                    onChange={handleTeamBoardModeChange}
-                    options={[
-                      { label: copy.teamModeTokens, value: 'tokens' },
-                      { label: copy.teamModeCost, value: 'cost' }
-                    ]}
-                    value={effectiveTeamBoardMode}
-                  />
-                </div>
-              )}
-              <div className="panel__header panel__header--team">
-                <div>
-                  <h2 className="panel__title">
-                    {effectiveTeamBoardMode === 'quota'
-                      ? copy.teamBoard
-                      : effectiveTeamBoardMode === 'cost'
-                        ? copy.teamCostBoard
-                        : copy.teamTokenBoard}
-                  </h2>
-                </div>
-                <button
-                  className={`ghost-button ghost-button--accent team__refresh${
-                    manualRefreshActive ? ' is-refreshing' : ''
-                  }`}
-                  disabled={manualRefreshActive || !canRefresh}
-                  onClick={() => void handleRefresh()}
-                  type="button"
-                  aria-label={copy.refresh}
-                >
-                  <RefreshIcon />
-                  <span>{manualRefreshActive ? copy.refreshing : copy.refresh}</span>
-                </button>
-              </div>
-
-              {isTeamUsageBoard ? (
                 <>
-                  <div className="team-window-switch">
-                    <SegmentedControl
-                      onChange={handleTeamUsageWindowChange}
-                      options={[
-                        { label: copy.usage1d, value: '1d' },
-                        { label: copy.usage7d, value: '7d' },
-                        { label: copy.usage30d, value: '30d' }
-                      ]}
-                      value={teamUsageWindow}
-                    />
-                  </div>
-                  {teamUsagePeers.length > 0 ? (
-                    <div
-                      className="team-board"
-                      key={`${effectiveTeamBoardMode}-${teamUsageWindow}`}
-                    >
-                      {teamUsagePeers.map((peer, index) => {
-                        const showLikes =
-                          effectiveTeamBoardMode === 'tokens' && teamUsageWindow === '1d'
-                        const like = showLikes ? aggregateReactions(peer.id) : undefined
-                        return (
-                          <TeamUsageRow
-                            appVersion={peer.appVersion}
-                            isLatestVersion={
-                              peer.appVersion !== undefined && maxAppVersion !== undefined
-                                ? compareSemver(peer.appVersion, maxAppVersion) === 0
-                                : undefined
-                            }
-                            isSelf={peer.isSelf}
-                            key={peer.id}
-                            likeCount={like?.count}
-                            locale={settings.locale}
-                            maxValue={teamUsageMax}
-                            nickname={peer.nickname || copy.teamAnonymous}
-                            onLike={
-                              showLikes ? () => void handleReactionToggle(peer.id) : undefined
-                            }
-                            rank={index + 1}
-                            selfLiked={like?.selfLiked}
-                            valueMode={effectiveTeamBoardMode === 'cost' ? 'cost' : 'tokens'}
-                            cost={peer.costUsage?.[teamUsageWindow]}
-                            tokens={peer.tokenUsage?.[teamUsageWindow]}
-                            tokensByAgent={peer.tokenUsageByAgent?.[teamUsageWindow]}
-                          />
-                        )
-                      })}
+                  {isQuotaTeamBoardAvailable ? (
+                    <div className="team-mode-switch">
+                      <SegmentedControl
+                        onChange={handleTeamBoardModeChange}
+                        options={[
+                          { label: copy.teamModeQuota, value: 'quota' },
+                          { label: copy.teamModeTokens, value: 'tokens' },
+                          { label: copy.teamModeCost, value: 'cost' }
+                        ]}
+                        value={effectiveTeamBoardMode}
+                      />
                     </div>
                   ) : (
-                    <p
-                      className="team-empty"
-                      key={`${effectiveTeamBoardMode}-empty-${teamUsageWindow}`}
+                    <div className="team-mode-switch">
+                      <SegmentedControl
+                        onChange={handleTeamBoardModeChange}
+                        options={[
+                          { label: copy.teamModeTokens, value: 'tokens' },
+                          { label: copy.teamModeCost, value: 'cost' }
+                        ]}
+                        value={effectiveTeamBoardMode}
+                      />
+                    </div>
+                  )}
+                  <div className="panel__header panel__header--team">
+                    <div>
+                      <h2 className="panel__title">
+                        {effectiveTeamBoardMode === 'quota'
+                          ? copy.teamBoard
+                          : effectiveTeamBoardMode === 'cost'
+                            ? copy.teamCostBoard
+                            : copy.teamTokenBoard}
+                      </h2>
+                    </div>
+                    <button
+                      className={`ghost-button ghost-button--accent team__refresh${
+                        manualRefreshActive ? ' is-refreshing' : ''
+                      }`}
+                      disabled={manualRefreshActive || !canRefresh}
+                      onClick={() => void handleRefresh()}
+                      type="button"
+                      aria-label={copy.refresh}
                     >
+                      <RefreshIcon />
+                      <span>{manualRefreshActive ? copy.refreshing : copy.refresh}</span>
+                    </button>
+                  </div>
+
+                  {isTeamUsageBoard ? (
+                    <>
+                      <div className="team-window-switch">
+                        <SegmentedControl
+                          onChange={handleTeamUsageWindowChange}
+                          options={[
+                            { label: copy.usage1d, value: '1d' },
+                            { label: copy.usage7d, value: '7d' },
+                            { label: copy.usage30d, value: '30d' }
+                          ]}
+                          value={teamUsageWindow}
+                        />
+                      </div>
+                      {teamUsagePeers.length > 0 ? (
+                        <div
+                          className="team-board"
+                          key={`${effectiveTeamBoardMode}-${teamUsageWindow}`}
+                        >
+                          {teamUsagePeers.map((peer, index) => {
+                            const showLikes =
+                              effectiveTeamBoardMode === 'tokens' && teamUsageWindow === '1d'
+                            const like = showLikes ? aggregateReactions(peer.id) : undefined
+                            return (
+                              <TeamUsageRow
+                                appVersion={peer.appVersion}
+                                isLatestVersion={
+                                  peer.appVersion !== undefined && maxAppVersion !== undefined
+                                    ? compareSemver(peer.appVersion, maxAppVersion) === 0
+                                    : undefined
+                                }
+                                isSelf={peer.isSelf}
+                                key={peer.id}
+                                likeCount={like?.count}
+                                locale={settings.locale}
+                                maxValue={teamUsageMax}
+                                nickname={peer.nickname || copy.teamAnonymous}
+                                onLike={
+                                  showLikes ? () => void handleReactionToggle(peer.id) : undefined
+                                }
+                                rank={index + 1}
+                                selfLiked={like?.selfLiked}
+                                valueMode={effectiveTeamBoardMode === 'cost' ? 'cost' : 'tokens'}
+                                cost={peer.costUsage?.[teamUsageWindow]}
+                                tokens={peer.tokenUsage?.[teamUsageWindow]}
+                                tokensByAgent={peer.tokenUsageByAgent?.[teamUsageWindow]}
+                              />
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <p
+                          className="team-empty"
+                          key={`${effectiveTeamBoardMode}-empty-${teamUsageWindow}`}
+                        >
+                          {copy.teamEmpty}
+                        </p>
+                      )}
+                    </>
+                  ) : teamPeers.length > 0 ? (
+                    <div className="team-board" key="quota">
+                      {teamPeers.map((peer, index) => (
+                        <TeamRow
+                          key={peer.id}
+                          isSelf={peer.isSelf}
+                          rank={index + 1}
+                          nickname={peer.nickname || copy.teamAnonymous}
+                          remainingPercent={peer.remainingPercent}
+                          shortWindow={peer.shortWindow}
+                          longWindow={peer.longWindow}
+                          resetCreditCount={peer.resetCreditCount}
+                          appVersion={peer.appVersion}
+                          theme={settings.theme}
+                          isLatestVersion={
+                            peer.appVersion !== undefined && maxAppVersion !== undefined
+                              ? compareSemver(peer.appVersion, maxAppVersion) === 0
+                              : undefined
+                          }
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="team-empty" key="quota-empty">
                       {copy.teamEmpty}
                     </p>
                   )}
-                </>
-              ) : teamPeers.length > 0 ? (
-                <div className="team-board" key="quota">
-                  {teamPeers.map((peer, index) => (
-                    <TeamRow
-                      key={peer.id}
-                      isSelf={peer.isSelf}
-                      rank={index + 1}
-                      nickname={peer.nickname || copy.teamAnonymous}
-                      remainingPercent={peer.remainingPercent}
-                      shortWindow={peer.shortWindow}
-                      longWindow={peer.longWindow}
-                      resetCreditCount={peer.resetCreditCount}
-                      appVersion={peer.appVersion}
-                      theme={settings.theme}
-                      isLatestVersion={
-                        peer.appVersion !== undefined && maxAppVersion !== undefined
-                          ? compareSemver(peer.appVersion, maxAppVersion) === 0
-                          : undefined
-                      }
-                    />
-                  ))}
-                </div>
-              ) : (
-                <p className="team-empty" key="quota-empty">
-                  {copy.teamEmpty}
-                </p>
-              )}
 
-              {/* 广播消息流:会话内仅实时,最新在底;发送经主进程校验与回显 */}
-              <div className="team-broadcast">
-                <div className="team-broadcast__feed" ref={broadcastFeedRef}>
-                  {broadcastMessages.length > 0 ? (
-                    broadcastMessages.map((message) => (
-                      <div className="team-broadcast__item" key={message.id}>
-                        <span className="team-broadcast__name">
-                          {message.senderNickname || copy.teamAnonymous}
-                        </span>
-                        <span className="team-broadcast__time">
-                          {formatMessageTime(message.sentAt)}
-                        </span>
-                        <span className="team-broadcast__text">{message.text}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="team-broadcast__empty">{copy.broadcastEmpty}</p>
-                  )}
-                </div>
-                <div className="team-broadcast__composer">
-                  <input
-                    className="team-broadcast__input"
-                    disabled={broadcastSending}
-                    maxLength={200}
-                    onChange={(event) => {
-                      setBroadcastInput(event.target.value)
-                      if (broadcastSendError) {
-                        setBroadcastSendError('')
-                      }
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        void handleBroadcastSend()
-                      }
-                    }}
-                    placeholder={copy.broadcastPlaceholder}
-                    type="text"
-                    value={broadcastInput}
-                  />
-                  <button
-                    className="ghost-button ghost-button--accent team-broadcast__send"
-                    disabled={broadcastSending || broadcastInput.trim().length === 0}
-                    onClick={() => void handleBroadcastSend()}
-                    type="button"
-                  >
-                    {copy.broadcastSend}
-                  </button>
-                </div>
-                {broadcastSendError ? (
-                  <p className="team-broadcast__error">{broadcastSendError}</p>
-                ) : null}
-              </div>
+                  {/* 广播消息流:会话内仅实时,最新在底;发送经主进程校验与回显 */}
+                  <div className="team-broadcast">
+                    <div className="team-broadcast__feed" ref={broadcastFeedRef}>
+                      {broadcastMessages.length > 0 ? (
+                        broadcastMessages.map((message) => (
+                          <div className="team-broadcast__item" key={message.id}>
+                            <span className="team-broadcast__name">
+                              {message.senderNickname || copy.teamAnonymous}
+                            </span>
+                            <span className="team-broadcast__time">
+                              {formatMessageTime(message.sentAt)}
+                            </span>
+                            <span className="team-broadcast__text">{message.text}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="team-broadcast__empty">{copy.broadcastEmpty}</p>
+                      )}
+                    </div>
+                    <div className="team-broadcast__composer">
+                      <input
+                        className="team-broadcast__input"
+                        disabled={broadcastSending}
+                        maxLength={200}
+                        onChange={(event) => {
+                          setBroadcastInput(event.target.value)
+                          if (broadcastSendError) {
+                            setBroadcastSendError('')
+                          }
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            void handleBroadcastSend()
+                          }
+                        }}
+                        placeholder={copy.broadcastPlaceholder}
+                        type="text"
+                        value={broadcastInput}
+                      />
+                      <button
+                        className="ghost-button ghost-button--accent team-broadcast__send"
+                        disabled={broadcastSending || broadcastInput.trim().length === 0}
+                        onClick={() => void handleBroadcastSend()}
+                        type="button"
+                      >
+                        {copy.broadcastSend}
+                      </button>
+                    </div>
+                    {broadcastSendError ? (
+                      <p className="team-broadcast__error">{broadcastSendError}</p>
+                    ) : null}
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="panel__footer">
@@ -1942,7 +1977,7 @@ function App(): React.JSX.Element {
               <div className="settings-list">
                 <div className="settings-section">
                   <p className="settings-section__title">{copy.groupAppearance}</p>
-                  <SettingField label={copy.theme} hint={copy.themeHint}>
+                  <SettingField label={copy.theme}>
                     <SegmentedControl
                       scrollable
                       onChange={(value) => {
@@ -1959,7 +1994,7 @@ function App(): React.JSX.Element {
 
                 <div className="settings-section">
                   <p className="settings-section__title">{copy.groupAgent}</p>
-                  <SettingField label={copy.agentId} hint={copy.agentIdHint}>
+                  <SettingField label={copy.agentId}>
                     <SegmentedControl
                       onChange={(value) => {
                         void handleSettingsPatch({
@@ -1979,7 +2014,6 @@ function App(): React.JSX.Element {
                       <div className="setting-row tool-setting-row">
                         <div className="tool-setting-copy">
                           <span className="setting-field__label">{copy.autoKeep5hWindow}</span>
-                          <small className="setting-field__hint">{copy.autoKeep5hWindowHint}</small>
                           <label
                             className={`inline-input window-keeper-start-time ${settings.autoKeep5hWindow ? '' : 'is-disabled'}`}
                           >
@@ -2001,9 +2035,6 @@ function App(): React.JSX.Element {
                               value={windowKeeperStartTimeInput}
                             />
                           </label>
-                          <small className="setting-field__hint window-keeper-start-time__hint">
-                            {copy.windowKeeperStartTimeHint}
-                          </small>
                         </div>
                         <ToggleSwitch
                           checked={settings.autoKeep5hWindow}
