@@ -485,7 +485,6 @@ export default function Island(): React.JSX.Element {
         setNavigationError('无法定位任务，已打开 Codex')
         return
       }
-      if (task.phase === 'failed') return
       if (task.phase === 'completed') {
         setMode('compact', 'open-completed')
         return

@@ -150,7 +150,9 @@ export class CodexActivityService {
     const task = this.state
       .getSnapshot()
       .tasks.find((candidate) => candidate.latestEventId === eventId)
-    if (task?.phase === 'completed') this.state.removeTask(task.hostId, task.threadId)
+    if (task?.phase === 'completed' || task?.phase === 'failed') {
+      this.state.removeTask(task.hostId, task.threadId)
+    }
     this.emit()
   }
 

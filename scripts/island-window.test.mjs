@@ -38,6 +38,7 @@ function testLog(stage) {
 }
 
 let openedThread
+let taskOpenConfirmed = true
 let ready
 let resolveHidden
 let hiddenRevision
@@ -488,23 +489,7 @@ async function verifyAlertRules(window) {
   testLog('alerts:completed-hidden')
   assert.equal((await inspect(window)).mode, 'compact')
 
-  window.webContents.send(CHANNELS.islandUpdated, snapshot('failed'))
-  await delay(900)
-  testLog('alerts:failed-shown')
-  assert.equal((await inspect(window)).mode, 'alert')
-  await window.webContents.executeJavaScript(
-    "document.querySelector('.alert-footer button:last-of-type').click()"
-  )
-  assert.equal(openedThread, 'thread-1')
-  await delay(700)
-  testLog('alerts:failed-viewed')
-  assert.equal((await inspect(window)).mode, 'alert')
-  await window.webContents.executeJavaScript(
-    "document.querySelector('.alert-footer button:first-of-type').click()"
-  )
-  await delay(700)
-  testLog('alerts:failed-dismissed')
-  assert.equal((await inspect(window)).mode, 'compact')
+  await verifyFailedTaskViewing(window)
 
   sendPresentation(window, true)
   await delay(700)
@@ -524,6 +509,39 @@ async function verifyAlertRules(window) {
   sendPresentation(window, false)
   await delay(500)
   testLog('alerts:end')
+}
+
+async function verifyFailedTaskViewing(window) {
+  for (const view of ['alert', 'expanded']) {
+    window.webContents.send(CHANNELS.islandUpdated, snapshot('failed', 1, `-view-${view}`))
+    await retry(async () => assert.equal((await inspect(window)).mode, 'alert'))
+    if (view === 'expanded') {
+      await window.webContents.executeJavaScript(
+        "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))"
+      )
+      await retry(async () => assert.equal((await inspect(window)).mode, 'compact'))
+      await window.webContents.executeJavaScript("document.querySelector('.compact').click()")
+      await retry(async () => assert.equal((await inspect(window)).mode, 'expanded'))
+    }
+    const selector = view === 'alert' ? '.alert-footer button:last-of-type' : '.task-list .task'
+    taskOpenConfirmed = false
+    await window.webContents.executeJavaScript(`document.querySelector('${selector}').click()`)
+    await delay(700)
+    assert.equal((await inspect(window)).mode, view)
+    taskOpenConfirmed = true
+    await window.webContents.executeJavaScript(`document.querySelector('${selector}').click()`)
+    await retry(async () => assert.equal((await inspect(window)).mode, 'compact'))
+    assert.equal(openedThread, 'thread-1')
+    testLog(`alerts:failed-${view}-viewed`)
+  }
+
+  window.webContents.send(CHANNELS.islandUpdated, snapshot('failed', 1, '-dismiss'))
+  await retry(async () => assert.equal((await inspect(window)).mode, 'alert'))
+  await window.webContents.executeJavaScript(
+    "document.querySelector('.alert-footer button:first-of-type').click()"
+  )
+  await retry(async () => assert.equal((await inspect(window)).mode, 'compact'))
+  testLog('alerts:failed-dismissed')
 }
 
 async function verifyRecreate(window, expectDiagnostics = true) {
@@ -946,7 +964,7 @@ function registerHandlers() {
   })
   ipcMain.handle(CHANNELS.islandOpenTask, (_event, threadId) => {
     openedThread = threadId
-    return true
+    return taskOpenConfirmed
   })
   ipcMain.handle(CHANNELS.islandDismissTask, () => true)
 }

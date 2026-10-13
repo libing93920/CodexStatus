@@ -376,22 +376,39 @@ test('IPC 终态后的模糊 active 快照不复活已结束任务', () => {
   assert.equal(latest.tasks.length, 0)
 })
 
-test('已查看的 IPC 完成任务不会被后续快照重新加入', () => {
-  let latest
-  const service = new CodexActivityService({
-    cwd: '.',
-    descriptorPath: 'unused',
-    emitDebounceMs: 0,
-    onSnapshot: (snapshot) => {
+for (const phase of ['completed', 'failed']) {
+  test(`已查看的 IPC ${phase}任务移除且不被后续快照重新加入，其他任务保留`, () => {
+    let latest
+    const service = activityService((snapshot) => {
       latest = snapshot
+    })
+    const finished = authoritativeTask(phase, 'turn-1')
+    const running = {
+      ...authoritativeTask('running', 'turn-2'),
+      threadId: 'thread-2',
+      latestEventId: 'ipc:running:thread-2'
     }
+    service.updateIpcTasks([finished, running])
+    service.markViewed(finished.latestEventId)
+    assert.deepEqual(
+      latest.tasks.map((task) => task.threadId),
+      ['thread-2']
+    )
+    assert.ok(latest.viewedEventIds.includes(finished.latestEventId))
+    service.updateIpcTasks([finished, running])
+    assert.deepEqual(
+      latest.tasks.map((task) => task.threadId),
+      ['thread-2']
+    )
   })
-  service.threadSources.set('local\u0000thread-1', 'vscode')
-  const completed = authoritativeTask('completed', 'turn-1')
-  service.updateIpcTasks?.([completed])
-  service.markViewed(completed.latestEventId)
-  service.updateIpcTasks?.([completed])
-  assert.equal(latest.tasks.length, 0)
+}
+
+test('查看最后一个失败任务清空灵动岛任务列表', () => {
+  const service = activityService(() => undefined)
+  const failed = authoritativeTask('failed', 'turn-1')
+  service.updateIpcTasks([failed])
+  service.markViewed(failed.latestEventId)
+  assert.deepEqual(service.getSnapshot().tasks, [])
 })
 
 test('Hook 任务不会被 IPC 缺失或完成快照覆盖', () => {
