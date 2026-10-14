@@ -117,6 +117,7 @@ import { resolveCodexExecutable } from './services/window-keeper-runner'
 import { createIslandWindow, positionIslandWindow } from './windows/island-window'
 import { WindowsFullscreenMonitor, type FullscreenState } from './services/windows-fullscreen'
 import { TeamActivityService } from './services/team-activity.ts'
+import { getPanelVisibility, subscribePanelVisibility } from './services/panel-visibility.ts'
 import { parseTeamIdentity } from '../shared/team-role.ts'
 import {
   ACTIVITY_CHANNELS,
@@ -430,6 +431,7 @@ function createPanelWindow(): BrowserWindow {
   // 首次创建不在此 show:窗口 show 交给渲染层 bootstrap 完成后的 panel-ready IPC,
   // 否则 ready-to-show(Chromium 首屏可画)早于 React 挂载,会先闪一个空透明窗,
   // 等 bootstrap resolve 真正内容挂载后再"重开"一次——视觉上像弹了两遍
+  subscribePanelVisibility(window)
   window.on('move', () => {
     const bounds = window.getBounds()
     persistedState = {
@@ -686,6 +688,9 @@ app.on('before-quit', (event) => {
 })
 
 function registerIpcHandlers(): void {
+  ipcMain.handle(ACTIVITY_CHANNELS.panelVisibility, (event) =>
+    getPanelVisibility(panelWindow, event.sender.id)
+  )
   ipcMain.handle(ACTIVITY_CHANNELS.board, (event, date: unknown) => {
     requireActivityPanel(event)
     if (!teamActivity) throw new Error(teamActivityFailure ?? '活动服务尚未就绪')

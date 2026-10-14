@@ -6,6 +6,7 @@ import path from 'node:path'
 import seed from '../resources/holidays/2026.json' with { type: 'json' }
 import { TeamActivityService } from '../src/main/services/team-activity.ts'
 import { MINUTE_MS } from '../src/shared/work-time.ts'
+import { ACTIVITY_SYNC_MS } from '../src/shared/activity.ts'
 
 const DATE = '2026-10-13'
 const HISTORY_DATE = '2026-10-12'
@@ -105,6 +106,127 @@ function activityDay({
   }
 }
 
+function configureAdmin(service) {
+  service.configure({
+    team: TEAM,
+    peerId: ADMIN,
+    nickname: '管理员',
+    enabled: false,
+    admin: true,
+    thresholdMinutes: 5
+  })
+}
+
+test('成员只来自观察日的日报，在线无日报不显示，离线已收日报保留', async (t) => {
+  const serviceTransport = transport([peer(MEMBER, '新昵称'), peer(OTHER, '无数据成员')])
+  const { service } = await setup(t, serviceTransport)
+  configureAdmin(service)
+  assert.deepEqual(service.getBoard(DATE).members, [])
+  await service.receive(MEMBER, { type: 'activity-day', day: activityDay() })
+  assert.deepEqual(service.getBoard(DATE).members, [])
+  assert.equal(service.getBoard(HISTORY_DATE).members[0].nickname, '新昵称')
+  await service.receive(MEMBER, {
+    type: 'activity-day',
+    day: activityDay({ date: DATE, startTime: '13:40' })
+  })
+  const online = service.getBoard(DATE).members
+  assert.equal(online.length, 1)
+  assert.equal(online[0].id, MEMBER)
+  assert.equal(online[0].online, true)
+  serviceTransport.setPeers([])
+  service.onPeersChanged()
+  const offline = service.getBoard(DATE).members
+  assert.equal(offline.length, 1)
+  assert.equal(offline[0].online, false)
+  assert.equal(offline[0].day.date, DATE)
+})
+
+test('同ID新版日报更新一行，同名不同ID保留，本机仅有当日日报才显示', async (t) => {
+  const serviceTransport = transport([peer(MEMBER, '同名成员'), peer(OTHER, '同名成员')])
+  const { service } = await setup(t, serviceTransport)
+  configureAdmin(service)
+  for (const peerId of [MEMBER, OTHER]) {
+    await service.receive(peerId, {
+      type: 'activity-day',
+      day: activityDay({ date: DATE, peerId, startTime: '13:40' })
+    })
+  }
+  await service.receive(MEMBER, {
+    type: 'activity-day',
+    day: activityDay({ date: DATE, revision: 3, startTime: '13:40' })
+  })
+  let members = service.getBoard(DATE).members
+  assert.equal(members.length, 2)
+  assert.equal(members.filter((member) => member.nickname === '同名成员').length, 2)
+  assert.equal(members.find((member) => member.id === MEMBER).day.revision, 3)
+  serviceTransport.setPeers([peer(MEMBER, '改名成员'), peer(OTHER, '同名成员')])
+  members = service.getBoard(DATE).members
+  assert.equal(members.length, 2)
+  assert.equal(members.find((member) => member.id === MEMBER).nickname, '改名成员')
+  service.store.stage(activityDay({ date: DATE, peerId: ADMIN, startTime: '13:40' }))
+  const self = service.getBoard(DATE).members.find((member) => member.isSelf)
+  assert.equal(self.id, ADMIN)
+  assert.equal(self.nickname, '管理员')
+  assert.equal(self.online, true)
+})
+
+test('没有活跃区间的有效日报仍显示，锁定和未知数据保持原有含义', async (t) => {
+  const serviceTransport = transport([peer(MEMBER, '成员')])
+  const { service } = await setup(t, serviceTransport)
+  configureAdmin(service)
+  const empty = { ...activityDay({ date: DATE, startTime: '13:40' }), intervals: [] }
+  await service.receive(MEMBER, { type: 'activity-day', day: empty })
+  let member = service.getBoard(DATE).members[0]
+  assert.equal(member.id, MEMBER)
+  assert.equal(member.summary.idleMs, 0)
+  assert.ok(member.summary.unknownMs > 0)
+  const locked = activityDay({ date: DATE, revision: 3, startTime: '13:40' })
+  locked.intervals[0].kind = 'locked'
+  await service.receive(MEMBER, { type: 'activity-day', day: locked })
+  member = service.getBoard(DATE).members[0]
+  assert.equal(member.summary.lockedMs, 10 * MINUTE_MS)
+})
+
+test('同步版本表仅读取元信息，已同步日报不再复制完整内容', async (t) => {
+  const serviceTransport = transport([peer(MEMBER, '成员')])
+  const fixture = await setup(t, serviceTransport)
+  configureAdmin(fixture.service)
+  await fixture.service.receive(MEMBER, {
+    type: 'activity-day',
+    day: activityDay({ date: DATE, revision: 3, startTime: '13:40' })
+  })
+  const reads = t.mock.method(fixture.service.store, 'get')
+  serviceTransport.sent.length = 0
+  fixture.setNow(NOW + ACTIVITY_SYNC_MS)
+  fixture.service.onPeersChanged()
+  assert.equal(reads.mock.callCount(), 0)
+  assert.equal(serviceTransport.sent[0].message.revisions[DATE], 3)
+
+  const memberTransport = transport([peer(ADMIN, '管理员')])
+  memberTransport.setAdminIds([ADMIN])
+  const memberFixture = await setup(t, memberTransport)
+  memberFixture.service.configure({
+    team: TEAM,
+    peerId: MEMBER,
+    nickname: '成员',
+    enabled: true,
+    admin: false,
+    thresholdMinutes: 5
+  })
+  const revision = memberFixture.service.store.getRevision(TEAM, MEMBER, DATE)
+  const memberReads = t.mock.method(memberFixture.service.store, 'get')
+  memberTransport.sent.length = 0
+  await memberFixture.service.receive(ADMIN, {
+    type: 'activity-request',
+    revisions: { [DATE]: revision }
+  })
+  assert.equal(memberReads.mock.callCount(), 0)
+  assert.equal(memberTransport.sent.length, 0)
+  await memberFixture.service.receive(ADMIN, { type: 'activity-request', revisions: { [DATE]: 0 } })
+  assert.equal(memberReads.mock.callCount(), 1)
+  assert.equal(memberTransport.sent[0].message.type, 'activity-day')
+})
+
 test('只向同团队 admin 响应日报请求，错误 peer、撤销角色和 opt-out 不可继续读取', async (t) => {
   const adminPeer = peer(ADMIN, '管理员')
   const memberTransport = transport([adminPeer])
@@ -144,7 +266,7 @@ test('只向同团队 admin 响应日报请求，错误 peer、撤销角色和 o
   assert.throws(() => memberFixture.service.getBoard(DATE), /管理员/)
 })
 
-test('管理员拒绝错 team、错 peer 和不支持 peer，合法日报保留历史并补齐缺日', async (t) => {
+test('管理员拒绝错 team、错 peer 和不支持 peer，合法历史日报不补出无数据的当日成员', async (t) => {
   const memberPeer = peer(MEMBER, '成员')
   const adminTransport = transport([memberPeer])
   const fixture = await setup(t, adminTransport)
@@ -188,8 +310,8 @@ test('管理员拒绝错 team、错 peer 和不支持 peer，合法日报保留�
   assert.equal(historyMember.day.date, historical.date)
   assert.equal(historyMember.day.revision, historical.revision)
   assert.deepEqual(historyMember.day.intervals, historical.intervals)
-  assert.equal(currentMember.day, undefined)
-  assert.equal(currentMember.online, true)
+  assert.equal(currentMember, undefined)
+  assert.deepEqual(currentBoard.members, [])
 })
 
 test('日报旧版本不覆盖缓存，阈值改变只重算摘要，实时数据保留可判 stale 的时间戳', async (t) => {
@@ -253,8 +375,7 @@ test('日报旧版本不覆盖缓存，阈值改变只重算摘要，实时数�
   const historicalMember = fixture.service
     .getBoard(HISTORY_DATE)
     .members.find((item) => item.id === MEMBER)
-  assert.equal(historicalMember.live.observedAt, member.live.observedAt)
-  assert.equal(historicalMember.day, undefined)
+  assert.equal(historicalMember, undefined)
 })
 
 test('日报保存等待期间撤销管理员、换组或成员关闭分享，不发送过期确认', async (t) => {

@@ -142,7 +142,7 @@ export class ActivityMonitor {
 
   private observeWork(now: number, date: string, calendarVersion: string): void {
     const config = this.config!
-    if (this.recorder?.snapshot().date !== date) {
+    if (this.recorder?.date !== date) {
       this.finishRecorder(now)
       const stored = this.options.store.get(config.team, config.peerId, date)?.day
       this.recorder = new ActivityRecorder(stored ?? this.createDay(date, now, calendarVersion))

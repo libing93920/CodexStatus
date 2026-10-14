@@ -132,12 +132,6 @@
 .activity-timeline__end {
   right: 0;
 }
-.activity .activity-timeline__inspection {
-  top: 100%;
-  left: 0;
-  right: 0;
-  transform: none;
-}
 @media (max-width: 440px) {
   .activity .activity-week .activity-week__days {
     display: grid;

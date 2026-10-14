@@ -134,56 +134,14 @@ export class TeamActivityService {
     if (!isRetainedWorkDate(date, this.now())) throw new Error('请选择近30天的有效日期')
     const config = this.config
     const calendar = this.calendar.getStatus(date)
-    const members = new Map<string, ActivityMember>()
-    members.set(config.peerId, {
-      id: config.peerId,
-      nickname: config.nickname,
-      isSelf: true,
-      online: true,
-      supported: true,
-      enabled: config.enabled
-    })
-    for (const stored of this.store
-      .list(config.team)
-      .sort((left, right) => left.day.observedAt - right.day.observedAt)) {
-      const day = stored.day
-      const member = members.get(day.peerId) ?? {
-        id: day.peerId,
-        nickname: day.nickname,
-        isSelf: false,
-        online: false,
-        supported: true
-      }
-      if (!member.isSelf) member.nickname = day.nickname
-      if (day.date === date) {
-        member.day = day
-        member.receivedAt = stored.receivedAt
-      }
-      members.set(day.peerId, member)
-    }
-    for (const peer of this.options.transport.getPeers()) {
-      const member = members.get(peer.id) ?? {
-        id: peer.id,
-        nickname: peer.nickname,
-        isSelf: false,
-        online: true,
-        supported: false
-      }
-      Object.assign(member, {
-        nickname: peer.nickname,
-        online: true,
-        supported: peer.activitySupported === true,
-        enabled: peer.activityEnabled
-      })
-      members.set(peer.id, member)
-    }
-    this.decorateMembers([...members.values()], calendar)
+    const members = this.getMembers(date)
+    this.decorateMembers(members, calendar)
     return {
       date,
       generatedAt: this.now(),
       thresholdMinutes: config.thresholdMinutes,
       calendar,
-      members: [...members.values()],
+      members,
       issues: [...this.store.issues].slice(-6)
     }
   }
@@ -220,6 +178,35 @@ export class TeamActivityService {
     return (this.options.now ?? Date.now)()
   }
 
+  private getMembers(date: string): ActivityMember[] {
+    const config = this.config!
+    const members = new Map<string, ActivityMember>()
+    for (const { day, receivedAt } of this.store.list(config.team, date)) {
+      const isSelf = day.peerId === config.peerId
+      members.set(day.peerId, {
+        id: day.peerId,
+        nickname: isSelf ? config.nickname : day.nickname,
+        isSelf,
+        online: isSelf,
+        supported: true,
+        enabled: isSelf ? config.enabled : undefined,
+        day,
+        receivedAt
+      })
+    }
+    for (const peer of this.options.transport.getPeers()) {
+      const member = members.get(peer.id)
+      if (!member) continue
+      Object.assign(member, {
+        nickname: peer.nickname,
+        online: true,
+        supported: peer.activitySupported === true,
+        enabled: peer.activityEnabled
+      })
+    }
+    return [...members.values()]
+  }
+
   private pulse(): void {
     if (!this.config?.team) return
     void this.calendar.refresh().catch((error: unknown) => this.report(error))
@@ -248,7 +235,7 @@ export class TeamActivityService {
       const revisions = Object.fromEntries(
         recentWorkDates(now).map((date) => [
           date,
-          this.store.get(this.config!.team, peer.id, date)?.day.revision ?? 0
+          this.store.getRevision(this.config!.team, peer.id, date)
         ])
       )
       if (this.options.transport.sendActivity(peer.id, { type: 'activity-request', revisions }))
@@ -267,8 +254,8 @@ export class TeamActivityService {
         !this.options.transport.getActivityAdminIds().includes(peerId)
       )
         return
-      const day = this.store.get(config.team, config.peerId, date)?.day
-      if (!day || day.revision <= revision) continue
+      if (this.store.getRevision(config.team, config.peerId, date) <= revision) continue
+      const day = this.store.get(config.team, config.peerId, date)!.day
       await this.store.save(day)
       if (!this.config?.enabled || this.config.team !== config.team) return
       this.options.transport.sendActivity(peerId, { type: 'activity-day', day })

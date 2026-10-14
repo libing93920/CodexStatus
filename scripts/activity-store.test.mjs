@@ -9,6 +9,7 @@ import { WorkCalendarService, fetchHolidayYear } from '../src/main/services/work
 import { DAY_MS, MINUTE_MS } from '../src/shared/work-time.ts'
 
 const DATE = '2026-10-13'
+const HISTORY_DATE = '2026-10-12'
 const NOW = Date.parse(`${DATE}T18:00:00+08:00`)
 const RETRY_DELAY_MS = 5 * MINUTE_MS
 const PEER = '10000000-0000-4000-8000-000000000001'
@@ -82,19 +83,46 @@ test('只清理确定的过期日报，坏文件报告不完整，跨团队隔�
   const store = new ActivityStore(root, () => now)
   await store.initialize()
   await store.save(day())
-  assert.equal(store.list('abcdef123456').length, 0)
+  assert.equal(store.list('abcdef123456', DATE).length, 0)
   const foreign = 'unrelated.json'
   await writeFile(path.join(root, foreign), 'keep')
   now += 30 * DAY_MS
   await store.prune()
-  assert.equal(store.list(TEAM).length, 0)
+  assert.equal(store.list(TEAM, DATE).length, 0)
   assert.equal(await readFile(path.join(root, foreign), 'utf8'), 'keep')
   const brokenName = `${DATE}_${TEAM}_${PEER}.json`
   await writeFile(path.join(root, brokenName), '{broken')
   const reloaded = new ActivityStore(root, () => NOW)
   await reloaded.initialize()
   assert.ok(reloaded.issues.size > 0)
-  assert.equal(reloaded.list(TEAM).length, 0)
+  assert.equal(reloaded.list(TEAM, DATE).length, 0)
+})
+
+test('单日查询只复制匹配日报，版本读取不复制，返回结果不能修改缓存', async (t) => {
+  const store = new ActivityStore(await directory(t), () => NOW)
+  store.stage(day(3))
+  store.stage({
+    ...day(),
+    date: HISTORY_DATE,
+    observedAt: START + MINUTE_MS - DAY_MS,
+    intervals: [{ start: START - DAY_MS, end: START + MINUTE_MS - DAY_MS, kind: 'locked' }]
+  })
+  store.stage({ ...day(), team: 'abcdef123456' })
+  const clone = globalThis.structuredClone
+  const copies = t.mock.method(globalThis, 'structuredClone', (value) => clone(value))
+  assert.equal(store.getRevision(TEAM, PEER, DATE), 3)
+  assert.equal(store.getRevision(TEAM, PEER, HISTORY_DATE), 1)
+  assert.equal(store.getRevision(TEAM, PEER, '2026-10-11'), 0)
+  assert.equal(copies.mock.callCount(), 0)
+  const selected = store.list(TEAM, DATE)
+  assert.equal(selected.length, 1)
+  assert.equal(copies.mock.callCount(), 1)
+  selected[0].day.nickname = '外部修改'
+  selected[0].day.intervals[0].kind = 'suspended'
+  const saved = store.get(TEAM, PEER, DATE).day
+  assert.equal(saved.nickname, '测试成员')
+  assert.equal(saved.intervals[0].kind, 'idle')
+  assert.deepEqual(store.list(TEAM, '2026-10-14'), [])
 })
 
 test('内置当年日历可离线用，缺失新年度不猜测，更新缓存重启可恢复', async (t) => {

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import { build } from 'esbuild'
 
 app.disableHardwareAcceleration()
@@ -14,6 +14,8 @@ const directory = await mkdtemp(join(process.env.PI_SCRATCH_DIR || tmpdir(), 'ac
 app.setPath('userData', directory)
 const errors = []
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+const HIDDEN_POLL_WAIT_MS = 30_100
+const RESTORED_POLL_WAIT_MS = 10_300
 let window
 const watchdog = setTimeout(() => {
   console.error('Activity UI watchdog timeout')
@@ -241,7 +243,7 @@ async function verifyPanelDetailsAndTooltip() {
   )
   assert.ok(kinds.every((kind) => /activity-pattern--(active|inactive)$/.test(kind)))
   assert.equal(
-    await evaluate("document.querySelector('.activity-timeline__inspection').hidden"),
+    await evaluate("document.querySelector('.activity-timeline [role=tooltip]') === null"),
     true
   )
   const warnings = await evaluate(
@@ -252,8 +254,12 @@ async function verifyPanelDetailsAndTooltip() {
     true
   )
   assert.equal(
-    warnings.some((text) => text.includes('活动时段口径不一致')),
+    warnings.some((text) => text.includes('日历版本不同')),
     true
+  )
+  assert.equal(
+    warnings.some((text) => text.includes('活动时段口径不一致')),
+    false
   )
   assert.deepEqual(
     await evaluate(
@@ -262,31 +268,18 @@ async function verifyPanelDetailsAndTooltip() {
     ['上午', '下午']
   )
 
-  await evaluate(
-    "(() => { const segment = document.querySelector('.activity-segment'); segment.focus(); segment.dispatchEvent(new FocusEvent('focusin', { bubbles: true })) })()"
+  await evaluate("document.querySelector('.activity-segment').focus()")
+  assert.equal(await evaluate("document.activeElement.matches('.activity-segment')"), true)
+  const details = await evaluate(
+    "Array.from(document.querySelectorAll('.activity-segment')).map(segment => ({title:segment.title,label:segment.getAttribute('aria-label')}))"
   )
-  await waitFor("!document.querySelector('.activity-timeline__inspection').hidden")
-  assert.equal(
-    await evaluate(
-      "document.querySelector('.activity-timeline__inspection').textContent.includes('08:30:00')"
-    ),
-    true
+  assert.ok(details.every((detail) => detail.title && detail.title === detail.label))
+  assert.deepEqual(
+    details.slice(0, 2).map((detail) => detail.title),
+    ['活动 · 08:30:00 - 09:00:00 · 30 分 0 秒', '未活动 · 09:00:00 - 09:30:00 · 30 分 0 秒']
   )
-  await evaluate(
-    "(() => { const segment = document.querySelector('.activity-segment'); segment.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })()"
-  )
-  await waitFor("document.querySelector('.activity-timeline__inspection').hidden")
-
-  await evaluate(
-    "(() => { const segment = document.querySelector('.activity-segment'); segment.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })) })()"
-  )
-  await waitFor("!document.querySelector('.activity-timeline__inspection').hidden")
-  await evaluate(
-    "(() => { const segment = document.querySelector('.activity-segment'); segment.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })) })()"
-  )
-  await waitFor("document.querySelector('.activity-timeline__inspection').hidden")
   console.log(
-    'PASS members: collapsed by default, unique regions, two activity states, keyboard/hover details'
+    'PASS members: collapsed by default, unique regions, two activity states, native tooltip text and keyboard labels'
   )
 }
 
@@ -471,6 +464,71 @@ async function verifyCrossYearMapping() {
     true
   )
   console.log('PASS cross-year mapping: January 1 week starts on Monday December 29')
+}
+
+async function verifyVisibilityPolling() {
+  await evaluate("activityFixture.setNow('2026-10-13T14:30:00+08:00')")
+  await evaluate("activityFixture.setSettings({ locale: 'zh-CN' })")
+  await mount('visibility-polling')
+  await waitFor("document.querySelector('.activity-member__toggle')")
+  await clickWeekday('周一')
+  await waitFor(
+    "document.querySelector('.activity-week__day[aria-pressed=true]')?.textContent.trim() === '周一'"
+  )
+  await clickSelector('.activity-member__toggle')
+  await waitFor("document.querySelector('.activity-member__toggle[aria-expanded=true]')")
+  await evaluate(`(() => {
+    activityFixture.visibilityChanges = []
+    window.codexStatus.onPanelVisibilityChanged(visible => {
+      activityFixture.visibilityChanges.push(visible ? 'visible' : 'hidden')
+    })
+  })()`)
+
+  await verifyHiddenBoardCalls()
+  assert.equal(
+    await evaluate(
+      "document.querySelector('.activity-week__day[aria-pressed=true]')?.textContent.trim()"
+    ),
+    '周一',
+    'show preserves selected date'
+  )
+  assert.equal(
+    await evaluate(
+      "document.querySelector('.activity-member__toggle')?.getAttribute('aria-expanded')"
+    ),
+    'true',
+    'show preserves expanded member details'
+  )
+  assert.equal(await evaluate('activityFixture.requestedDates.at(-1)'), '2026-10-12')
+  const shownCalls = await evaluate('activityFixture.boardCalls')
+  await delay(RESTORED_POLL_WAIT_MS)
+  assert.equal(
+    await evaluate('activityFixture.boardCalls'),
+    shownCalls + 1,
+    'show restores one 10-second poll'
+  )
+  console.log(
+    'PASS native Electron visibility IPC: hidden for 30 seconds makes no board calls; show refreshes immediately, restores one poll, and preserves selection/details'
+  )
+}
+
+async function verifyHiddenBoardCalls() {
+  window.webContents.setBackgroundThrottling(false)
+  window.showInactive()
+  await waitFor('document.visibilityState === "visible"')
+  window.hide()
+  window.webContents.setBackgroundThrottling(true)
+  await waitFor('activityFixture.visibilityChanges.at(-1) === "hidden"')
+  assert.equal(window.isVisible(), false)
+  const hiddenCalls = await evaluate('activityFixture.boardCalls')
+  await delay(HIDDEN_POLL_WAIT_MS)
+  assert.equal(await evaluate('activityFixture.boardCalls'), hiddenCalls, 'hidden for 30 seconds')
+  window.webContents.setBackgroundThrottling(false)
+  window.showInactive()
+  await waitFor(
+    'activityFixture.visibilityChanges.at(-1) === "visible" && activityFixture.boardCalls > ' +
+      hiddenCalls
+  )
 }
 
 async function verifyThemeConsistency(themes) {
@@ -665,6 +723,37 @@ async function checkThemeAtSize(theme, locale, width, measurements) {
 
 async function run() {
   console.log('STEP build isolated fixture')
+  const visibilityBundle = await build({
+    stdin: {
+      contents:
+        "export { getPanelVisibility, subscribePanelVisibility } from './src/main/services/panel-visibility.ts'; export { ACTIVITY_CHANNELS } from './src/shared/activity.ts'",
+      resolveDir: root,
+      loader: 'ts'
+    },
+    bundle: true,
+    write: false,
+    platform: 'node',
+    format: 'esm'
+  })
+  const { getPanelVisibility, subscribePanelVisibility, ACTIVITY_CHANNELS } = await import(
+    `data:text/javascript;base64,${Buffer.from(visibilityBundle.outputFiles[0].text).toString('base64')}`
+  )
+  const visibilityPreload = join(directory, 'visibility-preload.cjs')
+  await writeFile(
+    visibilityPreload,
+    `
+    const { contextBridge, ipcRenderer } = require('electron')
+    contextBridge.exposeInMainWorld('activityVisibility', {
+      getPanelVisibility: () => ipcRenderer.invoke(${JSON.stringify(ACTIVITY_CHANNELS.panelVisibility)}),
+      onPanelVisibilityChanged: listener => {
+        const channel = ${JSON.stringify(ACTIVITY_CHANNELS.panelVisibilityChanged)}
+        const handle = (_event, visible) => listener(visible)
+        ipcRenderer.on(channel, handle)
+        return () => ipcRenderer.removeListener(channel, handle)
+      }
+    })
+  `
+  )
   const styles =
     (await cssTree(join(root, 'src/renderer/src/assets/main.css'))) +
     (await cssTree(join(root, 'src/renderer/src/assets/themes.css')))
@@ -688,16 +777,23 @@ async function run() {
     width: 480,
     height: 1000,
     webPreferences: {
+      preload: visibilityPreload,
       contextIsolation: true,
       nodeIntegration: false,
       backgroundThrottling: false,
       offscreen: true
     }
   })
+  subscribePanelVisibility(window)
+  ipcMain.handle(ACTIVITY_CHANNELS.panelVisibility, (event) =>
+    getPanelVisibility(window, event.sender.id)
+  )
   window.webContents.on('console-message', (event) => {
     if (event.level === 'error' || event.level === 'warning') errors.push(event.message)
   })
   await window.loadURL(pathToFileURL(htmlFile).href)
+  window.setOpacity(0)
+  window.showInactive()
   await mount('app')
   await waitFor(
     "Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === '管理')"
@@ -718,6 +814,7 @@ async function run() {
   const themes = await evaluate('activityFixture.themes')
   assert.equal(themes.length, 10)
   await verifyThemeConsistency(themes)
+  await verifyVisibilityPolling()
   assert.deepEqual(errors, [])
   console.log('Activity UI checks passed. Isolated fixture: ' + htmlFile)
 }

@@ -76,6 +76,10 @@ const api: CodexStatusApi = {
     ipcRenderer.invoke(CHANNELS.updateSettings, patch) as Promise<PreferencesPayload>,
   getActivityBoard: (date: string) =>
     ipcRenderer.invoke(ACTIVITY_CHANNELS.board, date) as Promise<ActivityBoard>,
+  getPanelVisibility: () =>
+    ipcRenderer.invoke(ACTIVITY_CHANNELS.panelVisibility) as Promise<boolean>,
+  onPanelVisibilityChanged: (listener) =>
+    subscribe(ACTIVITY_CHANNELS.panelVisibilityChanged, listener),
   refreshWorkCalendar: () =>
     ipcRenderer.invoke(ACTIVITY_CHANNELS.calendarRefresh) as Promise<WorkCalendarStatus>,
   closePanel: () => ipcRenderer.invoke(CHANNELS.closePanel) as Promise<void>,

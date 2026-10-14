@@ -1,4 +1,3 @@
-import { useId, useState } from 'react'
 import type { ActivityInterval } from '../../../shared/activity'
 import type { WorkWindow } from '../../../shared/work-time'
 import type { ActivityCopy } from './copy'
@@ -25,16 +24,12 @@ function WindowBand({
   window,
   maxDuration,
   timeline,
-  copy,
-  onInspect,
-  tooltipId
+  copy
 }: {
   window: WorkWindow
   maxDuration: number
   timeline: ActivityDisplayInterval[]
   copy: ActivityCopy
-  onInspect: (text?: string) => void
-  tooltipId: string
 }): React.JSX.Element {
   const duration = window.end - window.start
   const intervals = timeline
@@ -62,12 +57,8 @@ function WindowBand({
               left: `${((interval.start - window.start) / duration) * 100}%`,
               width: `${((interval.end - interval.start) / duration) * 100}%`
             }}
+            title={intervalText(interval, copy)}
             aria-label={intervalText(interval, copy)}
-            aria-describedby={tooltipId}
-            onMouseEnter={() => onInspect(intervalText(interval, copy))}
-            onMouseLeave={() => onInspect()}
-            onFocus={() => onInspect(intervalText(interval, copy))}
-            onBlur={() => onInspect()}
           />
         ))}
       </div>
@@ -80,8 +71,6 @@ function WindowBand({
 }
 
 export function ActivityTimeline({ timeline, windows, copy }: TimelineProps): React.JSX.Element {
-  const [inspected, setInspected] = useState<string>()
-  const tooltipId = useId()
   const maxDuration = Math.max(...windows.map((window) => window.end - window.start))
   const displayIntervals = activityDisplayIntervals(timeline)
   return (
@@ -96,19 +85,9 @@ export function ActivityTimeline({ timeline, windows, copy }: TimelineProps): Re
             maxDuration={maxDuration}
             timeline={displayIntervals}
             copy={copy}
-            onInspect={setInspected}
-            tooltipId={tooltipId}
           />
         </div>
       ))}
-      <p
-        id={tooltipId}
-        className="usage-tooltip activity-timeline__inspection"
-        role="tooltip"
-        hidden={!inspected}
-      >
-        <span className="usage-tooltip__date">{inspected}</span>
-      </p>
     </section>
   )
 }

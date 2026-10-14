@@ -70,11 +70,14 @@ export class ActivityStore {
     return stored ? structuredClone(stored) : undefined
   }
 
-  list(team: string): StoredActivityDay[] {
+  getRevision(team: string, peerId: string, date: string): number {
+    return this.records.get(dayKey({ team, peerId, date }))?.day.revision ?? 0
+  }
+
+  list(team: string, date: string): StoredActivityDay[] {
+    if (!isRetainedWorkDate(date, this.now())) return []
     return [...this.records.values()]
-      .filter(
-        (record) => record.day.team === team && isRetainedWorkDate(record.day.date, this.now())
-      )
+      .filter((record) => record.day.team === team && record.day.date === date)
       .map((record) => structuredClone(record))
   }
 

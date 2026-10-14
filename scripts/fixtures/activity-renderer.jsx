@@ -154,6 +154,9 @@ window.codexStatus = {
   },
   onIslandUpdated: unsubscribe,
   onCommand: unsubscribe,
+  getPanelVisibility: () => window.activityVisibility.getPanelVisibility(),
+  onPanelVisibilityChanged: (listener) =>
+    window.activityVisibility.onPanelVisibilityChanged(listener),
   onUpdateProgress: unsubscribe,
   onBroadcastMessage: unsubscribe,
   onAnnouncementUpdated: unsubscribe,

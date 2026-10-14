@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 import ts from 'typescript'
 import { parseTeamIdentity } from '../src/shared/team-role.ts'
+import { getPanelVisibility } from '../src/main/services/panel-visibility.ts'
 import {
   ACTIVITY_CHANNELS,
   DEFAULT_IDLE_THRESHOLD_MINUTES,
@@ -34,6 +35,7 @@ const registration = functionNode('registerIpcHandlers')
 const keys = new Set([
   'ACTIVITY_CHANNELS.board',
   'ACTIVITY_CHANNELS.calendarRefresh',
+  'ACTIVITY_CHANNELS.panelVisibility',
   'CHANNELS.updateSettings'
 ])
 const handlers = registration.body.statements.filter(
@@ -42,7 +44,7 @@ const handlers = registration.body.statements.filter(
     ts.isCallExpression(node.expression) &&
     keys.has(node.expression.arguments[0]?.getText(file))
 )
-assert.equal(handlers.length, 3)
+assert.equal(handlers.length, 4)
 const code = ts.transpileModule(
   `${functionNode('requireActivityPanel').getText(file)}\n${functionNode('queueSettingsUpdate').getText(file)}\n${handlers.map((node) => node.getText(file)).join('\n')}`,
   { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }
@@ -56,11 +58,12 @@ function fixture(group = '9527GM') {
     savePersistedState: async () => {},
     parseTeamIdentity,
     ACTIVITY_CHANNELS,
+    getPanelVisibility,
     MIN_IDLE_THRESHOLD_MINUTES,
     MAX_IDLE_THRESHOLD_MINUTES,
     CHANNELS: { updateSettings: 'update-settings' },
     ipcMain: { handle: (channel, callback) => callbacks.set(channel, callback) },
-    panelWindow: { isDestroyed: () => false, webContents: { id: 12 } },
+    panelWindow: { isDestroyed: () => false, isVisible: () => true, webContents: { id: 12 } },
     persistedState: {
       settings: {
         teamGroup: group,
@@ -86,6 +89,20 @@ function fixture(group = '9527GM') {
   vm.runInNewContext(code, context)
   return { context, callbacks, event: { sender: { id: 12, mainFrame: frame }, senderFrame: frame } }
 }
+
+test('可见性IPC只返回调用方自身面板的原生状态，隐藏或销毁时为false', () => {
+  const { callbacks, event, context } = fixture()
+  const visible = callbacks.get(ACTIVITY_CHANNELS.panelVisibility)
+  assert.equal(visible(event), true)
+  assert.equal(visible({ sender: { id: 13 } }), false)
+  context.panelWindow.isVisible = () => false
+  assert.equal(visible(event), false)
+  context.panelWindow.isVisible = () => true
+  context.panelWindow.isDestroyed = () => true
+  assert.equal(visible(event), false)
+  context.panelWindow = null
+  assert.equal(visible(event), false)
+})
 
 test('活动IPC按实际面板和主frame核验，不允许胶囊或iframe', async () => {
   const { callbacks, event, context } = fixture()

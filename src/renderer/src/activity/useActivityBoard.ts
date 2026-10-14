@@ -30,29 +30,70 @@ export function useActivityBoard(selectedDate?: string): {
   useEffect(() => {
     let active = true
     let inFlight = false
+    let visible = false
+    let visibilityChanged = false
+    let latestRequest = 0
+    let timer: number | undefined
     async function readBoard(): Promise<void> {
-      if (inFlight) return
+      if (!active || !visible || inFlight) return
       inFlight = true
+      const requestId = ++latestRequest
       try {
         const board = await window.codexStatus.getActivityBoard(date)
-        if (active && board.date === date) setResult({ date, board, readAt: Date.now() })
+        if (active && requestId === latestRequest && visible && board.date === date)
+          setResult({ date, board, readAt: Date.now() })
       } catch (error) {
-        if (active)
-          setResult((previous) => ({
-            date,
-            readAt: Date.now(),
-            board: previous?.date === date ? previous.board : undefined,
-            error: error instanceof Error ? error.message : String(error)
-          }))
+        if (active && requestId === latestRequest && visible) reportError(error)
       } finally {
-        inFlight = false
+        if (requestId === latestRequest) inFlight = false
       }
     }
-    void readBoard()
-    const timer = window.setInterval(() => void readBoard(), ACTIVITY_BOARD_POLL_MS)
+    function reportError(error: unknown): void {
+      setResult((previous) => ({
+        date,
+        readAt: Date.now(),
+        board: previous?.date === date ? previous.board : undefined,
+        error: error instanceof Error ? error.message : String(error)
+      }))
+    }
+    function stopPolling(): void {
+      if (timer === undefined) return
+      window.clearInterval(timer)
+      timer = undefined
+    }
+    function startPolling(): void {
+      if (!active || timer !== undefined || !visible) return
+      timer = window.setInterval(() => void readBoard(), ACTIVITY_BOARD_POLL_MS)
+    }
+    function setVisibility(value: boolean): void {
+      if (!active || visible === value) return
+      visible = value
+      if (!visible) {
+        stopPolling()
+        latestRequest++
+        inFlight = false
+        return
+      }
+      void readBoard()
+      startPolling()
+    }
+    const unsubscribeVisibility = window.codexStatus.onPanelVisibilityChanged((value) => {
+      visibilityChanged = true
+      setVisibility(value)
+    })
+    void window.codexStatus
+      .getPanelVisibility()
+      .then((value) => {
+        if (!visibilityChanged) setVisibility(value)
+      })
+      .catch((error: unknown) => {
+        if (active && !visibilityChanged) reportError(error)
+      })
     return () => {
       active = false
-      window.clearInterval(timer)
+      unsubscribeVisibility()
+      stopPolling()
+      latestRequest++
     }
   }, [date, request])
   const current = result?.date === date ? result : undefined

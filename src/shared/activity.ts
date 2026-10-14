@@ -21,7 +21,9 @@ export const MIN_IDLE_THRESHOLD_MINUTES = 1
 export const MAX_IDLE_THRESHOLD_MINUTES = 60
 export const ACTIVITY_CHANNELS = {
   board: 'codex-status:activity-board',
-  calendarRefresh: 'codex-status:activity-calendar-refresh'
+  calendarRefresh: 'codex-status:activity-calendar-refresh',
+  panelVisibility: 'codex-status:panel-visibility',
+  panelVisibilityChanged: 'codex-status:panel-visibility-changed'
 } as const
 
 export type ActivityKind = 'active' | 'idle' | 'locked' | 'suspended' | 'unknown'

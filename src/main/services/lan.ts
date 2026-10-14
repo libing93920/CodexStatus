@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import { isIPv4, isIPv6, type AddressInfo } from 'node:net'
+import { isDeepStrictEqual } from 'node:util'
 import { WebSocketServer, WebSocket } from 'ws'
 import { LanDiscovery, type LanAdvertisement } from './lan-discovery.ts'
 import { formatDiagError, logDiag } from './diag-log.ts'
 import { ActivityConnectionAuth, type ActivityAuthHello } from './lan-activity-auth.ts'
+import { validatePeerSnapshot } from './lan-peer-snapshot.ts'
 import type {
   AgentId,
   AuthMode,
@@ -314,15 +316,16 @@ export class LanService {
     return true
   }
 
-  private applyActivityCapabilities(message: HelloMessage, verified: boolean): void {
-    this.activityCapabilities.set(message.peerId, {
-      role: message.role === 'admin' ? 'admin' : 'member',
-      version:
-        verified && message.activityVersion === ACTIVITY_PROTOCOL_VERSION
-          ? ACTIVITY_PROTOCOL_VERSION
-          : 0,
-      enabled: message.activityEnabled === true
-    })
+  private applyActivityCapabilities(message: HelloMessage, verified: boolean): boolean {
+    const previous = this.activityCapabilities.get(message.peerId)
+    const role: TeamRole = message.role === 'admin' ? 'admin' : 'member'
+    const version =
+      verified && message.activityVersion === ACTIVITY_PROTOCOL_VERSION
+        ? ACTIVITY_PROTOCOL_VERSION
+        : 0
+    const enabled = message.activityEnabled === true
+    this.activityCapabilities.set(message.peerId, { role, version, enabled })
+    return previous?.role !== role || previous.version !== version || previous.enabled !== enabled
   }
 
   private receiveActivity(peerId: string, message: ActivityMessage, socket: WebSocket): void {
@@ -581,7 +584,7 @@ export class LanService {
     if (this.boundSockets.get(socket) !== peerId) return
     this.connections.set(peerId, socket)
     if (message.type === 'snapshot') {
-      this.applyPeerSnapshot(peerId, undefined, message.snapshot)
+      this.applyPeerSnapshot(peerId, undefined, message.snapshot, false)
     } else if (message.type === 'message') {
       this.options?.onMessage(message)
     } else if (message.type === 'reaction') {
@@ -593,6 +596,7 @@ export class LanService {
 
   private handlePeerHello(socket: WebSocket, peerId: string, message: HelloMessage): void {
     const options = this.options
+    const wasVerified = this.activityAuth.isVerified(this.connections.get(peerId), peerId)
     if (
       !options ||
       !this.groupHash ||
@@ -629,8 +633,14 @@ export class LanService {
     this.clearSocketTimers(socket)
     this.clearReconnectTimer(peerId)
     this.connectionFailures.delete(peerId)
-    this.applyActivityCapabilities(message, this.activityAuth.isVerified(socket, peerId))
-    this.applyPeerSnapshot(message.peerId, message.nickname, message.snapshot)
+    const verified = this.activityAuth.isVerified(socket, peerId)
+    const capabilityChanged = this.applyActivityCapabilities(message, verified)
+    this.applyPeerSnapshot(
+      message.peerId,
+      message.nickname,
+      message.snapshot,
+      !alreadyBound || capabilityChanged || wasVerified !== verified
+    )
     if (!alreadyBound) this.sendHello(socket, true)
     if (!alreadyBound)
       logDiag(`lan peer connected target=${socket.url || INCOMING_TARGET} peers=${this.peers.size}`)
@@ -639,12 +649,14 @@ export class LanService {
   private applyPeerSnapshot(
     peerId: string,
     nickname: string | undefined,
-    snapshot?: PeerSnapshot
+    snapshot: PeerSnapshot | undefined,
+    forceNotify: boolean
   ): void {
     const existing = this.peers.get(peerId)
     // 昵称缺省时留空串,前端按 locale 显示本地化占位名;绝不用 'peer' 之类的字面量兜底,
     // 那会冒充真名出现在排行榜里,无法与成员实际设置的昵称区分
-    const resolvedNickname = snapshot?.nickname ?? nickname ?? existing?.nickname ?? ''
+    const resolvedNickname =
+      snapshot?.nickname ?? nickname ?? (snapshot ? '' : (existing?.nickname ?? ''))
     const entry: PeerEntry = {
       id: peerId,
       nickname: resolvedNickname,
@@ -663,7 +675,12 @@ export class LanService {
       updatedAt: new Date().toISOString()
     }
     this.peers.set(peerId, entry)
-    this.emitPeersChange()
+    // 接收时间持续更新；相同业务数据不重复推表，连接与权限变化仍立即通知。
+    if (
+      forceNotify ||
+      !isDeepStrictEqual({ ...existing, updatedAt: undefined }, { ...entry, updatedAt: undefined })
+    )
+      this.emitPeersChange()
   }
 
   private handleSocketClose(peerId: string): void {
@@ -788,7 +805,16 @@ function formatWsHost(host: string): string {
 function parseMessage(raw: string): PeerMessage | undefined {
   if (Buffer.byteLength(raw) > ACTIVITY_MAX_MESSAGE_BYTES) return undefined
   try {
-    return JSON.parse(raw) as PeerMessage
+    const message = JSON.parse(raw) as PeerMessage
+    if (!message || typeof message !== 'object' || Array.isArray(message)) return undefined
+    if (
+      (message.type === 'hello' || message.type === 'snapshot') &&
+      message.snapshot !== undefined &&
+      !validatePeerSnapshot(message.snapshot)
+    )
+      return undefined
+    if (message.type === 'hello' && typeof message.nickname !== 'string') return undefined
+    return message
   } catch {
     return undefined
   }

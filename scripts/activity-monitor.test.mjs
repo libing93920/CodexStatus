@@ -5,6 +5,7 @@ import seed from '../resources/holidays/2026.json' with { type: 'json' }
 import { ActivityMonitor } from '../src/main/services/activity-monitor.ts'
 import { ActivityStore } from '../src/main/services/activity-store.ts'
 import { WorkCalendarService } from '../src/main/services/work-calendar.ts'
+import { ActivityRecorder } from '../src/shared/activity-recorder.ts'
 import { MINUTE_MS, seasonalWorkWindows } from '../src/shared/work-time.ts'
 
 const DATE = '2026-10-13'
@@ -91,6 +92,25 @@ test('监控默认关闭且首次启动不按系统 idle 值回填', async (t) =
   const observed = fixture.store.get(TEAM, PEER, DATE).day
   assert.deepEqual(observed.intervals, [{ start: START, end: START + 5_000, kind: 'idle' }])
   assert.equal(observed.firstInputAt, undefined)
+})
+
+test('同日采样按 recorder 日期元信息判断，不额外深拷贝日报', async (t) => {
+  const fixture = await setup(t)
+  fixture.monitor.configure(config())
+  const originalSnapshot = ActivityRecorder.prototype.snapshot
+  let snapshotCalls = 0
+  ActivityRecorder.prototype.snapshot = function () {
+    snapshotCalls++
+    return originalSnapshot.call(this)
+  }
+
+  try {
+    fixture.setTime(START + 5_000, 5_000)
+    fixture.monitor.tick()
+    assert.equal(snapshotCalls, 1)
+  } finally {
+    ActivityRecorder.prototype.snapshot = originalSnapshot
+  }
 })
 
 test('按约 5 秒观察，超过采样缺口的区间标记 unknown', async (t) => {

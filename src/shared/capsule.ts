@@ -367,6 +367,8 @@ export interface CodexStatusApi {
   updateSettings: (patch: Partial<AppSettings>) => Promise<PreferencesPayload>
   getActivityBoard: (date: string) => Promise<ActivityBoard>
   refreshWorkCalendar: () => Promise<WorkCalendarStatus>
+  getPanelVisibility: () => Promise<boolean>
+  onPanelVisibilityChanged: (listener: (visible: boolean) => void) => () => void
   closePanel: () => Promise<void>
   moveCapsuleWindow: (payload: CapsuleDragMovePayload) => Promise<WindowPreferences>
   finishCapsuleWindowDrag: () => Promise<WindowPreferences>

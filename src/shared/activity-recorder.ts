@@ -29,6 +29,10 @@ export class ActivityRecorder {
     this.day = structuredClone(day)
   }
 
+  get date(): string {
+    return this.day.date
+  }
+
   observe(sample: ActivitySample, windows: WorkWindow[]): ActivityDay {
     const window = windows.find((item) => sample.now >= item.start && sample.now < item.end)
     if (!window) return this.finish(sample.now)
