@@ -577,7 +577,16 @@ function App(): React.JSX.Element {
     if (width > 0 && height > 0) {
       void window.codexStatus.setCapsuleSize({ width, height })
     }
-  }, [isApiMode, windowRole, apiTokenText, apiHitText, capsuleViewMode, minimalStage])
+  }, [
+    isApiMode,
+    windowRole,
+    apiTokenText,
+    apiHitText,
+    capsuleViewMode,
+    minimalStage,
+    settings.theme,
+    settings.locale
+  ])
   // 团队额度排行榜:主键 7d(长窗口)剩余降序,7d 相同则次键 5h(短窗口)剩余降序;缺窗口视为最低排末尾。API Key 无订阅额度(恒 0),不参与额度排行
   const teamPeers = [...(snapshot.teamPeers ?? [])]
     .filter((peer) => peer.authMode !== 'api')

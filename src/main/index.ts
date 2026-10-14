@@ -195,6 +195,9 @@ let panelFocusUpdate = false
 let panelFocusTarget: PanelFocusTarget | undefined
 let currentAnnouncement: AnnouncementState | null = null
 let capsuleMinimalRuntime: { width: number; height: number } | null = null
+const capsuleApiContentSizes: Partial<
+  Record<WindowPreferences['viewMode'], { width: number; height: number }>
+> = {}
 let windowKeeper: WindowKeeper | undefined
 let codexActivity: CodexActivityService | undefined
 let fullscreenMonitor: WindowsFullscreenMonitor | undefined
@@ -942,10 +945,13 @@ function registerIpcHandlers(): void {
       if (!mainWindow || !Number.isFinite(size?.width) || !Number.isFinite(size?.height)) {
         return
       }
-      mainWindow.setSize(
-        Math.round(clamp(size.width, 40, 480)),
-        Math.round(clamp(size.height, 28, 320))
-      )
+      const contentSize = {
+        width: Math.round(clamp(size.width, 40, 480)),
+        height: Math.round(clamp(size.height, 28, 320))
+      }
+      // 拖动、吸附和快照刷新必须沿用内容尺寸，避免重新套用订阅模式的固定窗口。
+      capsuleApiContentSizes[persistedState.window.viewMode] = contentSize
+      mainWindow.setSize(contentSize.width, contentSize.height)
     }
   )
 
@@ -2231,7 +2237,11 @@ function resolveCapsuleWindowSize(viewMode: 'capsule' | 'orb'): {
   width: number
   height: number
 } {
-  // 胶囊只展示单个窗口(5h 优先,无 5h 取 7d 兜底),尺寸不随 rateLimits 数量变化,
+  const contentSize = capsuleApiContentSizes[viewMode]
+  if (currentSnapshot.authMode === 'api' && contentSize) {
+    return contentSize
+  }
+  // 订阅模式只展示单个窗口(5h 优先,无 5h 取 7d 兜底),尺寸不随 rateLimits 数量变化,
   // 避免 5h 回来后窗口从 160 撑到 250 而内容不变产生大片空白
   return viewMode === 'orb'
     ? { width: ORB_WINDOW_SIZE.width, height: SINGLE_ORB_WINDOW_HEIGHT }
