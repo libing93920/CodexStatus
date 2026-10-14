@@ -29,6 +29,7 @@ docs/superpowers/
 /local-docs/
 # 本地规划和临时运行数据
 /.planning/
+/.pi/
 /.tmp-capture-userdata/
 /skills-lock.json
 
