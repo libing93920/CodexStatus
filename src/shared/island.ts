@@ -173,6 +173,7 @@ export class IslandState {
       task.requests = task.requests.filter((request) => request.id !== event.requestId)
     } else if (event.kind === 'turn-finished') {
       task.phase = event.outcome
+      task.requests = []
     } else {
       task.phase = 'running'
     }

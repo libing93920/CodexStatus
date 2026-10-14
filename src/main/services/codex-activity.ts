@@ -14,6 +14,7 @@ import { formatDiagError, logDiag, recordPerf } from './diag-log.ts'
 // 只在服务层合并执行态更新，避免服务和窗口广播两层等待叠加。
 const EMIT_DEBOUNCE_MS = 100
 const HOOK_SOURCE_RETRY_MS = 1_000
+const DESKTOP_REQUEST_HOOK_EVENTS = new Set(['PreToolUse', 'PermissionRequest'])
 
 export interface CodexActivityOptions {
   executable?: string
@@ -33,6 +34,7 @@ export class CodexActivityService {
   private ipcTaskKeys = new Set<string>()
   private readonly hookTaskKeys = new Set<string>()
   private readonly hookTurnIds = new Map<string, string>()
+  private readonly hookIpcTurnIds = new Map<string, string>()
   private readonly threadSources = new Map<string, IslandTaskSource>()
   private readonly hookSourceCache = new Map<string, IslandTaskIdentity>()
   private readonly hookSourceRetryAt = new Map<string, number>()
@@ -61,6 +63,7 @@ export class CodexActivityService {
     this.emitNow()
     const threadIds: string[] = []
     this.threadSources.clear()
+    this.hookIpcTurnIds.clear()
     this.revokedThreadKeys.clear()
     this.hookSourceCache.clear()
     this.hookSourceRetryAt.clear()
@@ -113,6 +116,7 @@ export class CodexActivityService {
     this.hookSourceRetryAt.clear()
     this.hookTaskKeys.clear()
     this.hookTurnIds.clear()
+    this.hookIpcTurnIds.clear()
     this.finishedHookTurnIds.clear()
     this.finishedThreadIds.clear()
     await this.ingress.stop()
@@ -187,6 +191,10 @@ export class CodexActivityService {
     // 重新准入意味着撤销不再完成：订阅会重建，必须清掉旧标记，否则后续拒绝会短路。
     this.revokedThreadKeys.delete(createTaskKey('local', payload.session_id))
     if (source === 'vscode') this.ipc?.followThread(payload.session_id)
+    // 自动审批也会触发工具 Hook，Desktop 的待处理请求统一由 IPC 状态流确认。
+    if (source === 'vscode' && DESKTOP_REQUEST_HOOK_EVENTS.has(payload.hook_event_name)) {
+      return this.emit()
+    }
     const normalizedPayload = this.resolveHookTurn(
       source ? { ...payload, source } : payload,
       receivedAt
@@ -199,7 +207,14 @@ export class CodexActivityService {
     this.hookTurnIds.set(payload.session_id, event.turnId)
     this.hookTaskKeys.add(key)
     this.ipcTaskKeys.delete(key)
-    if (event.kind === 'turn-started') this.finishedThreadIds.delete(event.threadId)
+    if (event.kind === 'turn-started') {
+      const previousIpcTurnId = this.hookIpcTurnIds.get(key)
+      if (previousIpcTurnId) {
+        this.finishedHookTurnIds.add(createTaskKey(event.threadId, previousIpcTurnId))
+      }
+      this.hookIpcTurnIds.delete(key)
+      this.finishedThreadIds.delete(event.threadId)
+    }
     if (event.kind === 'turn-finished') {
       this.finishedHookTurnIds.add(createTaskKey(payload.session_id, event.turnId))
       this.finishedThreadIds.add(event.threadId)
@@ -276,6 +291,7 @@ export class CodexActivityService {
     this.hookTaskKeys.delete(key)
     this.ipcTaskKeys.delete(key)
     this.hookTurnIds.delete(threadId)
+    this.hookIpcTurnIds.delete(key)
     this.finishedThreadIds.delete(threadId)
     for (const turnKey of this.finishedHookTurnIds) {
       if (turnKey.startsWith(`${threadId}\u0000`)) this.finishedHookTurnIds.delete(turnKey)
@@ -360,24 +376,32 @@ export class CodexActivityService {
     )
     for (const current of this.state.getSnapshot().tasks) {
       const key = createTaskKey(current.hostId, current.threadId)
-      if (!this.hookTaskKeys.has(key)) continue
-      const ipcTask = ipcTasks.get(key)
-      const requests = [
-        ...current.requests.filter((request) => request.kind === 'approval'),
-        ...(ipcTask?.requests.filter((request) => request.kind === 'input') ?? [])
-      ]
-      if (!ipcTask) {
-        this.state.upsertAuthoritative({ ...current, requests })
+      if (
+        !this.hookTaskKeys.has(key) ||
+        current.source !== 'vscode' ||
+        current.phase !== 'running'
+      ) {
         continue
       }
-      const failed = current.phase === 'running' && ipcTask.phase === 'failed'
+      const ipcTask = ipcTasks.get(key)
+      if (
+        !ipcTask ||
+        this.finishedHookTurnIds.has(createTaskKey(current.threadId, ipcTask.turnId)) ||
+        !isCurrentHookTurn(current, ipcTask)
+      ) {
+        continue
+      }
+      if (ipcTask.turnId !== `thread:${current.threadId}`) {
+        this.hookIpcTurnIds.set(key, ipcTask.turnId)
+      }
+      const failed = ipcTask.phase === 'failed'
       this.state.upsertAuthoritative({
         ...current,
         title: ipcTask.title,
         project: ipcTask.project,
         phase: failed ? 'failed' : current.phase,
         updatedAt: failed ? ipcTask.updatedAt : current.updatedAt,
-        requests,
+        requests: ipcTask.phase === 'running' ? ipcTask.requests : [],
         latestEventId: failed ? ipcTask.latestEventId : current.latestEventId
       })
       if (failed) this.finishedThreadIds.add(current.threadId)
@@ -441,6 +465,15 @@ export class CodexActivityService {
 
 function createTaskKey(hostId: string, threadId: string): string {
   return `${hostId}\u0000${threadId}`
+}
+
+function isCurrentHookTurn(current: IslandTask, ipcTask: IslandTask): boolean {
+  // 工具 Hook 可能晚于 IPC 到达；缺少共享 ID 时依靠已观测回合的结束记录排除旧状态。
+  return (
+    current.turnId === ipcTask.turnId ||
+    current.turnId === `hook:${current.threadId}:${current.startedAt}` ||
+    ipcTask.turnId === `thread:${current.threadId}`
+  )
 }
 
 function criticalSignature(snapshot: IslandSnapshot): string {

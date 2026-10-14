@@ -70,9 +70,10 @@ function createService() {
   return { service, snapshots, hook }
 }
 
-test('默认窗口合并执行态，审批及解除立即送达', (context) => {
+test('CLI 默认窗口合并执行态，Hook 审批及解除立即送达', (context) => {
   context.mock.timers.enable({ apis: ['setTimeout'] })
-  const { hook, snapshots } = createService()
+  const { service, hook, snapshots } = createService()
+  service.threadSources.set('local\u0000thread', 'cli')
   hook('UserPromptSubmit')
   hook('PreToolUse', { tool_use_id: 'previous-tool' })
   assert.equal(snapshots.length, 0)
@@ -85,6 +86,30 @@ test('默认窗口合并执行态，审批及解除立即送达', (context) => {
   const count = snapshots.length
   context.mock.timers.tick(1000)
   assert.equal(snapshots.length, count)
+})
+
+test('Desktop 默认窗口合并执行态，IPC 审批及解除立即送达', (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  const { service, hook, snapshots } = createService()
+  hook('UserPromptSubmit')
+  context.mock.timers.tick(100)
+  const running = {
+    ...service.getSnapshot().tasks[0],
+    requests: [],
+    latestEventId: 'ipc:running'
+  }
+  service.updateIpcTasks([
+    { ...running, requests: [{ id: 'approval', kind: 'approval', createdAt: 1000 }] }
+  ])
+  assert.equal(snapshots.length, 2)
+  assert.equal(getDisplayStatus(snapshots.at(-1).tasks[0]), 'waiting-approval')
+  hook('PreToolUse', { tool_use_id: 'approval' })
+  assert.equal(getDisplayStatus(snapshots.at(-1).tasks[0]), 'waiting-approval')
+  service.updateIpcTasks([running])
+  assert.equal(snapshots.length, 3)
+  assert.equal(getDisplayStatus(snapshots.at(-1).tasks[0]), 'running')
+  context.mock.timers.tick(1000)
+  assert.equal(snapshots.length, 3)
 })
 
 test('停止服务取消排队回调', async (context) => {

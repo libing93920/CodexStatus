@@ -168,6 +168,26 @@ async function verifyIslandWindow() {
     assert.equal(alert.brandWidth, '23px')
     assert.notEqual(alert.satelliteIconFill, 'none')
     assert.equal(alert.statusColor, 'rgb(255, 159, 10)')
+    await dispatchPointerEnter(window, 232, 80)
+    window.webContents.send(CHANNELS.islandUpdated, snapshot('running'))
+    await retry(async () => {
+      const status = await window.webContents.executeJavaScript(
+        "document.querySelector('.alert .activity-header > span:last-child').textContent"
+      )
+      assert.equal(status, '执行中')
+      assert.equal((await inspect(window)).mode, 'alert')
+    })
+    const removed = snapshot('waiting-input')
+    removed.tasks[0].requests[0].id = 'removed-input'
+    window.webContents.send(CHANNELS.islandUpdated, removed)
+    await retry(async () => assert.equal((await inspect(window)).mode, 'alert'))
+    window.webContents.send(CHANNELS.islandUpdated, snapshot('running', 0))
+    await retry(async () => assert.equal((await inspect(window)).mode, 'compact'))
+    const resumed = snapshot('waiting-approval')
+    resumed.tasks[0].requests[0].id = 'resumed-approval'
+    window.webContents.send(CHANNELS.islandUpdated, resumed)
+    await retry(async () => assert.equal((await inspect(window)).mode, 'alert'))
+    await dispatchPointerLeave(window)
     await window.webContents.executeJavaScript(`(() => {
       const style = document.createElement('style')
       style.id = 'geometry-probe'

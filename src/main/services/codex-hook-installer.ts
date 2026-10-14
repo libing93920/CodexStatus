@@ -5,7 +5,7 @@ import path from 'node:path'
 import { logDiag } from './diag-log.ts'
 
 const MANAGED_STATUS = 'CodexStatus task activity'
-// 保留 PreToolUse 用于清除审批状态;PostToolUse 每次工具完成都 spawn 进程,由 IPC 状态流兜底
+// CLI 保留 PreToolUse 清除审批；Desktop 待处理请求以 IPC 为准，避免 PostToolUse 逐工具启动进程。
 const HOOK_EVENTS = [
   'SessionStart',
   'UserPromptSubmit',

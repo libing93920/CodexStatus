@@ -36,7 +36,7 @@ const SINGLE_TASK_HEIGHT = 200
 export default function Island(): React.JSX.Element {
   const [snapshot, setSnapshot] = useState<IslandSnapshot>(createEmptyIslandSnapshot)
   const [mode, setModeState] = useState<IslandMode>('hidden')
-  const [alertTask, setAlertTask] = useState<IslandTask>()
+  const [alertTarget, setAlertTarget] = useState<IslandTask>()
   const [presentation, setPresentation] = useState<IslandPresentation>({
     revision: 0,
     visible: false
@@ -68,6 +68,12 @@ export default function Island(): React.JSX.Element {
   const presentationHandlerRef = useRef<(next: IslandPresentation) => void>(() => undefined)
   const cancelInteractiveFrameRef = useRef<() => void>(() => undefined)
   const presentationFrame = useRef<number | undefined>(undefined)
+  // 悬停会暂停提醒计时，卡片始终读取最新快照，避免保存已解除的审批状态。
+  const alertTask =
+    alertTarget &&
+    snapshot.tasks.find(
+      (task) => task.hostId === alertTarget.hostId && task.threadId === alertTarget.threadId
+    )
   const alertEvent = alertTask ? alertEventId(alertTask) : undefined
   const activeTasks = useMemo(
     () => snapshot.tasks.filter((task) => getDisplayStatus(task) !== 'stopped'),
@@ -153,13 +159,19 @@ export default function Island(): React.JSX.Element {
 
   useEffect(() => {
     const candidate = findAlertCandidate(snapshot, seenEvents.current)
-    if (!candidate) return
+    if (!candidate) {
+      if (alertTarget && !alertTask) {
+        reminder.current?.stop()
+        if (modeRef.current === 'alert') finishAlertRef.current('task-removed')
+      }
+      return
+    }
     seenEvents.current.add(alertEventId(candidate))
-    setAlertTask(candidate)
+    setAlertTarget(candidate)
     diagnostic.request('alert', 'candidate-unless-expanded')
     setModeState((current) => (current === 'expanded' ? current : 'alert'))
     startReminderRef.current()
-  }, [snapshot, diagnostic])
+  }, [snapshot, diagnostic, alertTask, alertTarget])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -496,7 +508,7 @@ export default function Island(): React.JSX.Element {
   function dismissTask(task: IslandTask): void {
     void window.codexStatus.dismissIslandTask(task.threadId).then((dismissed) => {
       if (!dismissed) return
-      setAlertTask(undefined)
+      setAlertTarget(undefined)
       setMode('compact', 'dismiss-task')
     })
   }

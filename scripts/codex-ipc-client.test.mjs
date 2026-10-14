@@ -8,6 +8,7 @@ import {
   projectTerminalTransition
 } from '../src/main/services/codex-ipc-client.ts'
 import { getDisplayStatus } from '../src/shared/island.ts'
+import { CodexActivityService } from '../src/main/services/codex-activity.ts'
 
 test('其他客户端发现任务只通知服务层，未准入前不自动订阅', () => {
   const visibleThreads = []
@@ -270,6 +271,94 @@ test('IPC patch 新增终态 turn 时识别完成、失败和取消', () => {
       projectTerminalTransition('local', 'thread-1', previous, current, 3_000)?.phase,
       phase
     )
+  }
+})
+
+test('IPC 终态优先于尚未移除的审批和回复请求', () => {
+  const previous = conversationWithTurns([
+    { turnId: 'turn-1', turnStartedAtMs: 1_000, status: 'inProgress' }
+  ])
+  for (const status of ['completed', 'failed', 'interrupted']) {
+    const current = conversationWithTurns([{ turnId: 'turn-1', turnStartedAtMs: 1_000, status }])
+    current.requests = [
+      { requestId: 'approval', method: 'execCommandApproval' },
+      { requestId: 'input', method: 'requestUserInput' }
+    ]
+    current.threadRuntimeStatus.activeFlags = ['waitingOnApproval']
+    const task = projectTerminalTransition('local', 'thread-1', previous, current)
+    assert.deepEqual(task.requests, [])
+    assert.equal(getDisplayStatus(task), task.phase)
+  }
+})
+
+test('Desktop 自动审批的 IPC 快照与补丁集成流解除 Hook 任务等待', () => {
+  const service = new CodexActivityService({
+    cwd: '.',
+    descriptorPath: 'unused',
+    onSnapshot: () => undefined,
+    emitDebounceMs: 0
+  })
+  service.threadSources.set('local\u0000thread-1', 'vscode')
+  const hook = { session_id: 'thread-1', turn_id: 'turn-1', tool_use_id: 'tool-1' }
+  for (const hook_event_name of ['UserPromptSubmit', 'PreToolUse', 'PermissionRequest']) {
+    service.handleHookPayload({ ...hook, hook_event_name }, 1_000)
+  }
+  const client = new CodexIpcClient({
+    threadIds: ['thread-1'],
+    onTasks: (tasks) => service.updateIpcTasks(tasks),
+    onVisibleThread: () => undefined,
+    onConnection: () => undefined
+  })
+  const conversationState = conversationWithTurns([
+    { turnId: 'turn-1', turnStartedAtMs: 1_000, status: 'inProgress' }
+  ])
+  conversationState.requests = [{ requestId: 'ipc-approval', method: 'execCommandApproval' }]
+  conversationState.threadRuntimeStatus.activeFlags = ['waitingOnApproval']
+  client.handleStateChange({
+    conversationId: 'thread-1',
+    change: { type: 'snapshot', revision: 1, conversationState }
+  })
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'waiting-approval')
+  client.handleStateChange({
+    conversationId: 'thread-1',
+    change: {
+      type: 'patches',
+      baseRevision: 1,
+      revision: 2,
+      patches: [
+        { op: 'replace', path: ['requests'], value: [] },
+        { op: 'replace', path: ['threadRuntimeStatus', 'activeFlags'], value: [] }
+      ]
+    }
+  })
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'running')
+  assert.deepEqual(service.getSnapshot().tasks[0].requests, [])
+})
+
+test('初始及重复终态快照不把残留审批投影为执行任务', () => {
+  for (const status of ['completed', 'failed', 'interrupted']) {
+    const state = conversationWithTurns([
+      { turnId: 'turn-1', turnStartedAtMs: 1_000, durationMs: 500, status }
+    ])
+    state.threadRuntimeStatus = { type: 'idle', activeFlags: ['waitingOnApproval'] }
+    state.requests = [{ requestId: 'stale-approval', method: 'execCommandApproval' }]
+    const task = projectConversationState('local', 'thread-1', state)
+    assert.deepEqual(task.requests, [])
+    assert.equal(getDisplayStatus(task), task.phase)
+    const outputs = []
+    const client = new CodexIpcClient({
+      threadIds: ['thread-1'],
+      onTasks: (tasks) => outputs.push(tasks),
+      onVisibleThread: () => undefined,
+      onConnection: () => undefined
+    })
+    for (const revision of [1, 2]) {
+      client.handleStateChange({
+        conversationId: 'thread-1',
+        change: { type: 'snapshot', revision, conversationState: state }
+      })
+    }
+    assert.deepEqual(outputs, [[], []])
   }
 })
 

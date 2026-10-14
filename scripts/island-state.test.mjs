@@ -70,6 +70,12 @@ test('新内部证据撤销已上岛任务与审批，迟到IPC、Hook和目录�
   service.ipc = { followThread: () => undefined, unfollowThread: (id) => unfollowed.push(id) }
   service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW)
   service.handleHookPayload(hookPayload('PermissionRequest'), NOW + 1)
+  service.updateIpcTasks([
+    {
+      ...authoritativeTask('running', 'turn-1'),
+      requests: [{ id: 'approval', kind: 'approval', createdAt: NOW + 1 }]
+    }
+  ])
   assert.equal(service.getSnapshot().tasks[0].requests.length, 1)
   const file = path.join(directory, 'session.jsonl')
   await fs.writeFile(
@@ -505,7 +511,7 @@ test('被拒绝的 Hook 不接管任务且不会屏蔽后续 IPC 任务', () => 
   assert.equal(service.hookTaskKeys?.has('local\u0000thread-2'), false)
 })
 
-test('IPC 只向 Hook 任务补充待回复并可清除', () => {
+test('IPC 向 Desktop Hook 任务补充待回复并可清除', () => {
   let latest
   const service = activityService((snapshot) => {
     latest = snapshot
@@ -522,6 +528,204 @@ test('IPC 只向 Hook 任务补充待回复并可清除', () => {
   assert.equal(getDisplayStatus(latest.tasks[0]), 'waiting-input')
   service.updateIpcTasks?.([running])
   assert.equal(getDisplayStatus(latest.tasks[0]), 'running')
+})
+
+test('Desktop 自动审批由 IPC 解除，不受工具 Hook 顺序影响', () => {
+  const service = activityService(() => undefined)
+  const tool = { ...hookPayload('PreToolUse'), tool_use_id: 'tool-1' }
+  service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW)
+  service.handleHookPayload(tool, NOW + 1)
+  service.handleHookPayload({ ...tool, hook_event_name: 'PermissionRequest' }, NOW + 2)
+  const running = authoritativeTask('running', 'turn-1')
+  service.updateIpcTasks([
+    { ...running, requests: [{ id: 'ipc-approval', kind: 'approval', createdAt: NOW + 2 }] }
+  ])
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'waiting-approval')
+  service.updateIpcTasks([running])
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'running')
+  assert.deepEqual(service.getSnapshot().tasks[0].requests, [])
+  service.handleHookPayload(
+    { ...tool, hook_event_name: 'PermissionRequest', request_id: 'late-approval' },
+    NOW + 3
+  )
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'running')
+})
+
+test('Desktop 多个审批和回复只随 IPC 请求集合变化', () => {
+  const service = activityService(() => undefined)
+  service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW)
+  const running = authoritativeTask('running', 'turn-1')
+  const approvals = ['approval-1', 'approval-2'].map((id) => ({
+    id,
+    kind: 'approval',
+    createdAt: NOW
+  }))
+  service.updateIpcTasks([{ ...running, requests: approvals }])
+  service.handleHookPayload({ ...hookPayload('PreToolUse'), tool_use_id: 'approval-1' }, NOW + 1)
+  assert.deepEqual(service.getSnapshot().tasks[0].requests, approvals)
+  assert.equal(service.dismissTask('thread-1'), false)
+  service.updateIpcTasks([{ ...running, requests: approvals.slice(1) }])
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'waiting-approval')
+  service.updateIpcTasks([
+    { ...running, requests: [{ id: 'input', kind: 'input', createdAt: NOW + 2 }] }
+  ])
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'waiting-input')
+  service.updateIpcTasks([running])
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'running')
+})
+
+test('Desktop 缺少 IPC 快照或断线时保留最后确认的审批', () => {
+  const service = activityService(() => undefined)
+  service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW)
+  const pending = {
+    ...authoritativeTask('running', 'turn-1'),
+    requests: [{ id: 'approval', kind: 'approval', createdAt: NOW }]
+  }
+  service.updateIpcTasks([pending])
+  service.state.setConnection({ ipc: false })
+  service.updateIpcTasks([])
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'waiting-approval')
+  service.updateIpcTasks([authoritativeTask('running', 'turn-1')])
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'running')
+})
+
+test('Desktop 明确旧回合 IPC 不覆盖新回合待审批请求', () => {
+  const service = activityService(() => undefined)
+  service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW)
+  service.handleHookPayload(hookPayload('Stop'), NOW + 1)
+  service.handleHookPayload({ ...hookPayload('UserPromptSubmit'), turn_id: 'turn-2' }, NOW + 2)
+  const pending = {
+    ...authoritativeTask('running', 'turn-2'),
+    requests: [{ id: 'new-approval', kind: 'approval', createdAt: NOW + 3 }]
+  }
+  service.updateIpcTasks([pending])
+  service.updateIpcTasks([
+    {
+      ...authoritativeTask('running', 'turn-1'),
+      requests: [{ id: 'old-input', kind: 'input', createdAt: NOW }]
+    }
+  ])
+  assert.deepEqual(service.getSnapshot().tasks[0].requests, pending.requests)
+})
+
+test('Desktop 无 Hook turn_id 时接受当前 IPC，拒绝新输入之前的缓存', () => {
+  const service = activityService(() => undefined)
+  const prompt = { ...hookPayload('UserPromptSubmit'), turn_id: undefined }
+  service.handleHookPayload(prompt, NOW)
+  const first = {
+    ...authoritativeTask('running', 'ipc-turn-1'),
+    updatedAt: NOW + 1,
+    requests: [{ id: 'first-approval', kind: 'approval', createdAt: NOW + 1 }]
+  }
+  service.updateIpcTasks([first])
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'waiting-approval')
+  service.handleHookPayload({ ...hookPayload('Stop'), turn_id: undefined }, NOW + 2)
+  service.handleHookPayload(prompt, NOW + 3)
+  service.updateIpcTasks([first])
+  assert.deepEqual(service.getSnapshot().tasks[0].requests, [])
+  const next = {
+    ...authoritativeTask('running', 'ipc-turn-2'),
+    updatedAt: NOW + 4,
+    requests: [{ id: 'next-approval', kind: 'approval', createdAt: NOW + 4 }]
+  }
+  service.updateIpcTasks([next])
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'waiting-approval')
+  service.updateIpcTasks([{ ...next, requests: [] }])
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'running')
+})
+
+test('Desktop IPC 未载入 turn 时仍同步当前审批及解除', () => {
+  const service = activityService(() => undefined)
+  service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW)
+  const pending = {
+    ...authoritativeTask('running', 'thread:thread-1'),
+    updatedAt: NOW + 1,
+    requests: [{ id: 'approval', kind: 'approval', createdAt: NOW + 1 }]
+  }
+  service.updateIpcTasks([pending])
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'waiting-approval')
+  service.updateIpcTasks([{ ...pending, requests: [] }])
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'running')
+})
+
+test('Desktop 合成 Hook 回合不接受上一 IPC 回合的迟到更新', () => {
+  const service = activityService(() => undefined)
+  const prompt = { ...hookPayload('UserPromptSubmit'), turn_id: undefined }
+  service.handleHookPayload(prompt, NOW)
+  const previous = {
+    ...authoritativeTask('running', 'ipc-turn-1'),
+    updatedAt: NOW + 1,
+    requests: [{ id: 'old-approval', kind: 'approval', createdAt: NOW + 1 }]
+  }
+  service.updateIpcTasks([previous])
+  service.handleHookPayload({ ...hookPayload('Stop'), turn_id: undefined }, NOW + 2)
+  service.handleHookPayload(prompt, NOW + 3)
+  service.updateIpcTasks([{ ...previous, updatedAt: NOW + 4 }])
+  assert.deepEqual(service.getSnapshot().tasks[0].requests, [])
+  service.updateIpcTasks([
+    {
+      ...authoritativeTask('running', 'ipc-turn-2'),
+      updatedAt: NOW + 5,
+      requests: [{ id: 'new-approval', kind: 'approval', createdAt: NOW + 5 }]
+    }
+  ])
+  assert.equal(service.getSnapshot().tasks[0].requests[0].id, 'new-approval')
+})
+
+test('Desktop 合成 Hook 回合接受早于 Hook 到达的当前 IPC 状态', () => {
+  const service = activityService(() => undefined)
+  service.handleHookPayload({ ...hookPayload('UserPromptSubmit'), turn_id: undefined }, NOW + 1)
+  const running = authoritativeTask('running', 'ipc-turn-1')
+  service.updateIpcTasks([
+    { ...running, requests: [{ id: 'approval', kind: 'approval', createdAt: NOW }] }
+  ])
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'waiting-approval')
+  service.updateIpcTasks([running])
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'running')
+})
+
+test('Desktop 结束后的迟到 IPC 请求不复活审批', () => {
+  for (const eventName of ['Stop', 'Interrupt']) {
+    const service = activityService(() => undefined)
+    service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW)
+    const pending = {
+      ...authoritativeTask('running', 'turn-1'),
+      requests: [{ id: 'approval', kind: 'approval', createdAt: NOW }]
+    }
+    service.updateIpcTasks([pending])
+    service.handleHookPayload(hookPayload(eventName), NOW + 1)
+    service.updateIpcTasks([pending])
+    if (eventName === 'Interrupt') {
+      assert.deepEqual(service.getSnapshot().tasks, [])
+    } else {
+      const task = service.getSnapshot().tasks[0]
+      assert.equal(getDisplayStatus(task), 'completed')
+      assert.deepEqual(task.requests, [])
+      assert.equal(service.dismissTask('thread-1'), true)
+    }
+  }
+})
+
+test('CLI 审批保留 Hook 路径，完成和中断清除该回合请求', () => {
+  for (const eventName of ['Stop', 'Interrupt']) {
+    const service = activityService(() => undefined)
+    service.threadSources.set('local\u0000thread-1', 'cli')
+    service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW)
+    const approval = { ...hookPayload('PermissionRequest'), tool_use_id: 'tool-1' }
+    service.handleHookPayload(approval, NOW + 1)
+    assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'waiting-approval')
+    service.updateIpcTasks([])
+    assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'waiting-approval')
+    service.handleHookPayload({ ...approval, hook_event_name: 'PreToolUse' }, NOW + 2)
+    assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'running')
+    service.handleHookPayload({ ...approval, request_id: 'second-approval' }, NOW + 3)
+    service.handleHookPayload(hookPayload(eventName), NOW + 4)
+    if (eventName === 'Interrupt') assert.deepEqual(service.getSnapshot().tasks, [])
+    else {
+      assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'completed')
+      assert.deepEqual(service.getSnapshot().tasks[0].requests, [])
+    }
+  }
 })
 
 test('IPC 可补充 Hook 没有的失败终态但保留 Hook 开始时间', () => {
@@ -563,23 +767,23 @@ test('停止不新增提醒，完成和失败提醒遵循查看规则', () => {
 })
 
 test('审批和回复查看只标记已读，不改变待处理状态', () => {
-  let latest
-  const service = activityService((snapshot) => {
-    latest = snapshot
-  })
-  service.handleHookPayload?.(
-    {
-      ...hookPayload('PermissionRequest'),
-      tool_name: 'Bash',
-      tool_use_id: 'request-1'
-    },
-    NOW
-  )
-  const approval = latest.tasks[0].requests[0]
-  assert.equal(approval.kind, 'approval')
-  service.markViewed(latest.tasks[0].latestEventId)
-  assert.equal(getDisplayStatus(latest.tasks[0]), 'waiting-approval')
-  assert.deepEqual(latest.viewedEventIds, [latest.tasks[0].latestEventId])
+  for (const [kind, status] of [
+    ['approval', 'waiting-approval'],
+    ['input', 'waiting-input']
+  ]) {
+    const service = activityService(() => undefined)
+    service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW)
+    service.updateIpcTasks([
+      {
+        ...authoritativeTask('running', 'turn-1'),
+        requests: [{ id: 'request-1', kind, createdAt: NOW }]
+      }
+    ])
+    service.markViewed(service.getSnapshot().tasks[0].latestEventId)
+    const snapshot = service.getSnapshot()
+    assert.equal(getDisplayStatus(snapshot.tasks[0]), status)
+    assert.deepEqual(snapshot.viewedEventIds, [snapshot.tasks[0].latestEventId])
+  }
 })
 test('提醒暂停后只等待剩余时长', () => {
   const clock = new FakeClock(NOW)

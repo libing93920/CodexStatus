@@ -323,13 +323,6 @@ export function projectTerminalTransition(
     return undefined
   }
   const updatedAt = getTurnEndAt(currentTurn) ?? getNumber(current.updatedAt) ?? observedAt
-  const runtime = getRecord(current.threadRuntimeStatus)
-  const requests = projectRequests(
-    current.requests,
-    getStringArray(runtime?.activeFlags),
-    turnId,
-    observedAt
-  )
   return {
     hostId,
     threadId,
@@ -339,7 +332,7 @@ export function projectTerminalTransition(
     phase: status === 'failed' ? 'failed' : status === 'interrupted' ? 'stopped' : 'completed',
     startedAt: getNumber(currentTurn?.turnStartedAtMs),
     updatedAt,
-    requests,
+    requests: [],
     latestEventId: `ipc:${threadId}:${turnId}:${status}`
   }
 }
@@ -427,7 +420,10 @@ export function projectConversationState(
   const updatedAt = getNumber(state.updatedAt)
   const pendingTurn = hasUnloadedActiveTurn(runtime?.type, updatedAt, latestTurn)
   const turnId = getString(currentTurn?.turnId) ?? `thread:${threadId}`
-  const requests = projectRequests(state.requests, activeFlags, turnId, observedAt)
+  const terminalTurn = !pendingTurn && isTerminalStatus(getString(latestTurn?.status))
+  const requests = terminalTurn
+    ? []
+    : projectRequests(state.requests, activeFlags, turnId, observedAt)
   const phase =
     resolvePhase(currentTurn?.status) ??
     (pendingTurn || requests.length > 0 ? 'running' : undefined) ??
