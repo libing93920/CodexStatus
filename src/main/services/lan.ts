@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
-import { isIPv4, type AddressInfo } from 'node:net'
+import { isIPv4, isIPv6, type AddressInfo } from 'node:net'
 import { WebSocketServer, WebSocket } from 'ws'
-import Bonjour from 'bonjour-service'
+import { LanDiscovery, type LanAdvertisement } from './lan-discovery.ts'
 import { formatDiagError, logDiag } from './diag-log.ts'
 import { ActivityConnectionAuth, type ActivityAuthHello } from './lan-activity-auth.ts'
 import type {
@@ -24,8 +24,6 @@ import {
   type ActivityMessage
 } from '../../shared/activity.ts'
 
-const SERVICE_TYPE = 'codex-status'
-const SERVICE_PROTOCOL = 'tcp' as const
 const GROUP_HASH_LENGTH = 12
 // hello 重发等待:连接 open 后发 hello,若此时间内未收到对方 hello 则补发一次
 const HELLO_RETRY_DELAY_MS = 3000
@@ -33,6 +31,11 @@ const HELLO_RETRY_DELAY_MS = 3000
 const BROADCAST_MAX_TEXT_LENGTH = 200
 const BROADCAST_MIN_INTERVAL_MS = 2000
 const PEER_RECONNECT_DELAY_MS = 100
+export const LAN_CONNECTION_TIMEOUT_MS = 5_000
+export const LAN_HELLO_TIMEOUT_MS = 10_000
+export const LAN_RETRY_DELAY_MS = 10_000
+const MAX_PORT = 65_535
+const INCOMING_TARGET = 'incoming'
 
 /** peer 间互发的派生展示数据:绝不包含 Codex 凭据 */
 export interface PeerSnapshot {
@@ -129,9 +132,10 @@ interface DiscoveredService {
 export class LanService {
   private httpServer: Server | undefined
   private wss: WebSocketServer | undefined
-  private bonjour: Bonjour | undefined
-  private publishedService: ReturnType<Bonjour['publish']> | undefined
-  private browser: ReturnType<Bonjour['find']> | undefined
+  private discovery: LanDiscovery | undefined
+  private readonly sockets = new Set<WebSocket>()
+  private readonly connectionTimers = new Map<WebSocket, NodeJS.Timeout>()
+  private readonly connectionFailures = new Map<string, Set<string>>()
   private readonly connections = new Map<string, WebSocket>()
   private readonly activityAuth = new ActivityConnectionAuth()
   private readonly boundSockets = new WeakMap<WebSocket, string>()
@@ -142,7 +146,7 @@ export class LanService {
     { role: TeamRole; version: number; enabled: boolean }
   >()
   // hello 重发定时器:连接 open 后若未及时收到对方 hello 则补发
-  private readonly helloTimers = new Map<string, NodeJS.Timeout>()
+  private readonly helloTimers = new Map<WebSocket, NodeJS.Timeout>()
   private options: StartOptions | undefined
   private groupHash: string | undefined
   private stopped = false
@@ -177,34 +181,26 @@ export class LanService {
   stop(): void {
     this.lifecycleGeneration++
     this.stopped = true
-    for (const timer of this.helloTimers.values()) {
-      clearTimeout(timer)
+    this.discovery?.stop()
+    this.discovery = undefined
+    for (const timers of [this.helloTimers, this.connectionTimers, this.reconnectTimers]) {
+      for (const timer of timers.values()) clearTimeout(timer)
+      timers.clear()
     }
-    this.helloTimers.clear()
-    for (const timer of this.reconnectTimers.values()) {
-      clearTimeout(timer)
-    }
-    this.reconnectTimers.clear()
-    for (const socket of this.connections.values()) {
-      socket.close()
-      // 进程退出/切换团队时不能等待 WebSocket 对端完成 close 握手。
-      socket.terminate()
-    }
-    for (const socket of this.wss?.clients ?? []) socket.terminate()
+    // 包括尚未认证和被另一连接替换的 socket，退出时不能等待对端 close 握手。
+    const sockets = new Set([
+      ...this.sockets,
+      ...this.connections.values(),
+      ...(this.wss?.clients ?? [])
+    ])
+    for (const socket of sockets) socket.terminate()
+    this.sockets.clear()
     this.connections.clear()
+    this.connectionFailures.clear()
     const peersChanged = this.peers.size > 0
     this.peers.clear()
     this.activityCapabilities.clear()
     this.discovered.clear()
-
-    this.browser?.stop()
-    this.browser = undefined
-    if (this.publishedService && this.bonjour) {
-      this.bonjour.unpublishAll()
-    }
-    this.publishedService = undefined
-    this.bonjour = undefined
-
     this.wss?.close()
     this.wss = undefined
     this.httpServer?.close()
@@ -212,10 +208,7 @@ export class LanService {
     const onPeersChange = this.options?.onPeersChange
     this.options = undefined
     this.groupHash = undefined
-
-    if (peersChanged && onPeersChange) {
-      onPeersChange([])
-    }
+    if (peersChanged) onPeersChange?.([])
   }
 
   /** 本机 snapshot 变化后,推送给所有已连 peer */
@@ -387,125 +380,152 @@ export class LanService {
     if (!this.options || !this.groupHash || !this.httpServer) return
     const address = this.httpServer.address()
     if (!address || typeof address === 'string') return
-    const port = (address as AddressInfo).port
-
-    this.bonjour = new Bonjour()
-    // probe:false 跳过同名探测:peerId 是 randomUUID 全局唯一,
-    // 探测到的"同名"几乎总是本机旧服务未注销完的残留(TTL 未过),会导致发布失败
-    this.publishedService = this.bonjour.publish({
-      name: this.options.peerId,
-      type: SERVICE_TYPE,
-      protocol: SERVICE_PROTOCOL,
-      port,
-      probe: false,
-      txt: {
-        peerId: this.options.peerId,
-        nick: this.options.nickname,
-        groupHash: this.groupHash
-      }
+    this.discovery = new LanDiscovery({
+      peerId: this.options.peerId,
+      nickname: this.options.nickname,
+      groupHash: this.groupHash,
+      port: (address as AddressInfo).port,
+      onUp: (service) => this.handleServiceUp(service),
+      onDown: (service) => this.handleServiceDown(service)
     })
-
-    this.browser = this.bonjour.find({ type: SERVICE_TYPE, protocol: SERVICE_PROTOCOL })
-    this.browser.on('up', (service) => this.handleServiceUp(service))
-    this.browser.on('down', (service) => this.handleServiceDown(service))
+    this.discovery.start()
   }
 
-  private handleServiceUp(service: {
-    name?: string
-    txt?: Record<string, string>
-    addresses?: string[]
-    port: number
-  }): void {
-    if (!this.options || !this.groupHash) return
+  private handleServiceUp(service: LanAdvertisement): void {
+    if (this.stopped || !this.options || !this.groupHash) return
     const peerId = service.txt?.peerId
     const nickname = service.txt?.nick
     const groupHash = service.txt?.groupHash
-    if (!peerId || !nickname || !groupHash) return
-    if (peerId === this.options.peerId) return
-    if (groupHash !== this.groupHash) return
-
-    const hosts = sortServiceHosts(service.addresses)
+    if (!peerId || !nickname || groupHash !== this.groupHash || peerId === this.options.peerId)
+      return
+    if (!Number.isInteger(service.port) || service.port <= 0 || service.port > MAX_PORT) return
+    const hosts = sortServiceHosts(service.addresses, service.referer?.address)
     if (hosts.length === 0) return
-
-    // 已记录或已连接则跳过
-    if (this.discovered.has(peerId) || this.connections.has(peerId)) return
-
-    this.discovered.set(peerId, { peerId, nickname, groupHash, hosts, port: service.port })
-    this.connectToPeer(peerId)
+    const existing = this.discovered.get(peerId)
+    const sameAddress =
+      existing?.port === service.port &&
+      existing.hosts.length === hosts.length &&
+      existing.hosts.every((host, index) => host === hosts[index])
+    if (sameAddress) existing.nickname = nickname
+    else this.discovered.set(peerId, { peerId, nickname, groupHash, hosts, port: service.port })
+    if (!this.reconnectTimers.has(peerId)) this.connectToPeer(peerId)
   }
 
   private handleServiceDown(service: { name?: string }): void {
     const peerId = service.name
     if (!peerId) return
     this.clearReconnectTimer(peerId)
+    this.connectionFailures.delete(peerId)
     this.discovered.delete(peerId)
     const socket = this.connections.get(peerId)
-    if (socket) {
-      socket.close()
-      this.connections.delete(peerId)
-    }
+    this.connections.delete(peerId)
+    if (socket) socket.terminate()
     if (this.peers.delete(peerId)) {
       this.emitPeersChange()
     }
   }
 
-  // 逐个候选地址尝试连接;某地址握手失败试下一个,全失败才清 discovered 允许下次 mDNS up 重试
+  // 当前一轮按候选顺序尝试；全部失败保留发现信息，定时重试而不是等待缓存再次发 up。
   private connectToPeer(peerId: string, fromIndex = 0): void {
-    if (!this.discovered.has(peerId) || this.connections.has(peerId)) return
-    const info = this.discovered.get(peerId)!
+    const info = this.discovered.get(peerId)
+    if (this.stopped || !this.options || !info || this.connections.has(peerId)) return
     if (fromIndex >= info.hosts.length) {
-      // 所有地址都试过仍失败:清掉 discovered,下次 mDNS up 可重新尝试
-      this.discovered.delete(peerId)
+      this.scheduleReconnect(peerId, LAN_RETRY_DELAY_MS)
       return
     }
-    const host = info.hosts[fromIndex]
-    const url = `ws://${formatWsHost(host)}:${info.port}`
-    const socket = new WebSocket(url)
+    const target = `ws://${formatWsHost(info.hosts[fromIndex])}:${info.port}`
+    let socket: WebSocket
+    try {
+      socket = this.createPeerSocket(target)
+    } catch (error) {
+      this.reportConnectionFailure(peerId, target, 'connect', error)
+      this.connectToPeer(peerId, fromIndex + 1)
+      return
+    }
+    const generation = this.lifecycleGeneration
+    this.sockets.add(socket)
     this.connections.set(peerId, socket)
-    // close/error 可能先后触发同一 socket,用 closed 标记去重,避免重复试下一个地址
     let closed = false
     const handleClose = (): void => {
       if (closed) return
       closed = true
-      this.handleOutgoingClose(peerId, socket, fromIndex)
+      this.clearSocketTimers(socket)
+      this.sockets.delete(socket)
+      if (generation !== this.lifecycleGeneration || this.stopped) return
+      this.handleOutgoingClose(peerId, socket, { info, index: fromIndex })
     }
-
-    socket.on('open', () => this.onOutgoingOpen(peerId, socket))
-    socket.on('message', (raw) => this.handleMessage(socket, peerId, raw.toString()))
-    socket.on('close', handleClose)
-    socket.on('error', handleClose)
-  }
-
-  // 出站连接 open:发 hello 并启动重发定时器
-  private onOutgoingOpen(peerId: string, socket: WebSocket): void {
-    this.sendHello(socket)
-    this.scheduleHelloRetry(peerId, socket)
-  }
-  // 出站连接关闭:若记录已被其他连接替换(说明该 peer 另有活连接),只清定时器,不算掉线
-  private handleOutgoingClose(peerId: string, socket: WebSocket, fromIndex: number): void {
-    const isCurrent = this.connections.get(peerId) === socket
-    if (isCurrent) {
-      this.connections.delete(peerId)
-    }
-    this.clearHelloTimer(peerId)
-    if (!isCurrent) {
-      return
-    }
-    if (this.peers.has(peerId)) {
-      // 已建立过双向连接,按正常掉线处理并使用已发现地址排队重连。
-      if (this.peers.delete(peerId)) {
-        this.emitPeersChange()
+    socket.on('open', () => {
+      if (
+        generation !== this.lifecycleGeneration ||
+        this.stopped ||
+        this.connections.get(peerId) !== socket
+      ) {
+        socket.terminate()
+        return
       }
+      this.onOutgoingOpen(peerId, socket)
+    })
+    socket.on('message', (raw) => {
+      if (generation === this.lifecycleGeneration)
+        this.handleMessage(socket, peerId, raw.toString())
+    })
+    socket.on('close', handleClose)
+    socket.on('error', (error) => {
+      if (!closed && generation === this.lifecycleGeneration && !this.stopped)
+        this.reportConnectionFailure(peerId, target, 'transport', error)
+      handleClose()
+      socket.terminate()
+    })
+    this.waitForSocket(socket, {
+      timeoutMs: LAN_CONNECTION_TIMEOUT_MS,
+      phase: 'connect',
+      target,
+      peerId
+    })
+  }
+
+  private createPeerSocket(url: string): WebSocket {
+    return new WebSocket(url, { handshakeTimeout: LAN_CONNECTION_TIMEOUT_MS })
+  }
+
+  private onOutgoingOpen(peerId: string, socket: WebSocket): void {
+    this.waitForSocket(socket, {
+      timeoutMs: LAN_HELLO_TIMEOUT_MS,
+      phase: 'hello',
+      target: socket.url,
+      peerId
+    })
+    this.sendHello(socket)
+    if (!this.boundSockets.has(socket)) this.scheduleHelloRetry(socket)
+  }
+
+  private handleOutgoingClose(
+    peerId: string,
+    socket: WebSocket,
+    attempt: { info: DiscoveredService; index: number }
+  ): void {
+    if (this.connections.get(peerId) !== socket) return
+    this.connections.delete(peerId)
+    if (this.peers.delete(peerId)) {
+      this.emitPeersChange()
       this.scheduleReconnect(peerId)
       return
     }
-    // 从未收到对方 hello:说明这条地址没通,试下一个
-    this.connectToPeer(peerId, fromIndex + 1)
+    const nextIndex = this.discovered.get(peerId) === attempt.info ? attempt.index + 1 : 0
+    this.connectToPeer(peerId, nextIndex)
   }
 
   private handleIncoming(socket: WebSocket): void {
+    const generation = this.lifecycleGeneration
+    this.sockets.add(socket)
+    this.waitForSocket(socket, {
+      timeoutMs: LAN_HELLO_TIMEOUT_MS,
+      phase: 'hello',
+      target: INCOMING_TARGET
+    })
     let boundPeerId: string | undefined
     socket.on('message', (raw) => {
+      if (generation !== this.lifecycleGeneration || this.stopped) return
       const message = parseMessage(raw.toString())
       if (!message) return
       if (
@@ -518,7 +538,14 @@ export class LanService {
       if (message.type === 'hello') boundPeerId = message.peerId
       if (boundPeerId) this.handleMessage(socket, boundPeerId, raw.toString())
     })
+    socket.on('error', (error) => {
+      if (generation === this.lifecycleGeneration && !this.stopped)
+        this.reportConnectionFailure(INCOMING_TARGET, INCOMING_TARGET, 'transport', error)
+    })
     socket.on('close', () => {
+      this.clearSocketTimers(socket)
+      this.sockets.delete(socket)
+      if (generation !== this.lifecycleGeneration || this.stopped) return
       if (boundPeerId && this.connections.get(boundPeerId) === socket)
         this.handleSocketClose(boundPeerId)
     })
@@ -599,9 +626,14 @@ export class LanService {
     const alreadyBound = this.boundSockets.get(socket) === peerId
     this.boundSockets.set(socket, peerId)
     this.connections.set(peerId, socket)
+    this.clearSocketTimers(socket)
+    this.clearReconnectTimer(peerId)
+    this.connectionFailures.delete(peerId)
     this.applyActivityCapabilities(message, this.activityAuth.isVerified(socket, peerId))
     this.applyPeerSnapshot(message.peerId, message.nickname, message.snapshot)
     if (!alreadyBound) this.sendHello(socket, true)
+    if (!alreadyBound)
+      logDiag(`lan peer connected target=${socket.url || INCOMING_TARGET} peers=${this.peers.size}`)
   }
 
   private applyPeerSnapshot(
@@ -631,13 +663,10 @@ export class LanService {
       updatedAt: new Date().toISOString()
     }
     this.peers.set(peerId, entry)
-    // 收到对方数据说明双向已通,取消 hello 重发
-    this.clearHelloTimer(peerId)
     this.emitPeersChange()
   }
 
   private handleSocketClose(peerId: string): void {
-    this.clearHelloTimer(peerId)
     const removed = this.connections.delete(peerId)
     if (removed && this.peers.delete(peerId)) {
       this.emitPeersChange()
@@ -645,7 +674,7 @@ export class LanService {
     }
   }
 
-  private scheduleReconnect(peerId: string): void {
+  private scheduleReconnect(peerId: string, delayMs = PEER_RECONNECT_DELAY_MS): void {
     if (
       this.stopped ||
       !this.options ||
@@ -666,7 +695,7 @@ export class LanService {
       )
         return
       this.connectToPeer(peerId)
-    }, PEER_RECONNECT_DELAY_MS)
+    }, delayMs)
     timer.unref()
     this.reconnectTimers.set(peerId, timer)
   }
@@ -679,24 +708,52 @@ export class LanService {
     }
   }
 
-  // 连接 open 后启动:若 HELLO_RETRY_DELAY_MS 内未收到对方任何数据,补发一次 hello
-  private scheduleHelloRetry(peerId: string, socket: WebSocket): void {
-    this.clearHelloTimer(peerId)
+  private scheduleHelloRetry(socket: WebSocket): void {
     const timer = setTimeout(() => {
-      this.helloTimers.delete(peerId)
-      if (socket.readyState === WebSocket.OPEN) {
+      this.helloTimers.delete(socket)
+      if (!this.stopped && socket.readyState === WebSocket.OPEN && !this.boundSockets.has(socket))
         this.sendHello(socket)
-      }
     }, HELLO_RETRY_DELAY_MS)
-    this.helloTimers.set(peerId, timer)
+    timer.unref()
+    this.helloTimers.set(socket, timer)
   }
 
-  private clearHelloTimer(peerId: string): void {
-    const timer = this.helloTimers.get(peerId)
-    if (timer) {
-      clearTimeout(timer)
-      this.helloTimers.delete(peerId)
+  private waitForSocket(
+    socket: WebSocket,
+    options: { timeoutMs: number; phase: string; target: string; peerId?: string }
+  ): void {
+    this.clearSocketTimers(socket)
+    const timer = setTimeout(() => {
+      this.connectionTimers.delete(socket)
+      if (this.stopped || this.boundSockets.has(socket)) return
+      this.reportConnectionFailure(options.peerId ?? options.target, options.target, options.phase)
+      socket.terminate()
+    }, options.timeoutMs)
+    timer.unref()
+    this.connectionTimers.set(socket, timer)
+  }
+
+  private clearSocketTimers(socket: WebSocket): void {
+    for (const timers of [this.helloTimers, this.connectionTimers]) {
+      const timer = timers.get(socket)
+      if (timer) clearTimeout(timer)
+      timers.delete(socket)
     }
+  }
+
+  private reportConnectionFailure(
+    peerId: string,
+    target: string,
+    phase: string,
+    error?: unknown
+  ): void {
+    const message = error === undefined ? 'timeout' : formatDiagError(error)
+    const key = `${phase}:${target}:${message}`
+    const failures = this.connectionFailures.get(peerId) ?? new Set<string>()
+    if (failures.has(key)) return
+    failures.add(key)
+    this.connectionFailures.set(peerId, failures)
+    logDiag(`lan ${phase} failed target=${target} ${message}`)
   }
 
   private emitPeersChange(): void {
@@ -714,11 +771,12 @@ export function hashGroup(group: string): string {
     .slice(0, GROUP_HASH_LENGTH)
 }
 
-// 候选地址排序:IPv4 优先(IPv6 链路本地地址 fe80:: 要 zone id 且 URL 要方括号,坑多)
-function sortServiceHosts(addresses?: string[]): string[] {
-  if (!addresses || addresses.length === 0) return []
-  const v4 = addresses.filter((addr) => isIPv4(addr))
-  const v6 = addresses.filter((addr) => !isIPv4(addr))
+// 响应来源必须在公告中才优先使用，避免公告里的虚拟地址挡在物理地址之前。
+function sortServiceHosts(addresses?: string[], source?: string): string[] {
+  const hosts = [...new Set(addresses ?? [])]
+  const v4 = hosts.filter((address) => isIPv4(address))
+  const v6 = hosts.filter((address) => isIPv6(address))
+  if (source && v4.includes(source)) return [source, ...v4.filter((host) => host !== source), ...v6]
   return [...v4, ...v6]
 }
 

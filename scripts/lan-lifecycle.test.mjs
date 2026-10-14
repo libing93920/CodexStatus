@@ -57,3 +57,45 @@ test('快速切换配置时旧 loopback server 完成回调不启动新配置的
   assert.equal(service.httpServer, undefined)
   assert.equal(service.options, undefined)
 })
+
+test('停止服务清理发现模块和所有等待，重复stop不会重复释放', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
+  const service = new LanService()
+  let stoppedDiscoveries = 0
+  let lateCallbacks = 0
+  service.discovery = {
+    stop: () => {
+      stoppedDiscoveries++
+    }
+  }
+  service.options = options(FIRST)
+  const pendingSocket = {}
+  service.connectionTimers.set(
+    pendingSocket,
+    setTimeout(() => {
+      lateCallbacks++
+    }, 5_000)
+  )
+  service.helloTimers.set(
+    pendingSocket,
+    setTimeout(() => {
+      lateCallbacks++
+    }, 3_000)
+  )
+  service.reconnectTimers.set(
+    FIRST.peerId,
+    setTimeout(() => {
+      lateCallbacks++
+    }, 10_000)
+  )
+
+  service.stop()
+  service.stop()
+  t.mock.timers.tick(30_000)
+  assert.equal(stoppedDiscoveries, 1)
+  assert.equal(lateCallbacks, 0)
+  assert.equal(service.discovery, undefined)
+  assert.equal(service.connectionTimers.size, 0)
+  assert.equal(service.helloTimers.size, 0)
+  assert.equal(service.reconnectTimers.size, 0)
+})

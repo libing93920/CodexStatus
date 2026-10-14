@@ -3,9 +3,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { LanService, hashGroup } from '../src/main/services/lan.ts'
 import { ActivityConnectionAuth } from '../src/main/services/lan-activity-auth.ts'
+import { workDateKey } from '../src/shared/work-time.ts'
 import { WebSocket } from 'ws'
 
-const DATE = '2026-10-13'
+const DATE = workDateKey(Date.now())
 const ADMIN = '10000000-0000-4000-8000-000000000001'
 const MEMBER = '10000000-0000-4000-8000-000000000002'
 const GROUP = 'desktop-team'
@@ -275,8 +276,8 @@ test('本机 WebSocket 仅按同组 admin 定向交换活动消息，不启动 B
   })
   const adminPort = await localPort(admin)
   const memberPort = await localPort(member)
-  assert.equal(admin.bonjour, undefined)
-  assert.equal(member.bonjour, undefined)
+  assert.equal(admin.discovery, undefined)
+  assert.equal(member.discovery, undefined)
 
   serviceUp(admin, MEMBER, '成员', hashGroup('other-team'), memberPort)
   await new Promise((resolve) => setTimeout(resolve, 20))
@@ -331,7 +332,7 @@ test('本机 WebSocket 仅按同组 admin 定向交换活动消息，不启动 B
     team: TEAM_HASH,
     peerId: MEMBER,
     nickname: '成员',
-    date: DATE,
+    date: workDateKey(observedAt),
     revision: 1,
     calendarVersion: 'test-calendar',
     observedAt,
