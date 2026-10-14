@@ -105,6 +105,12 @@ async function verifyMinimalWindows() {
   try {
     await window.loadURL(`http://127.0.0.1:${address.port}/scripts/capsule-minimal-preview.html`)
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 350))
+    // 隐藏窗口的动画时钟可能暂停，先结束入场动画再检查最终可见尺寸。
+    await window.webContents.executeJavaScript(`
+      document.querySelectorAll('.capsule__minimal').forEach((ball) => {
+        ball.getAnimations().forEach((animation) => animation.finish())
+      })
+    `)
 
     const inspected = await inspectMinimalWindows(window)
     const screenshotPath = process.argv
