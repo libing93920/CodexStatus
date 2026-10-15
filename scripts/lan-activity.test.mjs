@@ -218,8 +218,8 @@ async function waitFor(predicate, message) {
   assert.fail(message)
 }
 
-function localService(t, options) {
-  const service = new LanService()
+function localService(t, options, adminDeviceAllowed = () => true) {
+  const service = new LanService(adminDeviceAllowed)
   // 只测试本机 WebSocket 握手，阻止测试触碰 mDNS/Bonjour 和真实局域网状态。
   service.startDiscovery = () => undefined
   service.start(options)
@@ -337,7 +337,8 @@ test('本机 WebSocket 仅按同组 admin 定向交换活动消息，不启动 B
     calendarVersion: 'test-calendar',
     observedAt,
     intervals: [],
-    incomplete: false
+    incomplete: true,
+    diagnostics: [{ code: 'clock-change', at: observedAt }]
   }
   assert.equal(member.sendActivity(ADMIN, { type: 'activity-day', day }), true)
   assert.equal(admin.sendActivity(MEMBER, { type: 'activity-day', day }), false)
@@ -347,6 +348,17 @@ test('本机 WebSocket 仅按同组 admin 定向交换活动消息，不启动 B
         ({ peerId, message }) => peerId === MEMBER && message.type === 'activity-day'
       ),
     'admin 未收到成员日报'
+  )
+  assert.deepEqual(
+    adminMessages.find(({ message }) => message.type === 'activity-day').message.day.diagnostics,
+    day.diagnostics
+  )
+  assert.equal(
+    member.sendActivity(ADMIN, {
+      type: 'activity-day',
+      day: { ...day, diagnostics: [{ code: 'untrusted-reason', at: observedAt }] }
+    }),
+    false
   )
 
   const disconnectedSocket = member.connections.get(ADMIN)

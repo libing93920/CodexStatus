@@ -38,7 +38,12 @@ function cleanDay(day: ActivityDay): ActivityDay {
     firstInputAt: day.firstInputAt,
     lastInputAt: day.lastInputAt,
     incomplete: day.incomplete,
-    intervals: day.intervals.map(({ start, end, kind }) => ({ start, end, kind }))
+    intervals: day.intervals.map(({ start, end, kind }) => ({ start, end, kind })),
+    ...(day.diagnostics === undefined
+      ? {}
+      : {
+          diagnostics: day.diagnostics.map(({ code, at, start, end }) => ({ code, at, start, end }))
+        })
   }
 }
 
@@ -81,14 +86,15 @@ export class ActivityStore {
       .map((record) => structuredClone(record))
   }
 
-  stage(day: ActivityDay): void {
-    if (!validateActivityDay(day, this.now())) throw new Error('活动记录无效，未写入')
+  stage(day: ActivityDay, referenceTime = this.now()): void {
+    if (!validateActivityDay(day, referenceTime)) throw new Error('活动记录无效，未写入')
     const clean = cleanDay(day)
     this.records.set(dayKey(clean), { day: clean, receivedAt: this.now() })
   }
 
-  save(day: ActivityDay): Promise<'saved' | 'unchanged' | 'stale'> {
-    if (!validateActivityDay(day, this.now()))
+  save(day: ActivityDay, referenceTime = this.now()): Promise<'saved' | 'unchanged' | 'stale'> {
+    // 仅本机采集可提供已确认观测时间；远端入口始终按当前时间校验。
+    if (!validateActivityDay(day, referenceTime))
       return Promise.reject(new Error('活动记录无效，未写入'))
     const clean = cleanDay(day)
     const task = this.queue.then(() => this.writeDay(clean))
@@ -128,7 +134,12 @@ export class ActivityStore {
       if ((await fs.stat(filePath)).size > ACTIVITY_MAX_MESSAGE_BYTES)
         throw new Error('文件超出大小限制')
       const stored = JSON.parse(await fs.readFile(filePath, 'utf8')) as StoredActivityDay
-      if (!validateActivityDay(stored.day, this.now()) || `${dayKey(stored.day)}.json` !== fileName)
+      // 日报写入时已校验，回拨后重启仍须保留此前已确认的观测。
+      const referenceTime = Math.max(this.now(), stored.day?.observedAt)
+      if (
+        !validateActivityDay(stored.day, referenceTime) ||
+        `${dayKey(stored.day)}.json` !== fileName
+      )
         throw new Error('日期、身份或区间无效')
       if (!Number.isFinite(stored.receivedAt) || stored.receivedAt < 0)
         throw new Error('同步时间无效')

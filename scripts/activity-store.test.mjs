@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { mkdtemp, readFile, writeFile, rm, readdir } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, writeFile, rm, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import seed from '../resources/holidays/2026.json' with { type: 'json' }
 import { ActivityStore } from '../src/main/services/activity-store.ts'
@@ -15,6 +15,7 @@ const RETRY_DELAY_MS = 5 * MINUTE_MS
 const PEER = '10000000-0000-4000-8000-000000000001'
 const TEAM = '123456abcdef'
 const START = Date.parse(`${DATE}T09:00:00+08:00`)
+const CLOCK_ROLLBACK_MS = 6_000
 
 async function directory(t) {
   assert.ok(process.env.PI_SCRATCH_DIR, '测试临时文件必须在会话scratch目录')
@@ -62,6 +63,65 @@ test('日报串行持久化、重启恢复、重复幂等，旧版本不能覆�
   )
 })
 
+test('默认写入拒绝超前观测，回拨后能恢复已确认日报', async (t) => {
+  const root = await directory(t)
+  const validDay = day()
+  const confirmedAt = validDay.observedAt
+  const writer = new ActivityStore(root, () => confirmedAt)
+  await writer.initialize()
+  assert.equal(await writer.save(validDay), 'saved')
+
+  const now = confirmedAt - CLOCK_ROLLBACK_MS
+  const strictStore = new ActivityStore(path.join(root, 'strict'), () => now)
+  await strictStore.initialize()
+  assert.throws(() => strictStore.stage({ ...validDay, revision: 2 }), /无效/)
+  await assert.rejects(strictStore.save({ ...validDay, revision: 2 }), /无效/)
+
+  const restored = new ActivityStore(root, () => now)
+  await restored.initialize()
+  assert.equal(restored.get(TEAM, PEER, DATE).day.revision, validDay.revision)
+  assert.deepEqual(restored.get(TEAM, PEER, DATE).day.intervals, validDay.intervals)
+  assert.equal(restored.issues.size, 0)
+})
+
+test('回拨后恢复仍拒绝损坏结构、区间、文件名身份及同步时间', async (t) => {
+  const root = await directory(t)
+  const validDay = day()
+  const now = validDay.observedAt - CLOCK_ROLLBACK_MS
+  const invalidFiles = [
+    { name: 'structure', day: { ...validDay, version: 99 }, filePeer: PEER, receivedAt: NOW },
+    {
+      name: 'interval',
+      day: {
+        ...validDay,
+        intervals: [{ ...validDay.intervals[0], end: validDay.observedAt + 1 }]
+      },
+      filePeer: PEER,
+      receivedAt: NOW
+    },
+    {
+      name: 'filename-identity',
+      day: validDay,
+      filePeer: '10000000-0000-4000-8000-000000000002',
+      receivedAt: NOW
+    },
+    { name: 'received-at', day: validDay, filePeer: PEER, receivedAt: -1 }
+  ]
+  for (const invalid of invalidFiles) {
+    const folder = path.join(root, invalid.name)
+    await mkdir(folder, { recursive: true })
+    const fileName = `${DATE}_${TEAM}_${invalid.filePeer}.json`
+    await writeFile(
+      path.join(folder, fileName),
+      JSON.stringify({ day: invalid.day, receivedAt: invalid.receivedAt })
+    )
+    const damaged = new ActivityStore(folder, () => now)
+    await damaged.initialize()
+    assert.equal(damaged.get(TEAM, PEER, DATE), undefined, invalid.name)
+    assert.equal(damaged.issues.size, 1, invalid.name)
+  }
+})
+
 test('检查点不能覆盖内存新观测，持久化异常不确认成功', async (t) => {
   const root = await directory(t)
   const store = new ActivityStore(root, () => NOW)
@@ -89,6 +149,7 @@ test('只清理确定的过期日报，坏文件报告不完整，跨团队隔�
   now += 30 * DAY_MS
   await store.prune()
   assert.equal(store.list(TEAM, DATE).length, 0)
+  assert.deepEqual(await readdir(root), [foreign])
   assert.equal(await readFile(path.join(root, foreign), 'utf8'), 'keep')
   const brokenName = `${DATE}_${TEAM}_${PEER}.json`
   await writeFile(path.join(root, brokenName), '{broken')

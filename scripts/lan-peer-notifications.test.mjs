@@ -19,7 +19,7 @@ const GROUP_HASH = hashGroup(GROUP)
 const DEEP_SNAPSHOT_DEPTH = 1_200
 
 function setup(t) {
-  const service = new LanService()
+  const service = new LanService(() => true)
   const notifications = []
   service.options = {
     peerId: SELF,

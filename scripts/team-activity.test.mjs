@@ -117,6 +117,21 @@ function configureAdmin(service) {
   })
 }
 
+test('远端不能借时钟变化诊断绕过未来观测时间校验', async (t) => {
+  const serviceTransport = transport([peer(MEMBER, '成员')])
+  const { service } = await setup(t, serviceTransport)
+  configureAdmin(service)
+  const future = activityDay({ date: DATE, startTime: '14:00', minutes: 1 })
+  future.incomplete = true
+  future.diagnostics = [{ code: 'clock-change', at: NOW }]
+  await service.receive(MEMBER, { type: 'activity-day', day: future })
+  assert.deepEqual(service.getBoard(DATE).members, [])
+  assert.equal(
+    serviceTransport.sent.some(({ message }) => message.type === 'activity-ack'),
+    false
+  )
+})
+
 test('成员只来自观察日的日报，在线无日报不显示，离线已收日报保留', async (t) => {
   const serviceTransport = transport([peer(MEMBER, '新昵称'), peer(OTHER, '无数据成员')])
   const { service } = await setup(t, serviceTransport)

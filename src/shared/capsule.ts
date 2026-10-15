@@ -311,6 +311,7 @@ export interface PersistedState {
 
 export interface BootstrapPayload {
   settings: AppSettings
+  teamAdminAllowed: boolean
   window: WindowPreferences
   panel: PanelPreferences
   snapshot: UsageSnapshot
@@ -330,6 +331,7 @@ export interface BootstrapPayload {
 
 export interface PreferencesPayload {
   settings: AppSettings
+  teamAdminAllowed: boolean
   window: WindowPreferences
   panel: PanelPreferences
 }

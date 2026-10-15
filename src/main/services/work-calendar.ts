@@ -11,7 +11,7 @@ import {
   workDateKey,
   type HolidayCalendar
 } from '../../shared/work-time.ts'
-import type { WorkCalendarStatus } from '../../shared/activity.ts'
+import { ACTIVITY_CALENDAR_VERSION_PREFIX, type WorkCalendarStatus } from '../../shared/activity.ts'
 import { writeAtomicJson } from './activity-store.ts'
 
 export const HOLIDAY_SOURCE = 'https://raw.githubusercontent.com/NateScarlet/holiday-cn/master'
@@ -109,13 +109,18 @@ export class WorkCalendarService {
     const relevant = values
       .filter((item) => Math.abs(item.year - year) <= 1)
       .sort((left, right) => left.year - right.year)
-    const version = createHash('sha256').update(JSON.stringify(relevant)).digest('hex').slice(0, 16)
+    const isWorkday = isCalendarWorkday(date, values)
+    const windows = calendarWorkWindows(date, values)
+    const digest = createHash('sha256')
+      .update(JSON.stringify({ date, isWorkday, windows }))
+      .digest('hex')
+      .slice(0, 16)
     return {
       year,
       available,
-      isWorkday: isCalendarWorkday(date, values),
-      windows: calendarWorkWindows(date, values),
-      version,
+      isWorkday,
+      windows,
+      version: `${ACTIVITY_CALENDAR_VERSION_PREFIX}${digest}`,
       papers: [...new Set(relevant.flatMap((item) => item.papers))],
       lastCheckedAt: this.checkedAt,
       updating: this.pending !== undefined,

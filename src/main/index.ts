@@ -119,11 +119,14 @@ import { WindowsFullscreenMonitor, type FullscreenState } from './services/windo
 import { TeamActivityService } from './services/team-activity.ts'
 import { getPanelVisibility, subscribePanelVisibility } from './services/panel-visibility.ts'
 import { parseTeamIdentity } from '../shared/team-role.ts'
+import { isTeamAdmin } from './services/admin-device.ts'
 import {
   ACTIVITY_CHANNELS,
   MIN_IDLE_THRESHOLD_MINUTES,
   MAX_IDLE_THRESHOLD_MINUTES
 } from '../shared/activity.ts'
+
+const TEAM_ADMIN_DEVICE_CHECK_MS = 10_000
 
 const CHANNELS = {
   bootstrap: 'codex-status:bootstrap',
@@ -212,6 +215,8 @@ let islandFullscreenSuppressed = false
 let fullscreenAlertTimer: NodeJS.Timeout | undefined
 let lastIslandAttentionKey: string | undefined
 const lanService = new LanService()
+let lastTeamAdminAllowed = false
+let teamAdminAccessTimer: NodeJS.Timeout | undefined
 let teamActivity: TeamActivityService | undefined
 let teamActivityFailure: string | undefined
 let activityQuitPending = false
@@ -603,6 +608,8 @@ if (hasSingleInstanceLock) {
     createTray()
     watchCodexAuthFile()
     syncLanService()
+    teamAdminAccessTimer = setInterval(refreshTeamAdminAccess, TEAM_ADMIN_DEVICE_CHECK_MS)
+    teamAdminAccessTimer.unref()
     void refreshStatus()
 
     // models.dev 价格后台同步:注入花费计算,拉取失败自动回落内置价格表
@@ -662,6 +669,8 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', (event) => {
   isQuitting = true
+  if (teamAdminAccessTimer) clearInterval(teamAdminAccessTimer)
+  teamAdminAccessTimer = undefined
   if (teamActivity && !activityQuitReady) {
     event.preventDefault()
     if (activityQuitPending) return
@@ -706,6 +715,7 @@ function registerIpcHandlers(): void {
     const role = resolveRendererRole(event.sender.id)
     return {
       settings: persistedState.settings,
+      teamAdminAllowed: isTeamAdmin(persistedState.settings.teamGroup),
       window: persistedState.window,
       panel: persistedState.panel,
       snapshot: currentSnapshot,
@@ -1473,6 +1483,7 @@ function getLanSnapshot(): PeerSnapshot {
 // 团队口令非空时启动/重启 LAN service,空则停止
 function syncLanService(): void {
   const group = persistedState.settings.teamGroup ?? ''
+  lastTeamAdminAllowed = isTeamAdmin(group)
   const identity = parseTeamIdentity(group)
   lanService.stop()
   if (!identity.valid || !identity.group) {
@@ -1507,6 +1518,13 @@ function syncLanService(): void {
     }
   })
   syncTeamActivity()
+}
+
+function refreshTeamAdminAccess(): void {
+  if (isTeamAdmin(persistedState.settings.teamGroup) === lastTeamAdminAllowed) return
+  // 设备授权变化时重新握手，撤回对端缓存的管理员角色。
+  syncLanService()
+  broadcastPreferences()
 }
 
 function handleBroadcastMessage(message: BroadcastMessage): void {
@@ -1920,6 +1938,7 @@ function isSelectedDisplayFullscreen(): boolean {
 function createPreferencesPayload(): PreferencesPayload {
   return {
     settings: persistedState.settings,
+    teamAdminAllowed: isTeamAdmin(persistedState.settings.teamGroup),
     window: persistedState.window,
     panel: persistedState.panel
   }
@@ -2351,7 +2370,7 @@ function syncTeamActivity(): void {
     peerId: persistedState.peerId!,
     nickname: settings.teamNickname ?? '我',
     enabled: settings.activityEnabled && process.platform === 'win32',
-    admin: identity.role === 'admin',
+    admin: isTeamAdmin(settings.teamGroup),
     thresholdMinutes: settings.activityIdleThresholdMinutes
   })
 }
@@ -2364,8 +2383,7 @@ function requireActivityPanel(event: Electron.IpcMainInvokeEvent, admin = true):
     event.senderFrame !== event.sender.mainFrame
   )
     throw new Error('活动接口仅允许主面板调用')
-  const identity = parseTeamIdentity(persistedState.settings.teamGroup)
-  if (admin && (!identity.valid || !identity.group || identity.role !== 'admin'))
+  if (admin && !isTeamAdmin(persistedState.settings.teamGroup))
     throw new Error('仅团队管理员可以查看活动统计')
 }
 

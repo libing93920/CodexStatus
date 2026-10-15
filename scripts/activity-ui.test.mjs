@@ -21,7 +21,7 @@ const watchdog = setTimeout(() => {
   console.error('Activity UI watchdog timeout')
   window?.destroy()
   app.exit(1)
-}, 120_000)
+}, 150_000)
 
 async function cssTree(file, seen = new Set()) {
   if (seen.has(file)) return ''
@@ -142,6 +142,8 @@ async function verifyAppRoutesAndPolling() {
 
   await evaluate("activityFixture.setSettings({ teamGroup: '9527' })")
   await waitFor("document.querySelector('.activity') === null")
+  assert.equal(await evaluate("document.querySelector('.activity-tabs') === null"), true)
+  assert.equal(await evaluate('activityFixture.teamAdminAllowed'), true)
   const callsAfterRevocation = await evaluate('activityFixture.boardCalls')
   await delay(10_300)
   assert.equal(
@@ -157,15 +159,62 @@ async function verifyAppRoutesAndPolling() {
   console.log('PASS App routes: removed capture settings and revocation stops polling')
 }
 
-async function installMismatchFixture() {
-  await evaluate(`(() => {
-    const readBoard = window.codexStatus.getActivityBoard.bind(window.codexStatus)
-    window.codexStatus.getActivityBoard = async date => {
-      const board = await readBoard(date)
-      if (board.members[0]?.day) board.members[0].calendarMismatch = true
-      return board
-    }
-  })()`)
+async function verifyTeamAdminAuthorization() {
+  assert.equal(await evaluate("activityFixture.settings().teamGroup === '9527GM'"), true)
+
+  await evaluate(
+    'activityFixture.teamAdminAllowed = false; activityFixture.omitTeamAdminAllowedFromBootstrap = false'
+  )
+  let calls = await evaluate('activityFixture.boardCalls')
+  await mount('app-remount')
+  assert.equal(
+    await evaluate("document.querySelector('.activity-tabs, .activity') === null"),
+    true,
+    'bootstrap false keeps the admin team group but hides management'
+  )
+  assert.equal(await evaluate('activityFixture.boardCalls'), calls)
+
+  await evaluate(
+    'activityFixture.teamAdminAllowed = true; activityFixture.omitTeamAdminAllowedFromBootstrap = true'
+  )
+  calls = await evaluate('activityFixture.boardCalls')
+  await mount('app-remount')
+  assert.equal(
+    await evaluate("document.querySelector('.activity-tabs, .activity') === null"),
+    true,
+    'missing bootstrap authorization defaults to hidden'
+  )
+  assert.equal(await evaluate('activityFixture.boardCalls'), calls)
+
+  await evaluate(
+    'activityFixture.omitTeamAdminAllowedFromBootstrap = false; activityFixture.setTeamAdminAllowed(true)'
+  )
+  await waitFor("document.querySelector('.activity-tabs')")
+  await clickText('管理')
+  await waitFor("document.querySelector('.activity-member__toggle')")
+
+  await evaluate('activityFixture.setTeamAdminAllowed(false)')
+  await waitFor("document.querySelector('.activity-tabs, .activity') === null")
+  await delay(120)
+  calls = await evaluate('activityFixture.boardCalls')
+  await delay(10_300)
+  assert.equal(
+    await evaluate('activityFixture.boardCalls'),
+    calls,
+    'preferences false hides management and stops activity polling'
+  )
+
+  await evaluate('activityFixture.setTeamAdminAllowed(true)')
+  await waitFor("document.querySelector('.activity-tabs')")
+  await clickText('管理')
+  await waitFor("document.querySelector('.activity-member__toggle')")
+  console.log(
+    'PASS team admin authorization: bootstrap, missing field, preferences revoke and restore'
+  )
+}
+
+async function setActivityCoverageCase(coverageCase) {
+  await evaluate('activityFixture.coverageCase = ' + JSON.stringify(coverageCase))
 }
 
 async function verifyMemberSorting() {
@@ -210,8 +259,92 @@ async function verifyMemberSorting() {
   )
 }
 
+async function installMemberCountBoard(mode) {
+  await evaluate(`(() => {
+    activityFixture.memberCountOriginalFetch ??= window.codexStatus.getActivityBoard
+    const scenario = ${JSON.stringify(mode)}
+    window.codexStatus.getActivityBoard = async date => {
+      const board = await activityFixture.memberCountOriginalFetch(date)
+      const source = board.members[0]
+      const self = { ...source, id: 'admin-self', nickname: '管理员自己', isSelf: true }
+      if (scenario === 'self-only') {
+        board.members = [self]
+        return board
+      }
+      const visibleCount = date === '2026-10-12' ? 1 : 2
+      board.members = [
+        self,
+        ...Array.from({ length: visibleCount }, (_, index) => ({
+          ...source,
+          id: 'visible-' + (index + 1),
+          nickname: '可见成员 ' + (index + 1),
+          isSelf: false
+        }))
+      ]
+      return board
+    }
+  })()`)
+}
+
+async function verifyMemberCounts() {
+  await evaluate("activityFixture.setSettings({ locale: 'zh-CN' })")
+  await installMemberCountBoard('with-self')
+  await mount('member-count-chinese')
+  await waitFor("document.querySelector('.activity-members__heading .settings-section__title')")
+
+  let view = await readMemberCountView()
+  assert.equal(view.title, '成员（2）')
+  assert.deepEqual(view.names.slice().sort(), ['可见成员 1', '可见成员 2'])
+  assert.equal(view.names.length, 2)
+  assert.equal(view.empty, '')
+  await saveWarningScreenshot('activity-members-count.png')
+
+  await selectAndWait('周一', '2026-10-12')
+  await waitFor(
+    "document.querySelector('.activity-members__heading .settings-section__title')?.textContent.trim() === '成员（1）'"
+  )
+  view = await readMemberCountView()
+  assert.equal(view.title, '成员（1）')
+  assert.deepEqual(view.names, ['可见成员 1'])
+  assert.equal(view.names.length, 1)
+
+  await evaluate("activityFixture.setSettings({ locale: 'en-US' })")
+  await mount('member-count-english')
+  await waitFor("document.querySelector('.activity-members__heading .settings-section__title')")
+  view = await readMemberCountView()
+  assert.equal(view.title, 'Members (2)')
+  assert.equal(view.names.length, 2)
+  assert.equal(view.names.includes('管理员自己'), false)
+
+  await evaluate("activityFixture.setSettings({ locale: 'zh-CN' })")
+  await installMemberCountBoard('self-only')
+  await mount('member-count-self-only')
+  await waitFor("document.querySelector('.activity-members__heading .settings-section__title')")
+  view = await readMemberCountView()
+  assert.equal(view.title, '成员（0）')
+  assert.deepEqual(view.names, [])
+  assert.equal(view.empty, '该观察日尚未收到活动记录')
+
+  await evaluate(`(() => {
+    window.codexStatus.getActivityBoard = activityFixture.memberCountOriginalFetch
+    delete activityFixture.memberCountOriginalFetch
+  })()`)
+  console.log(
+    'PASS member count: self excluded, date-specific count, zero-state, Chinese and English'
+  )
+}
+
+async function readMemberCountView() {
+  return evaluate(`(() => ({
+    title: document.querySelector('.activity-members__heading .settings-section__title')?.textContent.trim(),
+    names: Array.from(document.querySelectorAll('.activity-members .activity-member__name'))
+      .map(element => element.textContent.trim()),
+    empty: document.querySelector('.activity-members .activity-empty')?.textContent.trim() ?? ''
+  }))()`)
+}
+
 async function verifyPanelDetailsAndTooltip() {
-  await installMismatchFixture()
+  await setActivityCoverageCase('detailed')
   await mount('standalone-initial')
   await waitFor("document.querySelector('.activity-member__toggle')")
   assert.equal(await evaluate("document.querySelector('.activity-timeline') === null"), true)
@@ -246,20 +379,38 @@ async function verifyPanelDetailsAndTooltip() {
     await evaluate("document.querySelector('.activity-timeline [role=tooltip]') === null"),
     true
   )
-  const warnings = await evaluate(
-    "Array.from(document.querySelectorAll('.activity-warning')).map(item => item.textContent)"
-  )
+  const warning = await evaluate(`(() => {
+    const item = document.querySelector('.activity-coverage-warning')
+    return { text: item?.textContent.trim() ?? '', count: document.querySelectorAll('.activity-coverage-warning').length }
+  })()`)
+  assert.equal(warning.count, 1)
+  assert.ok(warning.text.includes('无法确认'))
+  assert.ok(warning.text.includes('未计入未活动'))
   assert.equal(
-    warnings.some((text) => text.includes('记录不完整')),
+    await evaluate(
+      "document.querySelector('.activity-incomplete, .activity-calendar-comparison, .activity-unknown-range, .activity-diagnostic-point') === null"
+    ),
     true
   )
+  const detailText = await evaluate("document.querySelector('.activity-detail')?.textContent ?? ''")
+  for (const oldDetail of [
+    '记录不完整',
+    '采样间隔过长',
+    '系统输入状态不可用',
+    '系统时间发生变化',
+    '读取系统输入状态失败',
+    '09:55:00',
+    '10:45:00'
+  ]) {
+    assert.equal(
+      detailText.includes(oldDetail),
+      false,
+      `Old diagnostic detail rendered: ${oldDetail}`
+    )
+  }
   assert.equal(
-    warnings.some((text) => text.includes('日历版本不同')),
-    true
-  )
-  assert.equal(
-    warnings.some((text) => text.includes('活动时段口径不一致')),
-    false
+    await evaluate("document.querySelector('.activity-member__inactive')?.textContent.trim()"),
+    '1h:19m:25s'
   )
   assert.deepEqual(
     await evaluate(
@@ -278,9 +429,150 @@ async function verifyPanelDetailsAndTooltip() {
     details.slice(0, 2).map((detail) => detail.title),
     ['活动 · 08:30:00 - 09:00:00 · 30 分 0 秒', '未活动 · 09:00:00 - 09:30:00 · 30 分 0 秒']
   )
+  await saveWarningScreenshot('activity-coverage-warning-detailed.png')
   console.log(
     'PASS members: collapsed by default, unique regions, two activity states, native tooltip text and keyboard labels'
   )
+}
+
+async function verifyActivityCoverageWarnings() {
+  await evaluate("activityFixture.setNow('2026-10-13T14:30:00+08:00')")
+  let syntheticGap
+  let pointOnly
+  let lunchGap
+  for (const coverageCase of [
+    'summary-gap',
+    'complete-incomplete',
+    'outside-window-unknown',
+    'lunch-unknown',
+    'future-unknown',
+    'point-only-diagnostic'
+  ]) {
+    await setActivityCoverageCase(coverageCase)
+    await mount('coverage-' + coverageCase)
+    await waitFor("document.querySelector('.activity-member__toggle')")
+    await clickSelector('.activity-member__toggle')
+    await waitFor("document.querySelector('.activity-timeline')")
+    assert.equal(
+      await evaluate("document.querySelector('.activity-coverage-warning') === null"),
+      true,
+      coverageCase + ': no warning for out-of-scope or synthesized unknown time'
+    )
+    assert.equal(
+      await evaluate("document.querySelector('.activity-incomplete') === null"),
+      true,
+      coverageCase + ': incomplete flag alone must not render a warning'
+    )
+    if (coverageCase === 'summary-gap') {
+      syntheticGap = await evaluate(`(() => {
+        const day = activityFixture.lastBoard?.members[0]?.day
+        const summary = activityFixture.lastBoard?.members[0]?.summary
+        return {
+          incomplete: day?.incomplete,
+          rawUnknown: day?.intervals.some(interval => interval.kind === 'unknown'),
+          summaryUnknown: summary?.timeline.some(interval => interval.kind === 'unknown'),
+          locked: day?.intervals.some(interval => interval.kind === 'locked'),
+          suspended: day?.intervals.some(interval => interval.kind === 'suspended'),
+          inactive: document.querySelector('.activity-member__inactive')?.textContent.trim()
+        }
+      })()`)
+    }
+    if (coverageCase === 'lunch-unknown') {
+      lunchGap = await evaluate(`(() => {
+        const board = activityFixture.lastBoard
+        return {
+          unknown: board.members[0].day.intervals.filter(interval => interval.kind === 'unknown'),
+          windows: board.calendar.windows
+        }
+      })()`)
+    }
+    if (coverageCase === 'point-only-diagnostic') {
+      pointOnly = await evaluate(`(() => {
+        const day = activityFixture.lastBoard.members[0].day
+        return {
+          incomplete: day.incomplete,
+          rawUnknown: day.intervals.some(interval => interval.kind === 'unknown'),
+          diagnosticCodes: day.diagnostics?.map(diagnostic => diagnostic.code) ?? []
+        }
+      })()`)
+    }
+  }
+  assert.equal(syntheticGap.incomplete, true)
+  assert.equal(syntheticGap.rawUnknown, false)
+  assert.equal(syntheticGap.summaryUnknown, true)
+  assert.equal(syntheticGap.locked, true)
+  assert.equal(syntheticGap.suspended, true)
+  assert.equal(syntheticGap.inactive, '1h:19m:25s')
+  assert.equal(lunchGap.unknown.length, 1)
+  assert.equal(lunchGap.unknown[0].start, Date.parse('2026-10-13T12:30:00+08:00'))
+  assert.equal(lunchGap.unknown[0].end, Date.parse('2026-10-13T13:00:00+08:00'))
+  assert.ok(
+    lunchGap.windows.every(
+      (window) => window.end <= lunchGap.unknown[0].start || window.start >= lunchGap.unknown[0].end
+    )
+  )
+  assert.equal(pointOnly.incomplete, true)
+  assert.equal(pointOnly.rawUnknown, false)
+  assert.deepEqual(pointOnly.diagnosticCodes, ['clock-change'])
+
+  await setActivityCoverageCase('two-second-unknown')
+  await mount('coverage-two-second-unknown')
+  await waitFor("document.querySelector('.activity-member__toggle')")
+  await clickSelector('.activity-member__toggle')
+  await waitFor("document.querySelector('.activity-coverage-warning')")
+  assert.equal(
+    await evaluate("document.querySelector('.activity-coverage-warning')?.textContent.trim()"),
+    '有 2 秒 无法确认，未计入未活动。'
+  )
+  assert.equal(
+    await evaluate(
+      "document.querySelector('.activity-coverage-warning')?.classList.contains('activity-warning')"
+    ),
+    true
+  )
+  await saveWarningScreenshot('activity-coverage-warning-two-seconds.png')
+
+  await evaluate("activityFixture.setNow('2026-10-13T08:30:02+08:00')")
+  await setActivityCoverageCase('bounded-two-second')
+  await mount('coverage-bounded-two-second')
+  await waitFor("document.querySelector('.activity-member__toggle')")
+  await clickSelector('.activity-member__toggle')
+  await waitFor("document.querySelector('.activity-coverage-warning')")
+  assert.equal(
+    await evaluate("document.querySelector('.activity-coverage-warning')?.textContent.trim()"),
+    '有 2 秒 无法确认，未计入未活动。',
+    'intersection uses both the calendar window and generatedAt cutoff'
+  )
+
+  await evaluate("activityFixture.setNow('2026-10-13T14:30:00+08:00')")
+  await evaluate("activityFixture.setSettings({ locale: 'en-US' })")
+  await setActivityCoverageCase('two-second-unknown')
+  await mount('coverage-two-second-english')
+  await waitFor("document.querySelector('.activity-member__toggle')")
+  await clickSelector('.activity-member__toggle')
+  await waitFor("document.querySelector('.activity-coverage-warning')")
+  assert.equal(
+    await evaluate("document.querySelector('.activity-coverage-warning')?.textContent.trim()"),
+    'Unconfirmed: 2 s; excluded from inactive time.'
+  )
+  assert.equal(
+    await evaluate(
+      "document.querySelector('.activity-coverage-warning')?.classList.contains('activity-warning')"
+    ),
+    true
+  )
+  await evaluate("activityFixture.setSettings({ locale: 'zh-CN' })")
+  console.log(
+    'PASS coverage warnings: raw unknown intersections, cutoff, translations, and excluded states'
+  )
+}
+
+async function saveWarningScreenshot(name) {
+  const screenshot = await new Promise((resolve) => {
+    window.webContents.once('paint', (_event, _dirty, frame) => resolve(frame))
+    window.webContents.invalidate()
+  })
+  await writeFile(join(directory, name), screenshot.toPNG())
 }
 
 async function clickWeekday(label) {
@@ -534,7 +826,7 @@ async function verifyHiddenBoardCalls() {
 async function verifyThemeConsistency(themes) {
   await evaluate("activityFixture.setNow('2026-10-13T14:30:00+08:00')")
   await evaluate(
-    'activityFixture.empty = false; activityFixture.noDay = false; activityFixture.missingCalendar = false; activityFixture.boardError = ""'
+    'activityFixture.empty = false; activityFixture.noDay = false; activityFixture.missingCalendar = false; activityFixture.boardError = ""; activityFixture.coverageCase = "two-second-unknown"'
   )
   await evaluate('activityFixture.setSettings({ activityIdleThresholdMinutes: 5 })')
   await mount('app')
@@ -551,7 +843,8 @@ async function verifyThemeConsistency(themes) {
       '<button class="detail-row window-keeper-row is-expanded"><span class="detail-row__label">测试成员甲</span><span class="detail-row__value-group"><span class="detail-row__hint">1h:19m:25s</span></span></button>' +
       '<div class="segmented"><button>周一</button><button class="is-active">周二</button><button>周三</button><button>周四</button><button>周五</button><button>周六</button><button>周日</button></div>' +
       '<div class="team-mode-switch"><div class="segmented"><button>排行榜</button><button class="is-active">管理</button></div></div>' +
-      '<div class="quota-card__progress"></div>'
+      '<div class="quota-card__progress"></div>' +
+      '<p class="activity-warning activity-theme-warning">无法确认</p>'
     document.querySelector('.panel').append(reference)
   })()`)
 
@@ -567,7 +860,12 @@ async function verifyThemeConsistency(themes) {
             JSON.stringify(locale) +
             ' })'
         )
-        await delay(220)
+        await evaluate(
+          'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))'
+        )
+        await evaluate(
+          "Promise.all(document.querySelector('.panel').getAnimations().map(animation => animation.finished))"
+        )
         await checkThemeAtSize(theme, locale, width, measurements)
       }
     }
@@ -579,12 +877,27 @@ async function verifyThemeConsistency(themes) {
 async function checkThemeAtSize(theme, locale, width, measurements) {
   const result = await evaluate(`(() => {
     const content = document.querySelector('.panel__content')
-    const overflow = Array.from(document.querySelectorAll('.activity *')).filter(element => {
+    const overflowElements = Array.from(document.querySelectorAll('.activity *')).filter(element => {
       if (!element.getClientRects().length) return false
       const rect = element.getBoundingClientRect(), bounds = content.getBoundingClientRect()
       return rect.left < bounds.left - 1 || rect.right > bounds.right + 1 ||
         (element.scrollWidth > element.clientWidth + 2 && getComputedStyle(element).display !== 'inline' && getComputedStyle(element).textOverflow !== 'ellipsis')
-    }).map(element => element.className || element.tagName)
+    })
+    const overflow = overflowElements.map(element => element.className || element.tagName)
+    const overflowDetails = overflowElements.map(element => ({
+      className: element.className || element.tagName,
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      left: element.getBoundingClientRect().left,
+      right: element.getBoundingClientRect().right,
+      children: Array.from(element.children).map(child => ({
+        className: child.className || child.tagName,
+        clientWidth: child.clientWidth,
+        scrollWidth: child.scrollWidth,
+        left: child.getBoundingClientRect().left,
+        right: child.getBoundingClientRect().right
+      }))
+    }))
     const tickOverlap = Array.from(document.querySelectorAll('.activity-timeline__axis')).some(axis => {
       const labels = Array.from(axis.children).map(label => label.getBoundingClientRect()).sort((a,b) => a.left-b.left)
       return labels.some((label,index) => index > 0 && label.left < labels[index-1].right + 1)
@@ -604,6 +917,7 @@ async function checkThemeAtSize(theme, locale, width, measurements) {
     const memberRow = document.querySelector('.activity-member__toggle')
     return {
       overflow,
+      overflowDetails,
       hasThresholdSettings: !!document.querySelector('.activity-advanced, .activity-threshold'),
       tickOverlap,
       nameLines: Math.max(...Array.from(document.querySelectorAll('.activity-member__name'))
@@ -613,6 +927,8 @@ async function checkThemeAtSize(theme, locale, width, measurements) {
       memberPadding: getComputedStyle(memberRow).paddingTop,
       memberMinHeight: getComputedStyle(memberRow).minHeight,
       durationWidths: Array.from(document.querySelectorAll('.activity-member__inactive')).map(element => element.offsetWidth),
+      memberCountTitle: document.querySelector('.activity-members__heading .settings-section__title')?.textContent.trim(),
+      memberCountRows: document.querySelectorAll('.activity-members .activity-member').length,
       segments: document.querySelectorAll('.activity-segment').length,
       inactiveFills: Array.from(document.querySelectorAll('.activity-pattern--inactive'))
         .map(element => getComputedStyle(element).backgroundImage),
@@ -624,6 +940,9 @@ async function checkThemeAtSize(theme, locale, width, measurements) {
       referenceName: pick(reference.querySelector('.detail-row__label'), ['fontWeight', 'color', 'fontFamily']),
       value: pick(document.querySelector('.activity-member__inactive'), ['fontWeight', 'fontSize', 'color', 'fontFamily']),
       referenceValue: pick(reference.querySelector('.detail-row__hint'), ['fontWeight', 'fontSize', 'color', 'fontFamily']),
+      warning: pick(document.querySelector('.activity-coverage-warning'), ['color', 'fontSize']),
+      referenceWarning: pick(reference.querySelector('.activity-theme-warning'), ['color', 'fontSize']),
+      coverageText: document.querySelector('.activity-coverage-warning')?.textContent.trim() ?? '',
       band: pick(document.querySelector('.activity-timeline__band'), cardNames),
       referenceBand: pick(reference.querySelector('.quota-card__progress'), cardNames),
       selected: pick(document.querySelector('.activity-week__day.is-active'), selectedNames),
@@ -635,9 +954,26 @@ async function checkThemeAtSize(theme, locale, width, measurements) {
     }
   })()`)
   const label = theme + '/' + locale + '/' + width
-  assert.deepEqual(result.overflow, [], label + ': horizontal overflow')
+  assert.deepEqual(
+    result.overflow,
+    [],
+    label + ': horizontal overflow ' + JSON.stringify(result.overflowDetails)
+  )
   assert.equal(result.hasThresholdSettings, false, label + ': threshold settings must be removed')
   assert.equal(result.tickOverlap, false, label + ': timeline labels overlap')
+  assert.equal(
+    result.memberCountTitle,
+    locale === 'zh-CN' ? '成员（3）' : 'Members (3)',
+    label + ': member count title must use the selected language'
+  )
+  assert.equal(result.memberCountRows, 3, label + ': count must match the displayed member rows')
+  assert.equal(
+    result.coverageText,
+    locale === 'zh-CN'
+      ? '有 2 秒 无法确认，未计入未活动。'
+      : 'Unconfirmed: 2 s; excluded from inactive time.',
+    label + ': coverage warning must use the selected language'
+  )
   assert.ok(result.nameLines <= 1.2, label + ': duration must not squeeze the member name')
   assert.equal(
     result.fullNames,
@@ -678,6 +1014,7 @@ async function checkThemeAtSize(theme, locale, width, measurements) {
   )
   assert.deepEqual(result.name, result.referenceName, label + ': member name theme differs')
   assert.deepEqual(result.value, result.referenceValue, label + ': inactive duration theme differs')
+  assert.deepEqual(result.warning, result.referenceWarning, label + ': warning theme differs')
   assert.deepEqual(
     result.tabs,
     result.referenceTabs,
@@ -804,8 +1141,11 @@ async function run() {
   await verifyActivityWeek()
   await verifyFixedThreshold()
   await verifyAppRoutesAndPolling()
+  await verifyTeamAdminAuthorization()
   await verifyMemberSorting()
+  await verifyMemberCounts()
   await verifyPanelDetailsAndTooltip()
+  await verifyActivityCoverageWarnings()
   await verifyDateRaceAndErrors()
   await verifyBoardStates()
   await verifyWeekendAndAdjustedWorkday()

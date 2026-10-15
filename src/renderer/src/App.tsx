@@ -100,6 +100,7 @@ function App(): React.JSX.Element {
   // API Key 模式胶囊:今日 token 用量(取 1d 窗口,算缓存命中率与今日用量)
   const [capsuleToday, setCapsuleToday] = useState<TokenUsageOverview | undefined>(undefined)
   const [settings, setSettings] = useState<AppSettings>({ ...DEFAULT_SETTINGS })
+  const [teamAdminAllowed, setTeamAdminAllowed] = useState(false)
   const [islandSnapshot, setIslandSnapshot] = useState<IslandSnapshot>(createEmptyIslandSnapshot)
   const [windowPreferences, setWindowPreferences] = useState<WindowPreferences>({
     ...DEFAULT_WINDOW_PREFERENCES
@@ -213,6 +214,7 @@ function App(): React.JSX.Element {
 
         setSnapshot(payload.snapshot)
         setSettings(payload.settings)
+        setTeamAdminAllowed(payload.teamAdminAllowed === true)
         setIslandSnapshot(payload.island)
         setWindowPreferences(payload.window)
         setWindowRole(payload.role)
@@ -248,6 +250,7 @@ function App(): React.JSX.Element {
 
     const disposePreferences = window.codexStatus.onPreferencesUpdated((payload) => {
       setSettings(payload.settings)
+      setTeamAdminAllowed(payload.teamAdminAllowed === true)
       setWindowPreferences(payload.window)
       setCustomRefreshInput(String(payload.settings.refreshIntervalSeconds))
       setTeamNicknameInput(payload.settings.teamNickname ?? '')
@@ -431,7 +434,8 @@ function App(): React.JSX.Element {
 
   const copy = COPY[settings.locale]
   const teamIdentity = parseTeamIdentity(settings.teamGroup)
-  const isTeamAdmin = teamIdentity.valid && !!teamIdentity.group && teamIdentity.role === 'admin'
+  const isTeamAdmin =
+    teamAdminAllowed && teamIdentity.valid && !!teamIdentity.group && teamIdentity.role === 'admin'
   const showActivityManagement = isTeamAdmin && teamView === 'management'
   const activityLabels = activityCopy(settings.locale)
   const canRefresh = snapshot.canRefresh !== false
@@ -1396,6 +1400,7 @@ function App(): React.JSX.Element {
     try {
       const payload = await window.codexStatus.updateSettings(patch)
       setSettings(payload.settings)
+      setTeamAdminAllowed(payload.teamAdminAllowed === true)
     } catch {
       setSettings(previousSettings)
     }

@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import type { ActivityBoard, ActivityMember } from '../../../shared/activity'
 import type { AppSettings } from '../../../shared/capsule'
 import { currentWeekDates, workDateKey } from '../../../shared/work-time'
+import { ActivityWarnings } from './ActivityWarnings'
 import { ActivityLegend, ActivityTimeline } from './ActivityTimeline'
 import { activityCopy, type ActivityCopy } from './copy'
 import {
@@ -97,14 +98,15 @@ function ActivityMembers({
   if (!board.calendar.windows.length) {
     return <p className="settings-section activity-empty">{copy.restday}</p>
   }
+  const members = board.members.filter((member) => !member.isSelf)
   return (
     <section className="settings-section activity-members" aria-label={copy.members}>
       <div className="activity-members__heading">
-        <h2 className="settings-section__title">{copy.members}</h2>
+        <h2 className="settings-section__title">{copy.membersCount(members.length)}</h2>
         <ActivityLegend copy={copy} />
       </div>
-      {!board.members.length ? <p className="activity-empty">{copy.empty}</p> : null}
-      {sortActivityMembersByInactiveTime(board.members).map((member) => (
+      {!members.length ? <p className="activity-empty">{copy.empty}</p> : null}
+      {sortActivityMembersByInactiveTime(members).map((member) => (
         <ActivityMemberCard key={member.id} member={member} board={board} copy={copy} />
       ))}
     </section>
@@ -187,8 +189,7 @@ function ActivityMemberDetail({
       ) : (
         <p className="activity-empty">{copy.noDay}</p>
       )}
-      {member.calendarMismatch ? <p className="activity-warning">{copy.mismatch}</p> : null}
-      {member.day?.incomplete ? <p className="activity-warning">{copy.incomplete}</p> : null}
+      <ActivityWarnings member={member} board={board} copy={copy} />
     </>
   )
 }

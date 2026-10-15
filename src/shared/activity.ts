@@ -16,6 +16,14 @@ export const ACTIVITY_SYNC_MS = 60_000
 export const ACTIVITY_STALE_MS = 35_000
 export const ACTIVITY_MAX_MESSAGE_BYTES = 2 * 1024 * 1024
 export const ACTIVITY_MAX_INTERVALS = 20_000
+export const ACTIVITY_MAX_DIAGNOSTICS = 1_000
+export const ACTIVITY_CALENDAR_VERSION_PREFIX = 'workday-v1:'
+export const ACTIVITY_DIAGNOSTIC_CODES = [
+  'sample-gap',
+  'clock-change',
+  'input-read-failed',
+  'input-unavailable'
+] as const
 export const DEFAULT_IDLE_THRESHOLD_MINUTES = 5
 export const MIN_IDLE_THRESHOLD_MINUTES = 1
 export const MAX_IDLE_THRESHOLD_MINUTES = 60
@@ -31,6 +39,15 @@ export interface ActivityInterval extends WorkWindow {
   kind: ActivityKind
 }
 
+export type ActivityDiagnosticCode = (typeof ACTIVITY_DIAGNOSTIC_CODES)[number]
+export interface ActivityDiagnostic {
+  code: ActivityDiagnosticCode
+  at: number
+  start?: number
+  end?: number
+}
+export type ActivityCalendarComparison = 'matching' | 'different' | 'unverifiable'
+
 export interface ActivityDay {
   version: number
   team: string
@@ -44,6 +61,7 @@ export interface ActivityDay {
   lastInputAt?: number
   intervals: ActivityInterval[]
   incomplete: boolean
+  diagnostics?: ActivityDiagnostic[]
 }
 
 export interface ActivityLive {
@@ -94,7 +112,7 @@ export interface ActivityMember {
   live?: ActivityLive
   summary?: ActivitySummary
   receivedAt?: number
-  calendarMismatch?: boolean
+  calendarComparison?: ActivityCalendarComparison
 }
 
 export interface ActivityBoard {
@@ -104,6 +122,17 @@ export interface ActivityBoard {
   calendar: WorkCalendarStatus
   members: ActivityMember[]
   issues: string[]
+}
+
+export function compareActivityCalendars(
+  recorded: string,
+  current: string
+): ActivityCalendarComparison {
+  const isDaily = (version: string): boolean =>
+    version.startsWith(ACTIVITY_CALENDAR_VERSION_PREFIX) &&
+    /^[a-f0-9]{16}$/.test(version.slice(ACTIVITY_CALENDAR_VERSION_PREFIX.length))
+  if (!isDaily(recorded) || !isDaily(current)) return 'unverifiable'
+  return recorded === current ? 'matching' : 'different'
 }
 
 export function normalizeIdleThreshold(value: unknown): number {
@@ -231,7 +260,33 @@ export function validateActivityDay(value: unknown, now = Date.now()): value is 
       return false
     cursor = interval.end
   }
-  return true
+  return validActivityDiagnostics(day)
+}
+
+function validActivityDiagnostics(day: ActivityDay): boolean {
+  if (day.diagnostics === undefined) return true
+  if (!Array.isArray(day.diagnostics) || day.diagnostics.length > ACTIVITY_MAX_DIAGNOSTICS)
+    return false
+  if (day.diagnostics.length && !day.incomplete) return false
+  const start = workDayStart(day.date)
+  return day.diagnostics.every((diagnostic) => {
+    if (!diagnostic || typeof diagnostic !== 'object' || Array.isArray(diagnostic)) return false
+    if (
+      !ACTIVITY_DIAGNOSTIC_CODES.includes(diagnostic.code) ||
+      !Number.isFinite(diagnostic.at) ||
+      diagnostic.at < start ||
+      diagnostic.at > day.observedAt
+    )
+      return false
+    if (diagnostic.start === undefined && diagnostic.end === undefined) return true
+    return (
+      Number.isFinite(diagnostic.start) &&
+      Number.isFinite(diagnostic.end) &&
+      diagnostic.start! >= start &&
+      diagnostic.end! > diagnostic.start! &&
+      diagnostic.end! <= day.observedAt
+    )
+  })
 }
 
 function validActivityInterval(value: unknown): value is ActivityInterval {

@@ -23,6 +23,7 @@ import {
   activityDisplayIntervals,
   formatCompactActivityDuration,
   inactiveActivityMs,
+  unconfirmedActivityMs,
   sortActivityMembersByInactiveTime
 } from '../src/renderer/src/activity/model.ts'
 
@@ -146,6 +147,51 @@ function idleUntil(recorder, start, minutes, windows, initialIdle = 0) {
   for (let seconds = 5; seconds <= minutes * 60; seconds += 5)
     sample(recorder, start + seconds * 1000, initialIdle + seconds, windows)
 }
+
+test('未活动提示只累计已观测未知区间与工作窗交集，并按看板时间截断', () => {
+  const windows = seasonalWorkWindows(DATE)
+  const interval = (start, end, kind) => ({ start, end, kind })
+  const report = (intervals, observedAt = NOW, incomplete = true) => ({
+    ...day(),
+    observedAt,
+    incomplete,
+    intervals
+  })
+
+  assert.equal(
+    unconfirmedActivityMs(
+      report([interval(START, START + 2_000, 'unknown')]),
+      windows,
+      START + 2_000
+    ),
+    2_000
+  )
+
+  const acrossLunch = interval(
+    Date.parse(`${DATE}T11:30:00+08:00`),
+    Date.parse(`${DATE}T14:00:00+08:00`),
+    'unknown'
+  )
+  assert.equal(unconfirmedActivityMs(report([acrossLunch]), windows, NOW), 60 * MINUTE_MS)
+
+  const future = interval(START, START + 10_000, 'unknown')
+  assert.equal(unconfirmedActivityMs(report([future]), windows, START + 2_000), 2_000)
+  assert.equal(
+    unconfirmedActivityMs(
+      report([interval(START + 5_000, START + 10_000, 'unknown')]),
+      windows,
+      START + 2_000
+    ),
+    0
+  )
+
+  const incompleteWithoutUnknown = report([], NOW)
+  assert.equal(incompleteWithoutUnknown.incomplete, true)
+  assert.equal(unconfirmedActivityMs(incompleteWithoutUnknown, windows, NOW), 0)
+  assert.ok(summarizeActivity(incompleteWithoutUnknown, windows, 5, NOW).unknownMs > 0)
+  assert.equal(unconfirmedActivityMs(undefined, windows, NOW), 0)
+  assert.equal(unconfirmedActivityMs(report([future]), [], NOW), 0)
+})
 
 test('GM只识别大写末尾，成员与管理员基础口令相同', () => {
   assert.deepEqual(parseTeamIdentity(' 9527GM '), { group: '9527', role: 'admin', valid: true })

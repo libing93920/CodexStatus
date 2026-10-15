@@ -2,6 +2,7 @@ import path from 'node:path'
 import {
   ACTIVITY_LIVE_MS,
   ACTIVITY_SYNC_MS,
+  compareActivityCalendars,
   normalizeIdleThreshold,
   summarizeActivity,
   validateActivityMessage,
@@ -256,7 +257,7 @@ export class TeamActivityService {
         return
       if (this.store.getRevision(config.team, config.peerId, date) <= revision) continue
       const day = this.store.get(config.team, config.peerId, date)!.day
-      await this.store.save(day)
+      await this.store.save(day, Math.max(this.now(), day.observedAt))
       if (!this.config?.enabled || this.config.team !== config.team) return
       this.options.transport.sendActivity(peerId, { type: 'activity-day', day })
     }
@@ -271,7 +272,10 @@ export class TeamActivityService {
           this.config!.thresholdMinutes,
           this.now()
         )
-        member.calendarMismatch = member.day.calendarVersion !== calendar.version
+        member.calendarComparison = compareActivityCalendars(
+          member.day.calendarVersion,
+          calendar.version
+        )
       }
       const remote = this.livePeers.get(member.id)
       const live = member.isSelf ? this.monitor.getLive() : remote?.live

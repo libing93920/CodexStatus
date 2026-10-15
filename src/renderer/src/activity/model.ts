@@ -1,5 +1,10 @@
 import { MINUTE_MS, WORK_TIMEZONE, type WorkWindow } from '../../../shared/work-time.ts'
-import type { ActivityInterval, ActivityMember } from '../../../shared/activity'
+import {
+  clipActivityIntervals,
+  type ActivityDay,
+  type ActivityInterval,
+  type ActivityMember
+} from '../../../shared/activity.ts'
 import type { ActivityCopy } from './copy'
 
 const SECONDS_PER_MINUTE = 60
@@ -37,6 +42,20 @@ export function activityDisplayIntervals(timeline: ActivityInterval[]): Activity
     else result.push({ start: interval.start, end: interval.end, kind })
   }
   return result
+}
+
+export function unconfirmedActivityMs(
+  day: ActivityDay | undefined,
+  windows: WorkWindow[],
+  now: number
+): number {
+  if (!day) return 0
+  // 只提示已记录的未知区间；未启动或尚未同步的空白不能冒充采样故障。
+  const intervals = day.intervals.filter((interval) => interval.kind === 'unknown')
+  return clipActivityIntervals(intervals, windows).reduce(
+    (total, interval) => total + Math.max(0, Math.min(interval.end, now) - interval.start),
+    0
+  )
 }
 
 export function formatActivityTime(time?: number): string {

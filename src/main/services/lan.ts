@@ -7,6 +7,7 @@ import { LanDiscovery, type LanAdvertisement } from './lan-discovery.ts'
 import { formatDiagError, logDiag } from './diag-log.ts'
 import { ActivityConnectionAuth, type ActivityAuthHello } from './lan-activity-auth.ts'
 import { validatePeerSnapshot } from './lan-peer-snapshot.ts'
+import { isAdminDevice, isTeamAdmin } from './admin-device.ts'
 import type {
   AgentId,
   AuthMode,
@@ -132,6 +133,7 @@ interface DiscoveredService {
  * 组口令经 SHA-256 哈希比对(只传哈希不传明文);不同口令的 peer 连上即断开。
  */
 export class LanService {
+  private readonly adminDeviceAllowed: () => boolean
   private httpServer: Server | undefined
   private wss: WebSocketServer | undefined
   private discovery: LanDiscovery | undefined
@@ -156,6 +158,10 @@ export class LanService {
   private lastBroadcastAt = 0
   private lifecycleGeneration = 0
   private readonly reconnectTimers = new Map<string, NodeJS.Timeout>()
+
+  constructor(adminDeviceAllowed = isAdminDevice) {
+    this.adminDeviceAllowed = adminDeviceAllowed
+  }
 
   start(options: StartOptions): void {
     if (this.options) {
@@ -304,7 +310,7 @@ export class LanService {
       !this.activityAuth.isVerified(socket, peerId)
     )
       return false
-    const localAdmin = parseTeamIdentity(this.options.group).role === 'admin'
+    const localAdmin = isTeamAdmin(this.options.group, this.adminDeviceAllowed())
     if (
       !canExchangeActivity(message.type, localAdmin, capability.role === 'admin', 'send') ||
       !validateActivityMessage(message)
@@ -337,7 +343,7 @@ export class LanService {
       !this.activityAuth.isVerified(socket, peerId)
     )
       return
-    const localAdmin = parseTeamIdentity(this.options.group).role === 'admin'
+    const localAdmin = isTeamAdmin(this.options.group, this.adminDeviceAllowed())
     if (!canExchangeActivity(message.type, localAdmin, capability.role === 'admin', 'receive'))
       return
     if (message.type === 'activity-day' && message.day.peerId !== peerId) return
@@ -561,7 +567,7 @@ export class LanService {
       peerId: this.options.peerId,
       nickname: this.options.nickname,
       groupHash: this.groupHash,
-      role: parseTeamIdentity(this.options.group).role,
+      role: isTeamAdmin(this.options.group, this.adminDeviceAllowed()) ? 'admin' : 'member',
       activityVersion: ACTIVITY_PROTOCOL_VERSION,
       activityEnabled: this.options.activityEnabled === true,
       ...(includeSnapshot ? { snapshot: this.options.getSnapshot() } : {})

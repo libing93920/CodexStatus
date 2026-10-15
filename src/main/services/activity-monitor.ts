@@ -79,6 +79,11 @@ export class ActivityMonitor {
     const window = status.windows.find((item) => now >= item.start && now < item.end)
     if (!window || !status.available) {
       this.finishRecorder(now)
+      const stored = this.options.store.get(config.team, config.peerId, date)?.day
+      if (stored && stored.observedAt > now) {
+        this.recorder = new ActivityRecorder(stored)
+        this.finishRecorder(now)
+      }
       this.liveState = {
         state: status.available ? 'outside-work' : 'calendar-unavailable',
         enabled: true,
@@ -148,22 +153,24 @@ export class ActivityMonitor {
       this.recorder = new ActivityRecorder(stored ?? this.createDay(date, now, calendarVersion))
     }
     const status = this.options.calendar.getStatus(date)
-    let input: Pick<ActivitySample, 'idleSeconds' | 'kind'>
+    let input: Pick<ActivitySample, 'idleSeconds' | 'kind' | 'inputIssue'>
     try {
       input = this.override ? { kind: this.override, idleSeconds: 0 } : this.options.readInput()
     } catch {
-      input = { kind: 'unknown', idleSeconds: 0 }
+      input = { kind: 'unknown', idleSeconds: 0, inputIssue: 'input-read-failed' }
     }
-    this.recorder.setMetadata(config.nickname.slice(0, 100), calendarVersion)
+    this.recorder.setNickname(config.nickname.slice(0, 100))
     const observed = this.recorder.observe(
       { ...input, now, monotonic: (this.options.monotonic ?? (() => performance.now()))() },
       status.windows
     )
-    this.options.store.stage(observed)
+    this.options.store.stage(observed, this.validationTime(observed))
     this.liveState = this.recorder.live()
-    if (now - this.lastSavedAt >= ACTIVITY_CHECKPOINT_MS) {
+    if (now < this.lastSavedAt || now - this.lastSavedAt >= ACTIVITY_CHECKPOINT_MS) {
       this.lastSavedAt = now
-      void this.options.store.save(observed).catch((error: unknown) => this.report(error))
+      void this.options.store
+        .save(observed, this.validationTime(observed))
+        .catch((error: unknown) => this.report(error))
     }
   }
 
@@ -188,8 +195,10 @@ export class ActivityMonitor {
     const day = this.recorder.finish(now)
     this.recorder = undefined
     try {
-      this.options.store.stage(day)
-      void this.options.store.save(day).catch((error: unknown) => this.report(error))
+      this.options.store.stage(day, this.validationTime(day))
+      void this.options.store
+        .save(day, this.validationTime(day))
+        .catch((error: unknown) => this.report(error))
     } catch (error) {
       this.report(error)
     }
@@ -198,7 +207,10 @@ export class ActivityMonitor {
   private async persistCurrent(now = this.now()): Promise<void> {
     if (!this.config) return
     const day = this.options.store.get(this.config.team, this.config.peerId, workDateKey(now))?.day
-    if (day) await this.options.store.save(day).catch((error: unknown) => this.report(error))
+    if (day)
+      await this.options.store
+        .save(day, this.validationTime(day))
+        .catch((error: unknown) => this.report(error))
   }
 
   private async recordConfirmedSleep(start: number, end: number): Promise<void> {
@@ -222,10 +234,19 @@ export class ActivityMonitor {
       }
       if (!changed) continue
       day.revision++
-      this.options.store.stage(day)
-      writes.push(this.options.store.save(day).catch((error: unknown) => this.report(error)))
+      this.options.store.stage(day, this.validationTime(day))
+      writes.push(
+        this.options.store
+          .save(day, this.validationTime(day))
+          .catch((error: unknown) => this.report(error))
+      )
     }
     await Promise.all(writes)
+  }
+
+  private validationTime(day: ActivityDay): number {
+    // 跨日回拨仍须保存其他日期的观测；远端数据继续按当前时间校验。
+    return Math.max(this.now(), day.observedAt)
   }
 
   private schedule(at: number): void {
