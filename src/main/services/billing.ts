@@ -1,6 +1,7 @@
 // API Key 模式真实账单:逐日调 OpenAI billing/usage 取实际花费(USD)。
 // 仅 auth_mode='api' 生效;非 api 模式或无 key 返回 available:false,不抛错。
 import { net } from 'electron'
+import { createHash } from 'node:crypto'
 import type { SpendDay, SpendUsage, UsageWindow } from '../../shared/capsule'
 import { readOfficialCodexCredentials } from './quota'
 import { formatDiagError, logDiag } from './diag-log'
@@ -10,10 +11,11 @@ const BILLING_TIMEOUT_MS = 10_000
 const DAY_MS = 24 * 60 * 60 * 1000
 // 账单按日缓存 24h;价格/消费高频变化下一天一刷足够
 const DAY_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+const DAY_ERROR_RETRY_MS = 5 * 60 * 1000
 const WINDOW_DAYS: Record<UsageWindow, number> = { '1d': 1, '7d': 7, '30d': 30 }
 
 interface DayCacheEntry {
-  usd: number
+  usd: number | undefined
   fetchedAtMs: number
 }
 const dayCache = new Map<string, DayCacheEntry>()
@@ -22,9 +24,10 @@ const inflight = new Map<string, Promise<number | undefined>>()
 /** 1/7/30 天真实账单花费;非 API Key 模式或全部失败 → available:false */
 export async function getSpendUsage(window: UsageWindow): Promise<SpendUsage> {
   const credentialLookup = await readOfficialCodexCredentials()
-  if (credentialLookup.mode !== 'api') {
+  if (credentialLookup.mode !== 'api' || !credentialLookup.apiKey) {
     return { available: false, generatedAt: new Date().toISOString(), days: [], total: 0 }
   }
+  const apiKey = credentialLookup.apiKey
 
   const length = WINDOW_DAYS[window]
   const now = Date.now()
@@ -33,7 +36,7 @@ export async function getSpendUsage(window: UsageWindow): Promise<SpendUsage> {
     dates.push(toDateKey(new Date(now - offset * DAY_MS)))
   }
 
-  const results = await Promise.all(dates.map((d) => fetchDaySpend(credentialLookup.apiKey, d)))
+  const results = await Promise.all(dates.map((d) => fetchDaySpend(apiKey, d)))
   const days: SpendDay[] = results.map((usd, index) => ({
     date: dates[index],
     cost: usd ?? 0
@@ -48,26 +51,26 @@ export async function getSpendUsage(window: UsageWindow): Promise<SpendUsage> {
   }
 }
 
-// 缓存 + 并发去重:同一日期只发一次请求
+// 失败也短暂缓存，避免随快照反复请求；Key 指纹隔离缓存且不保留明文 Key。
 async function fetchDaySpend(apiKey: string, date: string): Promise<number | undefined> {
-  const cached = dayCache.get(date)
-  if (cached && Date.now() - cached.fetchedAtMs < DAY_CACHE_TTL_MS) {
+  const cacheKey = `${createHash('sha256').update(apiKey).digest('hex')}:${date}`
+  const cached = dayCache.get(cacheKey)
+  const ttl = cached?.usd === undefined ? DAY_ERROR_RETRY_MS : DAY_CACHE_TTL_MS
+  if (cached && Date.now() - cached.fetchedAtMs < ttl) {
     return cached.usd
   }
-  const pending = inflight.get(date)
+  const pending = inflight.get(cacheKey)
   if (pending) {
     return pending
   }
   const promise = requestDaySpend(apiKey, date)
-  inflight.set(date, promise)
+  inflight.set(cacheKey, promise)
   try {
     const usd = await promise
-    if (usd !== undefined) {
-      dayCache.set(date, { usd, fetchedAtMs: Date.now() })
-    }
+    dayCache.set(cacheKey, { usd, fetchedAtMs: Date.now() })
     return usd
   } finally {
-    inflight.delete(date)
+    inflight.delete(cacheKey)
   }
 }
 

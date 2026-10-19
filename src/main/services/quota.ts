@@ -23,10 +23,10 @@ export interface JsonlFileEntry {
   size?: number
 }
 
-// 凭据判别式:chatgpt=订阅 OAuth,api=API Key,none=未识别/缺失
+// auth.json 缺失也按 API 模式统计本地用量；只有取得 Key 才能读取真实账单。
 type CredentialLookup =
   | { canRefresh: true; mode: 'chatgpt'; accessToken: string; accountId?: string }
-  | { canRefresh: true; mode: 'api'; apiKey: string }
+  | { canRefresh: true; mode: 'api'; apiKey?: string }
   | { canRefresh: false; mode: 'none'; issue?: string }
 
 const SESSION_SUBDIR = 'sessions'
@@ -105,8 +105,11 @@ export async function collectUsageSnapshot(): Promise<UsageSnapshot> {
     }
     resetCredit = await getResetCreditWithCache(headers)
   } else if (credentialLookup.mode === 'api') {
-    // API Key 模式:无订阅额度窗口与重置卡,保持本地来源;不产生官方接口错误噪音
+    // 历史 JSONL 可能来自订阅登录，不能带入当前 API 模式。
     authMode = 'api'
+    rateLimits = []
+    rateLimitSource = 'none'
+    invalidateQuotaCaches()
   } else {
     officialIssue = credentialLookup.issue ?? '未找到 Codex 凭据'
   }
@@ -415,8 +418,11 @@ export async function readOfficialCodexCredentials(): Promise<CredentialLookup> 
       accessToken,
       accountId: getString(tokens?.account_id ?? tokens?.accountId)
     }
-  } catch {
-    return { canRefresh: false, mode: 'none', issue: '未找到 ~/.codex/auth.json' }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { canRefresh: true, mode: 'api' }
+    }
+    return { canRefresh: false, mode: 'none', issue: '无法读取 Codex auth.json' }
   }
 }
 

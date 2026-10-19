@@ -299,10 +299,12 @@ export function ModelLeaderboard({
 
 export function UsageCard({
   locale,
-  authMode
+  authMode,
+  generatedAt
 }: {
   locale: LocaleCode
   authMode: AuthMode
+  generatedAt?: string
 }): React.JSX.Element {
   const copy = COPY[locale]
   // 三个窗口一次性预取,切换按钮即时显示,避免每次切换重新拉取导致的闪烁
@@ -363,10 +365,13 @@ export function UsageCard({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [generatedAt])
 
   // API Key 模式:预取真实账单花费,账单不可用时 UI 回落 token 估算
   useEffect(() => {
+    // 快照刷新或登录方式切换后，旧账单不再代表当前状态。
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSpendByWindow({})
     if (authMode !== 'api') {
       return
     }
@@ -386,7 +391,7 @@ export function UsageCard({
     return () => {
       cancelled = true
     }
-  }, [authMode])
+  }, [authMode, generatedAt])
 
   const isCustom = customRange !== undefined
   const customStartMs = customRange?.startMs
@@ -417,7 +422,7 @@ export function UsageCard({
     days.reduce((max, day) => Math.max(max, day.input + day.output), 0)
   )
   // API Key 模式:真实账单可用时用账单金额替代 token 估算
-  const spend = spendByWindow[presetWindow]
+  const spend = authMode === 'api' ? spendByWindow[presetWindow] : undefined
   const spendMap =
     spend?.available === true ? new Map(spend.days.map((d) => [d.date, d.cost])) : undefined
   const costIsReal = spendMap !== undefined

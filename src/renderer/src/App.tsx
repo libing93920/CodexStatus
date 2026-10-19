@@ -1673,7 +1673,11 @@ function App(): React.JSX.Element {
                 </div>
               ) : null}
 
-              <UsageCard authMode={snapshot.authMode} locale={settings.locale} />
+              <UsageCard
+                authMode={snapshot.authMode}
+                generatedAt={snapshot.generatedAt}
+                locale={settings.locale}
+              />
 
               <div className="panel__rows">
                 {detailRows.map((row) => (

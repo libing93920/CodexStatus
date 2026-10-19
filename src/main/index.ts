@@ -190,6 +190,7 @@ let refreshTimer: NodeJS.Timeout | undefined
 let persistTimer: NodeJS.Timeout | undefined
 let settingsUpdateQueue: Promise<void> = Promise.resolve()
 let refreshPromise: Promise<void> | undefined
+let credentialRefreshPending = false
 let watchedCodexAuthPath: string | undefined
 let isQuitting = false
 let userHidCapsule = false
@@ -1563,8 +1564,11 @@ function broadcastAnnouncement(): void {
 
 async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): Promise<void> {
   if (refreshPromise) {
+    if (options.forceCredentialCheck) credentialRefreshPending = true
     return refreshPromise
   }
+
+  if (options.forceCredentialCheck) invalidateQuotaCaches()
 
   if (!options.forceCredentialCheck && !canRefreshStatus() && currentSnapshot.generatedAt) {
     syncRefreshTimer()
@@ -1613,6 +1617,11 @@ async function refreshStatus(options: { forceCredentialCheck?: boolean } = {}): 
       refreshTrayMenu()
       syncRefreshTimer()
       refreshPromise = undefined
+    }
+
+    if (credentialRefreshPending) {
+      credentialRefreshPending = false
+      await refreshStatus({ forceCredentialCheck: true })
     }
   })()
 

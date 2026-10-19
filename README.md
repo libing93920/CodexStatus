@@ -47,7 +47,7 @@ CodexStatus 可以帮你：
 - **团队排行榜**：局域网内同事互见，按剩余额度降序排名，展示 5h + 7d 双行数据
 - **Token 消耗排行榜**：团队页可切换 Token 消耗榜，按 1/7/30 天窗口统计同事消耗
 - **用量统计**：详情面板 1/7/30 天 token 用量（输入/输出/缓存/花费）与每日柱状图
-- **API Key 登录**：支持 Codex API Key 模式，胶囊与详情展示今日 token 与缓存命中率
+- **API Key 登录**：支持 Codex API Key 模式，胶囊与详情展示今日 token 与缓存命中率；`auth.json` 不存在时也按 API 模式统计本地用量，无 Key 时只展示估算费用
 - **AI 雷达入口**：详情面板一键跳转 codex-reset-radar 查看模型排行榜
 - **在线自动更新**：启动自动检查 + 定时检查，胶囊右上角红点提醒，一键下载静默安装
 - **双口径切换**：剩余百分比 / 已使用百分比，满足不同习惯
@@ -193,7 +193,7 @@ CodexStatus helps you:
 - **Team leaderboard**: LAN peer discovery, ranked by remaining quota, dual-row 5h + 7d display
 - **Token leaderboard**: switch the team board to token consumption, ranked by 1d / 7d / 30d windows
 - **Usage stats**: 1/7/30-day token usage (input / output / cache / cost) with a daily bar chart
-- **API Key login**: supports Codex API Key mode; capsule & panel show today's tokens and cache-hit rate
+- **API Key login**: supports Codex API Key mode; capsule & panel show today's tokens and cache-hit rate. A missing `auth.json` also uses API mode for local usage, with estimated costs when no key is available
 - **AI Radar entry**: one-click jump to codex-reset-radar from the details panel
 - **Auto-update**: Startup check + periodic check, red dot badge on capsule, silent install & auto-restart
 - **Dual metric mode**: Remaining % or Used %, switch anytime

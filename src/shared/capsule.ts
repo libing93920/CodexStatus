@@ -80,7 +80,7 @@ export interface UsageSnapshot {
   available: boolean
   isRefreshing: boolean
   canRefresh: boolean
-  /** Codex 登录方式:chatgpt=订阅 OAuth,api=API Key,none=未识别 */
+  /** Codex 模式:chatgpt=订阅 OAuth,api=API Key 或 auth.json 不存在,none=凭据异常 */
   authMode: AuthMode
   generatedAt?: string
   rateLimits: RateLimitWindowSnapshot[]
