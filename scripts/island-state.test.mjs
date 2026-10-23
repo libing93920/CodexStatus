@@ -19,6 +19,11 @@ import {
   readCodexTranscriptSource
 } from '../src/main/services/codex-hook-events.ts'
 import { CodexActivityService } from '../src/main/services/codex-activity.ts'
+import {
+  resolveDiagLogDirectory,
+  setDiagDirectory,
+  writeDiagBatch
+} from '../src/main/services/diag-log.ts'
 
 const NOW = 1_000
 
@@ -26,7 +31,11 @@ test('无元数据的Hook与IPC均不能创建任务或依靠payload source冒�
   const service = activityService(() => undefined)
   service.threadSources.clear()
   const followed = []
-  service.ipc = { followThread: (id) => followed.push(id), unfollowThread: () => undefined }
+  service.ipc = {
+    followThread: (id) => followed.push(id),
+    unfollowThread: () => undefined,
+    getTerminalTask: () => undefined
+  }
   for (const name of ['SessionStart', 'UserPromptSubmit', 'PermissionRequest', 'Stop']) {
     service.handleHookPayload(parseCodexHookPayload({ ...hookPayload(name), source: 'cli' }), NOW)
   }
@@ -51,7 +60,11 @@ test('后台建议、记忆和子代理即使没有Stop也不进入任务和提�
     await fs.writeFile(file, `${JSON.stringify({ type: 'session_meta', payload: metadata })}\n`)
     const service = activityService(() => undefined)
     const followed = []
-    service.ipc = { followThread: (id) => followed.push(id), unfollowThread: () => undefined }
+    service.ipc = {
+      followThread: (id) => followed.push(id),
+      unfollowThread: () => undefined,
+      getTerminalTask: () => undefined
+    }
     for (const name of ['SessionStart', 'UserPromptSubmit', 'PermissionRequest']) {
       service.handleHookPayload({ ...hookPayload(name), transcript_path: file }, NOW)
     }
@@ -67,7 +80,11 @@ test('新内部证据撤销已上岛任务与审批，迟到IPC、Hook和目录�
   context.after(() => fs.rm(directory, { recursive: true, force: true }))
   const service = activityService(() => undefined)
   const unfollowed = []
-  service.ipc = { followThread: () => undefined, unfollowThread: (id) => unfollowed.push(id) }
+  service.ipc = {
+    followThread: () => undefined,
+    unfollowThread: (id) => unfollowed.push(id),
+    getTerminalTask: () => undefined
+  }
   service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW)
   service.handleHookPayload(hookPayload('PermissionRequest'), NOW + 1)
   service.updateIpcTasks([
@@ -137,7 +154,11 @@ test('先写internal再撤销已上岛任务：首次不短路，幽灵任务不
   )
   const service = activityService(() => undefined)
   const unfollowed = []
-  service.ipc = { followThread: () => undefined, unfollowThread: (id) => unfollowed.push(id) }
+  service.ipc = {
+    followThread: () => undefined,
+    unfollowThread: (id) => unfollowed.push(id),
+    getTerminalTask: () => undefined
+  }
   service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW)
   service.handleHookPayload(hookPayload('PermissionRequest'), NOW + 1)
   assert.equal(service.getSnapshot().tasks.length, 1)
@@ -163,7 +184,8 @@ test('重新准入清除撤销标记：拒绝→准入→再拒绝仍会退订',
   const events = []
   service.ipc = {
     followThread: (id) => events.push(['follow', id]),
-    unfollowThread: (id) => events.push(['unfollow', id])
+    unfollowThread: (id) => events.push(['unfollow', id]),
+    getTerminalTask: () => undefined
   }
   // 线程尚未被目录证实：先清掉 fixture 预置的桌面身份。
   service.threadSources.clear()
@@ -417,7 +439,7 @@ test('查看最后一个失败任务清空灵动岛任务列表', () => {
   assert.deepEqual(service.getSnapshot().tasks, [])
 })
 
-test('Hook 任务不会被 IPC 缺失或完成快照覆盖', () => {
+test('Hook 任务在 IPC 缺失时保持执行，匹配的完成快照可结束任务', () => {
   let latest
   const service = activityService((snapshot) => {
     latest = snapshot
@@ -425,9 +447,209 @@ test('Hook 任务不会被 IPC 缺失或完成快照覆盖', () => {
   service.handleHookPayload?.(hookPayload('UserPromptSubmit'), NOW)
   const startedAt = latest.tasks[0].startedAt
   service.updateIpcTasks?.([])
-  service.updateIpcTasks?.([{ ...authoritativeTask('completed', 'turn-1'), updatedAt: NOW + 99 }])
   assert.equal(latest.tasks[0].phase, 'running')
+  service.updateIpcTasks?.([{ ...authoritativeTask('completed', 'turn-1'), updatedAt: NOW + 99 }])
+  assert.equal(latest.tasks[0].phase, 'completed')
   assert.equal(latest.tasks[0].startedAt, startedAt)
+  assert.equal(service.dismissTask('thread-1'), true)
+})
+
+for (const kind of [undefined, 'approval', 'input']) {
+  test(`Desktop 同回合追加输入保留${kind ?? '无请求'}状态且 Stop 可结束`, () => {
+    const service = activityService(() => undefined)
+    const requests = kind ? [{ id: 'pending', kind, createdAt: NOW + 1 }] : []
+    service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW)
+    service.updateIpcTasks([{ ...authoritativeTask('running', 'turn-1'), requests }])
+    for (const offset of [2, 3]) {
+      service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW + offset)
+      const task = service.getSnapshot().tasks[0]
+      assert.equal(task.turnId, 'turn-1')
+      assert.equal(task.startedAt, NOW)
+      assert.deepEqual(task.requests, requests)
+      assert.equal(service.hookIpcTurnIds.get('local\u0000thread-1'), 'turn-1')
+      assert.equal(service.finishedHookTurnIds.has('thread-1\u0000turn-1'), false)
+    }
+    service.handleHookPayload(hookPayload('Stop'), NOW + 4)
+    assert.equal(service.getSnapshot().tasks[0].phase, 'completed')
+    assert.deepEqual(service.getSnapshot().tasks[0].requests, [])
+    assert.equal(service.dismissTask('thread-1'), true)
+  })
+}
+
+for (const phase of ['completed', 'failed', 'stopped']) {
+  test(`Desktop 匹配 IPC ${phase} 结束 Hook 任务且迟到事件不复活`, () => {
+    const service = activityService(() => undefined)
+    service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW)
+    const pending = {
+      ...authoritativeTask('running', 'turn-1'),
+      requests: [{ id: 'approval', kind: 'approval', createdAt: NOW }]
+    }
+    service.updateIpcTasks([pending])
+    service.updateIpcTasks([
+      { ...pending, phase, updatedAt: NOW + 1, latestEventId: `end:${phase}` }
+    ])
+    if (phase === 'stopped') assert.deepEqual(service.getSnapshot().tasks, [])
+    else {
+      const task = service.getSnapshot().tasks[0]
+      assert.equal(task.phase, phase)
+      assert.equal(task.startedAt, NOW)
+      assert.deepEqual(task.requests, [])
+      assert.equal(service.dismissTask('thread-1'), true)
+    }
+    service.handleHookPayload(hookPayload('Stop'), NOW + 2)
+    service.updateIpcTasks([pending])
+    service.updateIpcTasks([{ ...pending, phase, latestEventId: `end:${phase}` }])
+    assert.deepEqual(service.getSnapshot().tasks, [])
+  })
+
+  test(`Desktop 未确认回合身份的 IPC ${phase} 不结束合成 Hook 任务`, () => {
+    const service = activityService(() => undefined)
+    service.handleHookPayload({ ...hookPayload('UserPromptSubmit'), turn_id: undefined }, NOW)
+    const pending = {
+      ...authoritativeTask('running', 'candidate-turn'),
+      requests: [{ id: 'approval', kind: 'approval', createdAt: NOW }]
+    }
+    service.updateIpcTasks([pending])
+    service.updateIpcTasks([{ ...pending, phase, requests: [] }])
+    const task = service.getSnapshot().tasks[0]
+    assert.equal(task.phase, 'running')
+    assert.deepEqual(task.requests, pending.requests)
+    service.handleHookPayload({ ...hookPayload('Stop'), turn_id: undefined }, NOW + 1)
+    assert.equal(service.getSnapshot().tasks[0].phase, 'completed')
+  })
+}
+
+test('Desktop 新回合不被上一回合终态或线程占位终态结束', () => {
+  const service = activityService(() => undefined)
+  service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW)
+  service.updateIpcTasks([authoritativeTask('running', 'turn-1')])
+  service.handleHookPayload({ ...hookPayload('UserPromptSubmit'), turn_id: 'turn-2' }, NOW + 1)
+  for (const turnId of ['turn-1', 'thread:thread-1']) {
+    for (const phase of ['completed', 'failed', 'stopped']) {
+      service.updateIpcTasks([authoritativeTask(phase, turnId)])
+      const task = service.getSnapshot().tasks[0]
+      assert.equal(task.turnId, 'turn-2')
+      assert.equal(task.phase, 'running')
+    }
+  }
+  service.handleHookPayload(hookPayload('Stop'), NOW + 2)
+  assert.equal(service.getSnapshot().tasks[0].phase, 'running')
+  service.handleHookPayload({ ...hookPayload('Stop'), turn_id: 'turn-2' }, NOW + 3)
+  assert.equal(service.getSnapshot().tasks[0].phase, 'completed')
+})
+
+test('Desktop 缺少回合 ID 的追加输入不提前退休已观测 IPC 回合', () => {
+  const service = activityService(() => undefined)
+  const prompt = { ...hookPayload('UserPromptSubmit'), turn_id: undefined }
+  service.handleHookPayload(prompt, NOW)
+  service.updateIpcTasks([authoritativeTask('running', 'ipc-turn')])
+  service.handleHookPayload(prompt, NOW + 1)
+  assert.equal(service.finishedHookTurnIds.has('thread-1\u0000ipc-turn'), false)
+  const pending = {
+    ...authoritativeTask('running', 'ipc-turn'),
+    requests: [{ id: 'input', kind: 'input', createdAt: NOW + 2 }]
+  }
+  service.updateIpcTasks([pending])
+  assert.equal(getDisplayStatus(service.getSnapshot().tasks[0]), 'waiting-input')
+  service.handleHookPayload({ ...hookPayload('Stop'), turn_id: undefined }, NOW + 3)
+  assert.equal(service.getSnapshot().tasks[0].phase, 'completed')
+})
+
+test('无 ID Stop 只隔离旧 IPC 候选，不拒绝后来确认的真实回合', () => {
+  const service = activityService(() => undefined)
+  const prompt = { ...hookPayload('UserPromptSubmit'), turn_id: undefined }
+  const candidate = {
+    ...authoritativeTask('running', 'candidate-turn'),
+    requests: [{ id: 'approval', kind: 'approval', createdAt: NOW }]
+  }
+  service.handleHookPayload(prompt, NOW)
+  service.updateIpcTasks([candidate])
+  service.handleHookPayload({ ...hookPayload('Stop'), turn_id: undefined }, NOW + 1)
+  assert.equal(service.finishedHookTurnIds.has('thread-1\u0000candidate-turn'), false)
+  service.handleHookPayload(prompt, NOW + 2)
+  service.updateIpcTasks([candidate])
+  assert.deepEqual(service.getSnapshot().tasks[0].requests, [])
+  service.handleHookPayload(
+    { ...hookPayload('UserPromptSubmit'), turn_id: 'candidate-turn' },
+    NOW + 3
+  )
+  service.updateIpcTasks([candidate])
+  const task = service.getSnapshot().tasks[0]
+  assert.equal(task.turnId, 'candidate-turn')
+  assert.equal(getDisplayStatus(task), 'waiting-approval')
+  service.handleHookPayload({ ...hookPayload('Stop'), turn_id: 'candidate-turn' }, NOW + 4)
+  assert.equal(service.getSnapshot().tasks[0].phase, 'completed')
+  assert.equal(service.dismissTask('thread-1'), true)
+})
+
+test('Desktop IPC 先到后追加同一真实回合输入仍可由终态结束', () => {
+  const service = activityService(() => undefined)
+  service.updateIpcTasks([authoritativeTask('running', 'turn-1')])
+  service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW + 1)
+  service.updateIpcTasks([authoritativeTask('running', 'turn-1')])
+  service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW + 2)
+  service.updateIpcTasks([authoritativeTask('completed', 'turn-1')])
+  assert.equal(service.getSnapshot().tasks[0].phase, 'completed')
+  assert.equal(service.getSnapshot().tasks[0].startedAt, NOW)
+})
+
+test('真实新 Hook 回合淘汰已确认的旧回合，迟到旧 Hook 和请求不回滚', () => {
+  const service = activityService(() => undefined)
+  const old = {
+    ...authoritativeTask('running', 'old-turn'),
+    requests: [{ id: 'old-approval', kind: 'approval', createdAt: NOW }]
+  }
+  service.updateIpcTasks([old])
+  // IPC-only 身份不能证明回合先后，先由 Hook 确认旧回合再验证退休。
+  service.handleHookPayload({ ...hookPayload('UserPromptSubmit'), turn_id: 'old-turn' }, NOW)
+  service.handleHookPayload(hookPayload('UserPromptSubmit'), NOW + 1)
+  service.handleHookPayload({ ...hookPayload('UserPromptSubmit'), turn_id: 'old-turn' }, NOW + 2)
+  service.updateIpcTasks([old])
+  assert.equal(service.getSnapshot().tasks[0].turnId, 'turn-1')
+  assert.deepEqual(service.getSnapshot().tasks[0].requests, [])
+
+  service.handleHookPayload({ ...hookPayload('UserPromptSubmit'), turn_id: undefined }, NOW + 3)
+  service.updateIpcTasks([old])
+  assert.equal(service.getSnapshot().tasks[0].phase, 'running')
+  assert.deepEqual(service.getSnapshot().tasks[0].requests, [])
+})
+
+test('合成 Hook 回合不凭候选 IPC 身份接管真实 Stop，诊断不写正文或流式补丁', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-status-turn-diagnostic-'))
+  const previousDirectory = path.dirname(resolveDiagLogDirectory())
+  const previousEnabled = process.env.CODEX_STATUS_DIAG
+  context.after(async () => {
+    setDiagDirectory(previousDirectory)
+    if (previousEnabled === undefined) delete process.env.CODEX_STATUS_DIAG
+    else process.env.CODEX_STATUS_DIAG = previousEnabled
+    await fs.rm(directory, { recursive: true, force: true })
+  })
+  setDiagDirectory(directory)
+  process.env.CODEX_STATUS_DIAG = '1'
+  const service = activityService(() => undefined)
+  const prompt = {
+    ...hookPayload('UserPromptSubmit'),
+    turn_id: undefined,
+    prompt: 'private-prompt-sentinel',
+    tool_input: { token: 'private-token-sentinel' }
+  }
+  service.handleHookPayload(prompt, NOW)
+  for (let index = 0; index < 20; index++) {
+    service.updateIpcTasks([authoritativeTask('running', 'candidate-turn')])
+  }
+  service.handleHookPayload({ ...hookPayload('Stop'), turn_id: 'candidate-turn' }, NOW + 1)
+  service.updateIpcTasks([authoritativeTask('completed', 'candidate-turn')])
+  assert.equal(service.getSnapshot().tasks[0].phase, 'running')
+  service.handleHookPayload({ ...hookPayload('Stop'), turn_id: undefined }, NOW + 2)
+  assert.equal(service.getSnapshot().tasks[0].phase, 'completed')
+  await writeDiagBatch('turn-diagnostic-finished')
+  const content = await fs.readFile(path.join(directory, 'diag', 'diag.log'), 'utf8')
+  assert.match(content, /"decision":"different-turn"/)
+  assert.match(content, /"decision":"unconfirmed-turn"/)
+  assert.match(content, /"decision":"terminal-applied"/)
+  assert.equal(content.match(/island hook lifecycle/g)?.length, 3)
+  assert.equal(content.match(/island ipc terminal/g)?.length, 1)
+  assert.doesNotMatch(content, /private-prompt-sentinel|private-token-sentinel|tool_input/)
 })
 
 test('缺少 turn_id 时新输入建立新回合且后续 Hook 继承', () => {
@@ -809,7 +1031,8 @@ test('CLI 任务不订阅或合并私有 IPC，未知来源不跟踪', () => {
   const followed = []
   service.ipc = {
     unfollowThread: () => undefined,
-    followThread: (threadId) => followed.push(threadId)
+    followThread: (threadId) => followed.push(threadId),
+    getTerminalTask: () => assert.fail('CLI 不得读取 Desktop IPC 缓存')
   }
   service.threadSources?.set('local\u0000thread-1', 'cli')
   service.handleHookPayload?.(hookPayload('UserPromptSubmit'), NOW)
@@ -864,7 +1087,8 @@ test('子代理 transcript 被识别并在 Hook 进入状态机前忽略', async
     const followed = []
     service.ipc = {
       unfollowThread: () => undefined,
-      followThread: (threadId) => followed.push(threadId)
+      followThread: (threadId) => followed.push(threadId),
+      getTerminalTask: () => undefined
     }
     service.handleHookPayload?.(
       parseCodexHookPayload({
@@ -899,7 +1123,8 @@ test('transcript 尚未可读时首个子代理 Hook 延迟重放后仍忽略', 
   const followed = []
   service.ipc = {
     unfollowThread: () => undefined,
-    followThread: (threadId) => followed.push(threadId)
+    followThread: (threadId) => followed.push(threadId),
+    getTerminalTask: () => undefined
   }
   service.handleHookPayload?.(payload, NOW)
   assert.equal(retries.length, 1)
@@ -935,7 +1160,8 @@ test('transcript 重试仍不可读时拒绝上岛且不再次调度', async (co
   const followed = []
   service.ipc = {
     unfollowThread: () => undefined,
-    followThread: (threadId) => followed.push(threadId)
+    followThread: (threadId) => followed.push(threadId),
+    getTerminalTask: () => undefined
   }
   service.handleHookPayload?.(payload, NOW)
   assert.equal(retries.length, 1)
@@ -967,7 +1193,8 @@ test('transcript 重试回调在服务停止后不再处理 Hook', async (contex
   service.ipc = {
     unfollowThread: () => undefined,
     followThread: (threadId) => followed.push(threadId),
-    stop: () => undefined
+    stop: () => undefined,
+    getTerminalTask: () => undefined
   }
   service.handleHookPayload?.(payload, NOW)
   assert.equal(retries.length, 1)
@@ -1077,7 +1304,8 @@ test('transcript 延迟识别后普通 CLI/VSCode Hook 可恢复', async (contex
     const followed = []
     service.ipc = {
       unfollowThread: () => undefined,
-      followThread: (threadId) => followed.push(threadId)
+      followThread: (threadId) => followed.push(threadId),
+      getTerminalTask: () => undefined
     }
     service.handleHookPayload?.(payload, NOW)
     assert.equal(retries.length, 1)

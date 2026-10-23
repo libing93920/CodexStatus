@@ -35,11 +35,14 @@ export class CodexIpcClient {
   private readonly conversations = new Map<string, ConversationVersion>()
   private readonly activeConversationKeys = new Set<string>()
   private readonly terminalTasks = new Map<string, IslandTask>()
-  // 每会话投影缓存:key → {revision, task};emitTasks 每条 state change 都对
-  // 全部会话重投影,但每条 patch 只改一个会话 —— 其余直接复用缓存
+  // 每会话投影缓存；终态精确查询也复用该 revision 项，避免单独维护会话映射。
   private readonly projectedTaskCache = new Map<
     string,
-    { revision: number; task: IslandTask | undefined }
+    {
+      revision: number
+      task: IslandTask | undefined
+      terminalTask?: IslandTask | undefined
+    }
   >()
   private socket?: Socket
   private clientId = INITIAL_CLIENT_ID
@@ -92,6 +95,22 @@ export class CodexIpcClient {
     this.conversations.clear()
     this.projectedTaskCache.clear()
     this.options.onConnection(false)
+  }
+
+  getTerminalTask(hostId: string, threadId: string, turnId: string): IslandTask | undefined {
+    if (!this.threadIds.has(threadId)) return undefined
+    const key = conversationKey(hostId, threadId)
+    const conversation = this.conversations.get(key)
+    if (!conversation) return undefined
+    const task = this.projectTask(key, conversation)
+    if (task && task.phase !== 'running') return task.turnId === turnId ? task : undefined
+
+    const cached = this.projectedTaskCache.get(key)
+    if (!cached) return undefined
+    if (!('terminalTask' in cached)) {
+      cached.terminalTask = projectTerminalTurn(hostId, threadId, conversation.state)
+    }
+    return cached.terminalTask?.turnId === turnId ? cached.terminalTask : undefined
   }
 
   followThread(threadId: string): void {
@@ -315,22 +334,36 @@ export function projectTerminalTransition(
   observedAt = Date.now()
 ): IslandTask | undefined {
   const previousTurn = getLatestTurn(previous.turnHistory, false)
-  const currentTurn = getLatestTurn(current.turnHistory, false)
-  const status = getString(currentTurn?.status)
-  const turnId = getString(currentTurn?.turnId)
-  if (!turnId || !isTerminalStatus(status)) return undefined
-  if (getString(previousTurn?.turnId) === turnId && getString(previousTurn?.status) === status) {
+  const task = projectTerminalTurn(hostId, threadId, current, observedAt)
+  if (!task) return undefined
+  if (
+    getString(previousTurn?.turnId) === task.turnId &&
+    resolvePhase(previousTurn?.status) === task.phase
+  ) {
     return undefined
   }
-  const updatedAt = getTurnEndAt(currentTurn) ?? getNumber(current.updatedAt) ?? observedAt
+  return task
+}
+
+function projectTerminalTurn(
+  hostId: string,
+  threadId: string,
+  state: Record<string, unknown>,
+  observedAt = Date.now()
+): IslandTask | undefined {
+  const turn = getLatestTurn(state.turnHistory, false)
+  const status = getString(turn?.status)
+  const turnId = getString(turn?.turnId)
+  if (!turnId || !isTerminalStatus(status)) return undefined
+  const updatedAt = getTurnEndAt(turn) ?? getNumber(state.updatedAt) ?? observedAt
   return {
     hostId,
     threadId,
     turnId,
-    title: getString(current.title) ?? 'Codex 任务',
-    project: getProjectName(getString(current.cwd)),
+    title: getString(state.title) ?? 'Codex 任务',
+    project: getProjectName(getString(state.cwd)),
     phase: status === 'failed' ? 'failed' : status === 'interrupted' ? 'stopped' : 'completed',
-    startedAt: getNumber(currentTurn?.turnStartedAtMs),
+    startedAt: getNumber(turn?.turnStartedAtMs),
     updatedAt,
     requests: [],
     latestEventId: `ipc:${threadId}:${turnId}:${status}`
@@ -419,8 +452,11 @@ export function projectConversationState(
   const currentTurn = latestTurn?.status === 'inProgress' ? latestTurn : undefined
   const updatedAt = getNumber(state.updatedAt)
   const pendingTurn = hasUnloadedActiveTurn(runtime?.type, updatedAt, latestTurn)
-  const turnId = getString(currentTurn?.turnId) ?? `thread:${threadId}`
   const terminalTurn = !pendingTurn && isTerminalStatus(getString(latestTurn?.status))
+  const terminalTurnId = terminalTurn ? getString(latestTurn?.turnId) : undefined
+  const terminalStatus = terminalTurn ? getString(latestTurn?.status) : undefined
+  const turn = terminalTurn ? latestTurn : currentTurn
+  const turnId = getString(turn?.turnId) ?? `thread:${threadId}`
   const requests = terminalTurn
     ? []
     : projectRequests(state.requests, activeFlags, turnId, observedAt)
@@ -438,11 +474,14 @@ export function projectConversationState(
     project: getProjectName(getString(state.cwd)),
     phase,
     startedAt:
-      getNumber(currentTurn?.turnStartedAtMs) ??
+      getNumber(turn?.turnStartedAtMs) ??
       (pendingTurn || requests.length > 0 ? updatedAt : undefined),
     updatedAt: turnEndedAt ?? updatedAt ?? observedAt,
     requests,
-    latestEventId: `ipc:${threadId}:${getNumber(state.updatedAt) ?? observedAt}`
+    latestEventId:
+      terminalTurnId && terminalStatus
+        ? `ipc:${threadId}:${terminalTurnId}:${terminalStatus}`
+        : `ipc:${threadId}:${updatedAt ?? observedAt}`
   }
 }
 

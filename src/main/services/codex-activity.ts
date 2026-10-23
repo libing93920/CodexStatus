@@ -1,4 +1,10 @@
-import type { IslandSnapshot, IslandTask, IslandTaskSource } from '../../shared/island.ts'
+import type {
+  IslandActivityEvent,
+  IslandSnapshot,
+  IslandTask,
+  IslandTaskPhase,
+  IslandTaskSource
+} from '../../shared/island.ts'
 import { getDisplayStatus, IslandState } from '../../shared/island.ts'
 import { isAdmittedIslandTaskSource, type IslandTaskIdentity } from './codex-task-identity.ts'
 import {
@@ -15,6 +21,7 @@ import { formatDiagError, logDiag, recordPerf } from './diag-log.ts'
 const EMIT_DEBOUNCE_MS = 100
 const HOOK_SOURCE_RETRY_MS = 1_000
 const DESKTOP_REQUEST_HOOK_EVENTS = new Set(['PreToolUse', 'PermissionRequest'])
+const LIFECYCLE_HOOK_EVENTS = new Set(['UserPromptSubmit', 'Stop', 'Interrupt'])
 
 export interface CodexActivityOptions {
   executable?: string
@@ -39,6 +46,7 @@ export class CodexActivityService {
   private readonly hookSourceCache = new Map<string, IslandTaskIdentity>()
   private readonly hookSourceRetryAt = new Map<string, number>()
   private readonly finishedHookTurnIds = new Set<string>()
+  private readonly retiredIpcCandidates = new Set<string>()
   private readonly finishedThreadIds = new Set<string>()
   // 记录已完成撤销的线程：身份确认且清理跑完后，后续同源拒绝无需再付出全量快照与清理成本。
   private readonly revokedThreadKeys = new Set<string>()
@@ -118,6 +126,7 @@ export class CodexActivityService {
     this.hookTurnIds.clear()
     this.hookIpcTurnIds.clear()
     this.finishedHookTurnIds.clear()
+    this.retiredIpcCandidates.clear()
     this.finishedThreadIds.clear()
     await this.ingress.stop()
     this.state.setConnection({ hooks: false, ipc: false })
@@ -202,28 +211,97 @@ export class CodexActivityService {
     if (!normalizedPayload) return this.emit()
     const event = mapCodexHookEvent(normalizedPayload, receivedAt)
     if (!event) return this.emit()
+    this.applyHookEvent(payload, event)
+  }
+
+  private applyHookEvent(payload: CodexHookPayload, event: IslandActivityEvent): void {
     const key = createTaskKey(event.hostId, event.threadId)
-    if (!this.state.apply(event)) return this.emit()
+    const current = LIFECYCLE_HOOK_EVENTS.has(payload.hook_event_name)
+      ? this.state
+          .getSnapshot()
+          .tasks.find((task) => task.hostId === event.hostId && task.threadId === event.threadId)
+      : undefined
+    if (!this.state.apply(event)) {
+      this.logHookDecision(payload, 'state-rejected', current)
+      return this.emit()
+    }
+    if (event.kind === 'turn-started') this.retirePreviousHookTurn(event, current)
     this.hookTurnIds.set(payload.session_id, event.turnId)
     this.hookTaskKeys.add(key)
     this.ipcTaskKeys.delete(key)
     if (event.kind === 'turn-started') {
-      const previousIpcTurnId = this.hookIpcTurnIds.get(key)
-      if (previousIpcTurnId) {
-        this.finishedHookTurnIds.add(createTaskKey(event.threadId, previousIpcTurnId))
-      }
-      this.hookIpcTurnIds.delete(key)
       this.finishedThreadIds.delete(event.threadId)
+      this.logHookDecision(
+        payload,
+        current?.turnId === event.turnId ? 'same-turn-input' : 'turn-input',
+        current,
+        'running'
+      )
+      if (event.source === 'vscode') this.reconcileHookTask(event.hostId, event.threadId)
     }
     if (event.kind === 'turn-finished') {
-      this.finishedHookTurnIds.add(createTaskKey(payload.session_id, event.turnId))
-      this.finishedThreadIds.add(event.threadId)
-      // 终态立即广播:完成/停止是用户关心的提醒点,不走 debounce
-      this.emitNow()
-      this.scheduleFinishedTask(event.hostId, event.threadId)
+      this.logHookDecision(payload, 'terminal-applied', current, event.outcome)
+      this.finishHookTurn(event.hostId, event.threadId, event.turnId)
       return
     }
     this.emit()
+  }
+
+  private retirePreviousHookTurn(event: IslandActivityEvent, current?: IslandTask): void {
+    // 追加输入不代表切换回合；无真实 ID 时也不能退休已观测的候选 IPC 回合。
+    if (!isConcreteTurnId(event.threadId, event.turnId)) return
+    this.retiredIpcCandidates.delete(createTaskKey(event.threadId, event.turnId))
+    const previousHookTurnId = this.hookTurnIds.get(event.threadId)
+    if (previousHookTurnId && previousHookTurnId !== event.turnId) {
+      this.finishedHookTurnIds.add(createTaskKey(event.threadId, previousHookTurnId))
+    }
+    if (current?.turnId === event.turnId) return
+    const key = createTaskKey(event.hostId, event.threadId)
+    // IPC-only 当前身份仍可能属于晚到 Hook，不能当成已结束的 Hook 回合。
+    const previousIpcTurnId =
+      this.hookIpcTurnIds.get(key) ??
+      (current && isConcreteTurnId(event.threadId, current.turnId) ? current.turnId : undefined)
+    if (previousIpcTurnId && previousIpcTurnId !== event.turnId) {
+      if (previousIpcTurnId !== previousHookTurnId) {
+        this.retiredIpcCandidates.add(createTaskKey(event.threadId, previousIpcTurnId))
+      }
+      this.hookIpcTurnIds.delete(key)
+    }
+  }
+
+  private finishHookTurn(hostId: string, threadId: string, turnId: string): void {
+    this.finishedHookTurnIds.add(createTaskKey(threadId, turnId))
+    const key = createTaskKey(hostId, threadId)
+    const ipcTurnId = this.hookIpcTurnIds.get(key)
+    // 候选只能隔离旧 IPC 快照，不能据此拒绝之后带真实 ID 的 Hook。
+    if (ipcTurnId && ipcTurnId !== turnId) {
+      this.retiredIpcCandidates.add(createTaskKey(threadId, ipcTurnId))
+    }
+    this.hookIpcTurnIds.delete(key)
+    this.finishedThreadIds.add(threadId)
+    this.emitNow()
+    this.scheduleFinishedTask(hostId, threadId)
+  }
+
+  private logHookDecision(
+    payload: CodexHookPayload,
+    decision: string,
+    current?: IslandTask,
+    phase?: IslandTaskPhase
+  ): void {
+    if (!LIFECYCLE_HOOK_EVENTS.has(payload.hook_event_name)) return
+    logDiag(
+      `island hook lifecycle ${JSON.stringify({
+        event: payload.hook_event_name,
+        threadId: payload.session_id,
+        hookTurnId: payload.turn_id,
+        currentTurnId: current?.turnId ?? this.hookTurnIds.get(payload.session_id),
+        ipcTurnId: this.hookIpcTurnIds.get(createTaskKey('local', payload.session_id)),
+        decision,
+        from: current?.phase,
+        to: phase
+      })}`
+    )
   }
 
   private scheduleHookSourceRetry(payload: CodexHookPayload, receivedAt: number): void {
@@ -296,6 +374,9 @@ export class CodexActivityService {
     for (const turnKey of this.finishedHookTurnIds) {
       if (turnKey.startsWith(`${threadId}\u0000`)) this.finishedHookTurnIds.delete(turnKey)
     }
+    for (const turnKey of this.retiredIpcCandidates) {
+      if (turnKey.startsWith(`${threadId}\u0000`)) this.retiredIpcCandidates.delete(turnKey)
+    }
     if (hostId === 'local') this.ipc?.unfollowThread(threadId)
     if (hadTask) this.emitNow()
   }
@@ -307,17 +388,22 @@ export class CodexActivityService {
     const currentTurnId = this.hookTurnIds.get(payload.session_id)
     if (payload.hook_event_name === 'UserPromptSubmit') {
       const turnId = payload.turn_id ?? `hook:${payload.session_id}:${receivedAt}`
-      if (this.finishedHookTurnIds.has(createTaskKey(payload.session_id, turnId))) return undefined
-      return { ...payload, turn_id: turnId }
-    }
-    if (payload.turn_id) {
-      if (this.finishedHookTurnIds.has(createTaskKey(payload.session_id, payload.turn_id))) {
+      if (this.finishedHookTurnIds.has(createTaskKey(payload.session_id, turnId))) {
+        this.logHookDecision(payload, 'retired-turn')
         return undefined
       }
-      if (currentTurnId && payload.turn_id !== currentTurnId) return undefined
-      return payload
+      return { ...payload, turn_id: turnId }
     }
-    return currentTurnId ? { ...payload, turn_id: currentTurnId } : payload
+    const turnId = payload.turn_id ?? currentTurnId
+    if (turnId && this.finishedHookTurnIds.has(createTaskKey(payload.session_id, turnId))) {
+      this.logHookDecision(payload, 'retired-turn')
+      return undefined
+    }
+    if (payload.turn_id && currentTurnId && payload.turn_id !== currentTurnId) {
+      this.logHookDecision(payload, 'different-turn')
+      return undefined
+    }
+    return turnId ? { ...payload, turn_id: turnId } : payload
   }
 
   private updateIpcTasks(tasks: IslandTask[]): void {
@@ -383,29 +469,65 @@ export class CodexActivityService {
       ) {
         continue
       }
-      const ipcTask = ipcTasks.get(key)
-      if (
-        !ipcTask ||
-        this.finishedHookTurnIds.has(createTaskKey(current.threadId, ipcTask.turnId)) ||
-        !isCurrentHookTurn(current, ipcTask)
-      ) {
-        continue
+      // 活跃列表不携带初始/重连终态，只重核身份明确匹配的缓存终态。
+      let ipcTask = ipcTasks.get(key)
+      if (!ipcTask || !isConcreteTurnId(current.threadId, ipcTask.turnId)) {
+        ipcTask =
+          this.ipc?.getTerminalTask(current.hostId, current.threadId, current.turnId) ?? ipcTask
       }
-      if (ipcTask.turnId !== `thread:${current.threadId}`) {
-        this.hookIpcTurnIds.set(key, ipcTask.turnId)
-      }
-      const failed = ipcTask.phase === 'failed'
-      this.state.upsertAuthoritative({
-        ...current,
-        title: ipcTask.title,
-        project: ipcTask.project,
-        phase: failed ? 'failed' : current.phase,
-        updatedAt: failed ? ipcTask.updatedAt : current.updatedAt,
-        requests: ipcTask.phase === 'running' ? ipcTask.requests : [],
-        latestEventId: failed ? ipcTask.latestEventId : current.latestEventId
-      })
-      if (failed) this.finishedThreadIds.add(current.threadId)
+      if (ipcTask) this.supplementHookTask(current, ipcTask)
     }
+  }
+
+  private reconcileHookTask(hostId: string, threadId: string): void {
+    const current = this.state
+      .getSnapshot()
+      .tasks.find((task) => task.hostId === hostId && task.threadId === threadId)
+    if (current?.source === 'vscode' && current.phase === 'running') {
+      const terminal = this.ipc?.getTerminalTask(hostId, threadId, current.turnId)
+      if (terminal) this.supplementHookTask(current, terminal)
+    }
+  }
+
+  private supplementHookTask(current: IslandTask, ipcTask: IslandTask): void {
+    const terminal = ipcTask.phase !== 'running'
+    const turnKey = createTaskKey(current.threadId, ipcTask.turnId)
+    const retired = this.finishedHookTurnIds.has(turnKey) || this.retiredIpcCandidates.has(turnKey)
+    const matches = terminal
+      ? current.turnId === ipcTask.turnId && isConcreteTurnId(current.threadId, current.turnId)
+      : isCurrentHookTurn(current, ipcTask)
+    if (terminal) {
+      logDiag(
+        `island ipc terminal ${JSON.stringify({
+          threadId: current.threadId,
+          hookTurnId: current.turnId,
+          ipcTurnId: ipcTask.turnId,
+          decision: retired ? 'retired-turn' : matches ? 'terminal-applied' : 'unconfirmed-turn',
+          from: current.phase,
+          to: ipcTask.phase
+        })}`
+      )
+    }
+    if (retired || !matches) return
+    if (terminal && this.state.isViewed(ipcTask.latestEventId)) {
+      this.state.removeTask(current.hostId, current.threadId)
+      this.finishHookTurn(current.hostId, current.threadId, current.turnId)
+      return
+    }
+    const key = createTaskKey(current.hostId, current.threadId)
+    if (isConcreteTurnId(ipcTask.threadId, ipcTask.turnId)) {
+      this.hookIpcTurnIds.set(key, ipcTask.turnId)
+    }
+    this.state.upsertAuthoritative({
+      ...current,
+      title: ipcTask.title,
+      project: ipcTask.project,
+      phase: terminal ? ipcTask.phase : current.phase,
+      updatedAt: terminal ? ipcTask.updatedAt : current.updatedAt,
+      requests: terminal ? [] : ipcTask.requests,
+      latestEventId: terminal ? ipcTask.latestEventId : current.latestEventId
+    })
+    if (terminal) this.finishHookTurn(current.hostId, current.threadId, current.turnId)
   }
 
   // emit 合并:streaming 期 IPC patch 高频到达,逐条全量快照+排序+派发是主进程热点;
@@ -465,6 +587,14 @@ export class CodexActivityService {
 
 function createTaskKey(hostId: string, threadId: string): string {
   return `${hostId}\u0000${threadId}`
+}
+
+function isConcreteTurnId(threadId: string, turnId: string): boolean {
+  return (
+    turnId !== `thread:${threadId}` &&
+    turnId !== `session:${threadId}` &&
+    !turnId.startsWith(`hook:${threadId}:`)
+  )
 }
 
 function isCurrentHookTurn(current: IslandTask, ipcTask: IslandTask): boolean {
