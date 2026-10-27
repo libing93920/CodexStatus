@@ -1271,7 +1271,7 @@ test('Hook 来源临时读盘失败在冷却后重试并恢复', async (context)
     session_id: 'retry-source',
     transcript_path: transcriptPath
   }
-  const key = 'local\u0000retry-source'
+  const key = transcriptPath
   assert.equal(service.resolveHookIdentity?.(payload)?.source, undefined)
   assert.ok(service.hookSourceRetryAt?.get(key) > Date.now())
 

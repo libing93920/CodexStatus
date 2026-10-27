@@ -30,6 +30,10 @@ export interface CodexHookPayload {
   source?: IslandTaskSource
 }
 
+export interface CodexTranscriptIdentity extends IslandTaskIdentity {
+  threadId?: string
+}
+
 export function parseCodexHookPayload(value: unknown): CodexHookPayload | undefined {
   const input = getRecord(value)
   const eventName = getString(input?.hook_event_name)
@@ -55,7 +59,7 @@ export function readCodexTranscriptSource(
 
 export function readCodexTranscriptIdentity(
   transcriptPath: string | undefined
-): IslandTaskIdentity | undefined {
+): CodexTranscriptIdentity | undefined {
   if (!transcriptPath) return undefined
   let descriptor: number | undefined
   try {
@@ -67,9 +71,13 @@ export function readCodexTranscriptIdentity(
     // 首行已成功解析但没有可识别来源时，后续重读同一首行没有收益。
     if (record?.type !== 'session_meta') return classifyIslandTaskIdentity(undefined, undefined)
     const payload = getRecord(record.payload)
-    return classifyIslandTaskIdentity(payload?.source, payload?.thread_source, {
-      ephemeral: payload?.ephemeral
-    })
+    const threadId = getString(payload?.id)
+    return {
+      ...classifyIslandTaskIdentity(payload?.source, payload?.thread_source, {
+        ephemeral: payload?.ephemeral
+      }),
+      ...(threadId ? { threadId } : {})
+    }
   } catch {
     return undefined
   } finally {

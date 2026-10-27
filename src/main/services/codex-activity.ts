@@ -10,7 +10,8 @@ import { isAdmittedIslandTaskSource, type IslandTaskIdentity } from './codex-tas
 import {
   mapCodexHookEvent,
   readCodexTranscriptIdentity,
-  type CodexHookPayload
+  type CodexHookPayload,
+  type CodexTranscriptIdentity
 } from './codex-hook-events.ts'
 import { CodexHookIngress } from './codex-hook-ingress.ts'
 import { CodexIpcClient } from './codex-ipc-client.ts'
@@ -34,6 +35,10 @@ export interface CodexActivityOptions {
   emitDebounceMs?: number
 }
 
+interface ResolvedHookIdentity extends IslandTaskIdentity {
+  threadId: string
+}
+
 export class CodexActivityService {
   private readonly options: CodexActivityOptions
   private readonly state: IslandState
@@ -44,6 +49,7 @@ export class CodexActivityService {
   private readonly hookIpcTurnIds = new Map<string, string>()
   private readonly threadSources = new Map<string, IslandTaskSource>()
   private readonly hookSourceCache = new Map<string, IslandTaskIdentity>()
+  private readonly hookTranscriptCache = new Map<string, CodexTranscriptIdentity>()
   private readonly hookSourceRetryAt = new Map<string, number>()
   private readonly finishedHookTurnIds = new Set<string>()
   private readonly retiredIpcCandidates = new Set<string>()
@@ -74,6 +80,7 @@ export class CodexActivityService {
     this.hookIpcTurnIds.clear()
     this.revokedThreadKeys.clear()
     this.hookSourceCache.clear()
+    this.hookTranscriptCache.clear()
     this.hookSourceRetryAt.clear()
     try {
       if (this.options.executable) {
@@ -121,6 +128,7 @@ export class CodexActivityService {
     this.threadSources.clear()
     this.revokedThreadKeys.clear()
     this.hookSourceCache.clear()
+    this.hookTranscriptCache.clear()
     this.hookSourceRetryAt.clear()
     this.hookTaskKeys.clear()
     this.hookTurnIds.clear()
@@ -187,31 +195,33 @@ export class CodexActivityService {
     if (this.stopped) return
     recordPerf('island:hookEvent')
     const identity = this.resolveHookIdentity(payload)
-    if (payload.transcript_path && identity === undefined && !isRetry) {
-      this.scheduleHookSourceRetry(payload, receivedAt)
+    if (payload.transcript_path && identity === undefined) {
+      if (!isRetry) this.scheduleHookSourceRetry(payload, receivedAt)
       return
     }
     if (!identity || !identity.admitted) {
-      this.rejectThread('local', payload.session_id, identity?.source ?? 'unknown')
+      this.rejectThread(
+        'local',
+        identity?.threadId ?? payload.session_id,
+        identity?.source ?? 'unknown'
+      )
       return
     }
+    const taskPayload = { ...payload, session_id: identity.threadId }
     const source = identity.source
     this.state.noteHookEvent(receivedAt)
     // 重新准入意味着撤销不再完成：订阅会重建，必须清掉旧标记，否则后续拒绝会短路。
-    this.revokedThreadKeys.delete(createTaskKey('local', payload.session_id))
-    if (source === 'vscode') this.ipc?.followThread(payload.session_id)
+    this.revokedThreadKeys.delete(createTaskKey('local', taskPayload.session_id))
+    if (source === 'vscode') this.ipc?.followThread(taskPayload.session_id)
     // 自动审批也会触发工具 Hook，Desktop 的待处理请求统一由 IPC 状态流确认。
     if (source === 'vscode' && DESKTOP_REQUEST_HOOK_EVENTS.has(payload.hook_event_name)) {
       return this.emit()
     }
-    const normalizedPayload = this.resolveHookTurn(
-      source ? { ...payload, source } : payload,
-      receivedAt
-    )
+    const normalizedPayload = this.resolveHookTurn({ ...taskPayload, source }, receivedAt)
     if (!normalizedPayload) return this.emit()
     const event = mapCodexHookEvent(normalizedPayload, receivedAt)
     if (!event) return this.emit()
-    this.applyHookEvent(payload, event)
+    this.applyHookEvent(taskPayload, event)
   }
 
   private applyHookEvent(payload: CodexHookPayload, event: IslandActivityEvent): void {
@@ -307,7 +317,7 @@ export class CodexActivityService {
   private scheduleHookSourceRetry(payload: CodexHookPayload, receivedAt: number): void {
     this.scheduleHookRetry(() => {
       if (this.stopped) return
-      this.hookSourceRetryAt.delete(createTaskKey('local', payload.session_id))
+      if (payload.transcript_path) this.hookSourceRetryAt.delete(payload.transcript_path)
       this.handleHookPayload(payload, receivedAt, true)
     })
   }
@@ -317,8 +327,14 @@ export class CodexActivityService {
     timer.unref?.()
   }
 
-  private resolveHookIdentity(payload: CodexHookPayload): IslandTaskIdentity | undefined {
-    const key = createTaskKey('local', payload.session_id)
+  private resolveHookIdentity(payload: CodexHookPayload): ResolvedHookIdentity | undefined {
+    const transcript = payload.transcript_path
+      ? this.resolveTranscriptIdentity(payload.transcript_path)
+      : undefined
+    if (payload.transcript_path && !transcript) return undefined
+    // 子代理沿用父 session_id；先确认 transcript 自身 id，不能借用或撤销父身份。
+    const threadId = transcript?.threadId ?? payload.session_id
+    const key = createTaskKey('local', threadId)
     const catalogSource = this.threadSources.get(key)
     const known =
       catalogSource === undefined
@@ -328,25 +344,35 @@ export class CodexActivityService {
             admitted: isAdmittedIslandTaskSource(catalogSource),
             legacyDesktopCandidate: false
           }
-    if (catalogSource === 'internal' || catalogSource === 'subagent') return known
-    const cached = this.hookSourceCache.get(key)
-    if (cached) return cached.legacyDesktopCandidate && catalogSource === 'vscode' ? known : cached
-    if (!payload.transcript_path) return known
+    if (catalogSource === 'internal' || catalogSource === 'subagent') {
+      return known && { ...known, threadId }
+    }
+    const identity = transcript ?? this.hookSourceCache.get(key)
+    if (!identity) return known && { ...known, threadId }
+    if (transcript) this.hookSourceCache.set(key, transcript)
+    const resolved =
+      identity.legacyDesktopCandidate && catalogSource === 'vscode' ? known : identity
+    if (!resolved) return undefined
+    this.threadSources.set(key, resolved.source)
+    if (isAdmittedIslandTaskSource(resolved.source)) this.revokedThreadKeys.delete(key)
+    return { ...resolved, threadId }
+  }
+
+  private resolveTranscriptIdentity(transcriptPath: string): CodexTranscriptIdentity | undefined {
+    const cached = this.hookTranscriptCache.get(transcriptPath)
+    if (cached) return cached
     const now = Date.now()
-    const retryAt = this.hookSourceRetryAt.get(key)
-    if (retryAt !== undefined && now < retryAt) return known?.admitted ? known : undefined
-    const identity = readCodexTranscriptIdentity(payload.transcript_path)
+    const retryAt = this.hookSourceRetryAt.get(transcriptPath)
+    if (retryAt !== undefined && now < retryAt) return undefined
+    const identity = readCodexTranscriptIdentity(transcriptPath)
     if (identity !== undefined) {
-      this.hookSourceRetryAt.delete(key)
-      this.hookSourceCache.set(key, identity)
-      if (identity.legacyDesktopCandidate && catalogSource === 'vscode') return known
-      this.threadSources.set(key, identity.source)
-      if (isAdmittedIslandTaskSource(identity.source)) this.revokedThreadKeys.delete(key)
+      this.hookSourceRetryAt.delete(transcriptPath)
+      this.hookTranscriptCache.set(transcriptPath, identity)
       return identity
     }
-    // 文件尚未创建或首行仍在写入时允许后续恢复，但限制高频 Hook 的同步读盘次数。
-    this.hookSourceRetryAt.set(key, now + HOOK_SOURCE_RETRY_MS)
-    return known?.admitted ? known : undefined
+    // 未读到事件实际归属时只延迟重试，不能回退到共享 session_id 的已知父身份。
+    this.hookSourceRetryAt.set(transcriptPath, now + HOOK_SOURCE_RETRY_MS)
+    return undefined
   }
 
   private rejectThread(hostId: string, threadId: string, source: IslandTaskSource): void {
