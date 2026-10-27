@@ -1,3 +1,4 @@
+import type { KeyboardEvent } from 'react'
 import type { IslandPreferences, IslandSnapshot } from '../../../shared/island'
 import type { LocaleCode } from '../../../shared/capsule'
 
@@ -17,8 +18,12 @@ export function IslandSettingsCard({
   const zh = locale === 'zh-CN'
   const runtime = getRuntimeHint(zh, snapshot)
   return (
-    <>
-      <div className="setting-row tool-setting-row">
+    <div
+      aria-label={zh ? '任务状态展示' : 'Task activity display'}
+      className="setting-row tool-setting-row island-setting"
+      role="group"
+    >
+      <div className="island-setting__header">
         <div className="tool-setting-copy">
           <span className="setting-field__label">
             {zh ? '任务状态展示' : 'Task activity display'}
@@ -51,7 +56,7 @@ export function IslandSettingsCard({
         </button>
       </div>
       <IslandModeOptions locale={locale} preferences={preferences} onChange={onChange} />
-    </>
+    </div>
   )
 }
 
@@ -68,12 +73,13 @@ function IslandModeOptions({
 }: IslandModeOptionsProps): React.JSX.Element {
   const zh = locale === 'zh-CN'
   return (
-    <div className={`island-mode-setting ${preferences.enabled ? '' : 'is-disabled'}`}>
+    <div className="setting-field island-mode-setting">
       <span className="setting-field__label">{zh ? '显示方式' : 'Display mode'}</span>
       <div
         aria-label={zh ? '任务状态显示方式' : 'Task activity display mode'}
         aria-disabled={!preferences.enabled}
-        className="island-mode-options"
+        className={`segmented ${preferences.enabled ? '' : 'is-disabled'}`}
+        onKeyDown={preferences.enabled ? handleIslandModeKeyDown : undefined}
         role="radiogroup"
       >
         <IslandModeOption
@@ -91,6 +97,22 @@ function IslandModeOptions({
       </div>
     </div>
   )
+}
+
+function handleIslandModeKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+  const backward = event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+  const forward = event.key === 'ArrowRight' || event.key === 'ArrowDown'
+  if (!backward && !forward) return
+  const options = Array.from(
+    event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')
+  )
+  const current = options.indexOf(event.target as HTMLButtonElement)
+  if (current < 0) return
+  event.preventDefault()
+  // 分段按钮沿用单选框的方向键选择与焦点行为，避免主题适配改变键盘操作。
+  const next = options[(current + (backward ? -1 : 1) + options.length) % options.length]
+  next.focus()
+  next.click()
 }
 
 interface IslandModeOptionProps {
@@ -112,19 +134,19 @@ function IslandModeOption({
   const title = islandMode ? (zh ? '灵动岛' : 'Dynamic Island') : zh ? '任务栏' : 'Taskbar'
 
   return (
-    <label className={`island-mode-option ${selected ? 'is-selected' : ''}`}>
-      <input
-        checked={selected}
-        disabled={!preferences.enabled}
-        name="island-display-mode"
-        onChange={() => onChange({ ...preferences, displayMode: mode })}
-        type="radio"
-        value={mode}
-      />
-      <span className="island-mode-option__copy">
-        <span className="island-mode-option__title">{title}</span>
-      </span>
-    </label>
+    <button
+      aria-checked={selected}
+      className={selected ? 'is-active' : ''}
+      disabled={!preferences.enabled}
+      onClick={() => {
+        if (!selected) onChange({ ...preferences, displayMode: mode })
+      }}
+      role="radio"
+      tabIndex={selected ? 0 : -1}
+      type="button"
+    >
+      {title}
+    </button>
   )
 }
 
