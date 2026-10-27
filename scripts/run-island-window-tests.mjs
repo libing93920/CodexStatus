@@ -8,6 +8,9 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const electronExecutable = resolveElectronExecutable()
 const testScript = join(repositoryRoot, 'scripts', 'island-window.test.mjs')
 
+if (process.platform === 'win32') {
+  await runIslandWindowTest({}, join(repositoryRoot, 'scripts', 'island-zorder.test.mjs'))
+}
 await runIslandWindowTest()
 await runIslandWindowTest({ ISLAND_TEST_REDUCED_MOTION: '1' })
 
@@ -23,9 +26,9 @@ function resolveElectronExecutable() {
   return executable
 }
 
-function runIslandWindowTest(extraEnv = {}) {
+function runIslandWindowTest(extraEnv = {}, script = testScript) {
   return new Promise((resolveRun, rejectRun) => {
-    const child = spawn(electronExecutable, [testScript], {
+    const child = spawn(electronExecutable, [script], {
       cwd: repositoryRoot,
       env: { ...process.env, ...extraEnv },
       stdio: 'inherit',

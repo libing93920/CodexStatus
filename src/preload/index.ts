@@ -20,6 +20,7 @@ import type {
   WindowPreferences
 } from '../shared/capsule'
 import type { IslandPresentation, IslandSnapshot } from '../shared/island'
+import type { IslandLayoutUpdate, IslandPointerUpdate } from '../shared/island-layout'
 import {
   ACTIVITY_CHANNELS,
   type ActivityBoard,
@@ -62,6 +63,12 @@ const CHANNELS = {
   islandReady: 'codex-status:island-ready',
   islandPresentation: 'codex-status:island-presentation',
   islandHidden: 'codex-status:island-hidden',
+  islandLayout: 'codex-status:island-layout',
+  islandPointer: 'codex-status:island-pointer',
+  islandViewport: 'codex-status:island-viewport',
+  islandMove: 'codex-status:island-move',
+  islandNudge: 'codex-status:island-nudge',
+  islandDragFinished: 'codex-status:island-drag-finished',
   islandInteractive: 'codex-status:island-interactive',
   islandDiagnostic: 'codex-status:island-diagnostic',
   islandOpenTask: 'codex-status:island-open-task',
@@ -131,9 +138,24 @@ const api: CodexStatusApi = {
   notifyIslandReady: () => ipcRenderer.invoke(CHANNELS.islandReady) as Promise<void>,
   notifyIslandHidden: (revision: number) =>
     ipcRenderer.invoke(CHANNELS.islandHidden, revision) as Promise<void>,
+  onIslandLayout: (listener: (update: IslandLayoutUpdate) => void) =>
+    subscribe(CHANNELS.islandLayout, listener),
+  onIslandPointer: (listener: (update: IslandPointerUpdate) => void) =>
+    subscribe(CHANNELS.islandPointer, listener),
+  setIslandViewport: (request) =>
+    ipcRenderer.invoke(CHANNELS.islandViewport, request) as Promise<IslandLayoutUpdate | undefined>,
+  moveIslandWindow: (offset) => ipcRenderer.invoke(CHANNELS.islandMove, offset) as Promise<void>,
+  nudgeIslandWindow: (direction) =>
+    ipcRenderer.invoke(CHANNELS.islandNudge, direction) as Promise<void>,
+  finishIslandWindowDrag: () => ipcRenderer.invoke(CHANNELS.islandDragFinished) as Promise<void>,
   logIslandDiagnostic: (batch) => ipcRenderer.send(CHANNELS.islandDiagnostic, batch),
-  setIslandInteractive: (interactive, diagnostic) =>
-    ipcRenderer.invoke(CHANNELS.islandInteractive, interactive, diagnostic) as Promise<void>,
+  setIslandInteractive: (interactive, presentationRevision, diagnostic) =>
+    ipcRenderer.invoke(
+      CHANNELS.islandInteractive,
+      interactive,
+      presentationRevision,
+      diagnostic
+    ) as Promise<void>,
   openIslandTask: (threadId: string) =>
     ipcRenderer.invoke(CHANNELS.islandOpenTask, threadId) as Promise<boolean>,
   dismissIslandTask: (threadId: string) =>

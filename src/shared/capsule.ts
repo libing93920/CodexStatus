@@ -6,6 +6,8 @@ import {
   type IslandSnapshot
 } from './island'
 import type { IslandDiagBatch } from './island-diagnostics'
+import type { IslandLayout, IslandLayoutUpdate, IslandPointerUpdate } from './island-layout'
+import type { IslandViewportRequest } from './island-viewport'
 import {
   DEFAULT_WINDOW_KEEPER_START_TIME,
   normalizeWindowKeeperStartTime
@@ -307,6 +309,7 @@ export interface PersistedState {
   /** 本机 LAN 标识,跨重启稳定;首次启动生成 UUID */
   peerId?: string
   islandViewedEventIds?: string[]
+  taskbarOffsetX?: number
 }
 
 export interface BootstrapPayload {
@@ -327,6 +330,7 @@ export interface BootstrapPayload {
   announcement: AnnouncementState | null
   island: IslandSnapshot
   islandDiagnostics: boolean
+  islandLayout?: IslandLayout
 }
 
 export interface PreferencesPayload {
@@ -421,9 +425,16 @@ export interface CodexStatusApi {
   onIslandPresentation: (listener: (presentation: IslandPresentation) => void) => () => void
   notifyIslandReady: () => Promise<void>
   notifyIslandHidden: (revision: number) => Promise<void>
+  onIslandLayout: (listener: (update: IslandLayoutUpdate) => void) => () => void
+  onIslandPointer: (listener: (update: IslandPointerUpdate) => void) => () => void
+  setIslandViewport: (request: IslandViewportRequest) => Promise<IslandLayoutUpdate | undefined>
+  moveIslandWindow: (offset: { x: number; y: number }) => Promise<void>
+  nudgeIslandWindow: (direction: { x: number; y: number }) => Promise<void>
+  finishIslandWindowDrag: () => Promise<void>
   logIslandDiagnostic: (batch: IslandDiagBatch) => void
   setIslandInteractive: (
     interactive: boolean,
+    presentationRevision: number,
     diagnostic?: { instance: string; request: number }
   ) => Promise<void>
   openIslandTask: (threadId: string) => Promise<boolean>

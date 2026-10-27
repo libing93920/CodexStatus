@@ -6,6 +6,11 @@ import { join, resolve } from 'node:path'
 import test from 'node:test'
 import vm from 'node:vm'
 import ts from 'typescript'
+import {
+  ISLAND_SINGLE_TASK_HEIGHT,
+  islandHitRects,
+  resolveIslandLayout
+} from '../src/shared/island-layout.ts'
 
 import {
   formatDiagError,
@@ -15,6 +20,7 @@ import {
 } from '../src/main/services/diag-log.ts'
 
 const DIAG_LOG_MAX_BYTES = 4 * 1024 * 1024
+const PRIMARY_BUTTON_MASK = 1
 const islandSource = await fs.readFile(resolve('src/renderer/src/island/Island.tsx'), 'utf8')
 const diagSource = await fs.readFile(resolve('src/main/services/diag-log.ts'), 'utf8')
 
@@ -134,6 +140,7 @@ test('生产鼠标effect在离开和清理后不会执行过期命中', () => {
     const events = {}
     const calls = []
     const cancelled = []
+    const windowEvents = {}
     const diagnostic = {
       counters: { current: { effect: 0 } },
       trace: () => undefined
@@ -146,6 +153,8 @@ test('生产鼠标effect在离开和清理后不会执行过期命中', () => {
     const latestPointer = { current: { x: 0, y: 0, timeStamp: 0, valid: false } }
     let frame
     let cleanup
+    const syncTaskbarPointer = () => undefined
+    const resetTaskbarPointer = () => undefined
     const cancelInteractiveFrameRef = { current: () => undefined }
     vm.runInNewContext(code, {
       useEffect: (fn) => {
@@ -155,6 +164,7 @@ test('生产鼠标effect在离开和清理后不会执行过期命中', () => {
       mode: 'compact',
       expandedHeight: 200,
       satelliteStatus: undefined,
+      viewport: { rebasingRef: { current: false } },
       diagnostic,
       interactiveRef,
       pendingHitTestRef,
@@ -162,8 +172,11 @@ test('生产鼠标effect在离开和清理后不会执行过期命中', () => {
       expandedHeightRef,
       satelliteRef,
       latestPointer,
+      layoutRef: { current: undefined },
       presentationRef: { current: true },
       tracePointerLeave: () => undefined,
+      syncTaskbarPointer,
+      resetTaskbarPointer,
       rememberPointer: (event) => {
         Object.assign(latestPointer.current, {
           x: event.clientX,
@@ -184,6 +197,14 @@ test('生产鼠标effect在离开和清理后不会执行过期命中', () => {
       },
       cancelAnimationFrame: (id) => cancelled.push(id),
       cancelInteractiveFrameRef,
+      window: {
+        addEventListener: (name, callback) => {
+          windowEvents[name] = callback
+        },
+        removeEventListener: (name, callback) => {
+          if (windowEvents[name] === callback) delete windowEvents[name]
+        }
+      },
       document: {
         addEventListener: (name, fn) => {
           events[name] = fn
@@ -193,10 +214,19 @@ test('生产鼠标effect在离开和清理后不会执行过期命中', () => {
         }
       }
     })
+    assert.equal(typeof windowEvents.blur, 'function')
+    assert.equal(windowEvents.blur, resetTaskbarPointer)
     events.pointermove({ clientX: 100, clientY: 10 })
-    if (action === 'cleanup') cleanup()
-    else if (action === 'pointerleave') cancelInteractiveFrameRef.current()
-    else events.mouseleave({ clientX: 10, clientY: 300 })
+    if (action === 'cleanup') {
+      cleanup()
+      assert.equal(events.pointermove, undefined)
+      assert.equal(events.mouseleave, undefined)
+      assert.equal(windowEvents.blur, undefined)
+    } else if (action === 'pointerleave') {
+      cancelInteractiveFrameRef.current()
+    } else {
+      events.mouseleave({ clientX: 10, clientY: 300 })
+    }
     assert.deepEqual(cancelled, [1])
     // 即使测试强行调用已取消回调，旧坐标也必须失效。
     frame()
@@ -215,7 +245,13 @@ function pointerHarness(source = islandSource) {
   const island = ast.statements.find(
     (node) => ts.isFunctionDeclaration(node) && node.name?.text === 'Island'
   )
-  const helpers = ['setIslandInteractive', 'rememberPointer']
+  const helpers = [
+    'isPointInIsland',
+    'rememberPointer',
+    'setIslandInteractive',
+    'syncTaskbarPointer',
+    'resetTaskbarPointer'
+  ]
   const statements = island.body.statements.filter((node) => {
     if (ts.isFunctionDeclaration(node)) return helpers.includes(node.name?.text)
     const text = node.getText(ast)
@@ -224,13 +260,8 @@ function pointerHarness(source = islandSource) {
       (text.startsWith('useLayoutEffect(') && text.includes("'geometry-change'"))
     )
   })
-  const geometry = ast.statements.filter(
-    (node) =>
-      ts.isFunctionDeclaration(node) &&
-      ['isPointInIsland', 'islandHitRects'].includes(node.name?.text)
-  )
   const code = ts.transpileModule(
-    [...geometry, ...statements].map((n) => n.getText(ast)).join('\n'),
+    `(() => {\n${statements.map((node) => node.getText(ast)).join('\n')}\n})()`,
     {
       compilerOptions: { target: ts.ScriptTarget.ES2022 }
     }
@@ -238,9 +269,25 @@ function pointerHarness(source = islandSource) {
   const events = {},
     calls = [],
     frames = new Map(),
+    windowEvents = {},
     effects = new Map()
+  const taskbarPointer = { current: 'idle' }
   let frameId = 0
   const ref = (current) => ({ current })
+  const display = {
+    id: 1,
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    workArea: { x: 0, y: 0, width: 1920, height: 1040 }
+  }
+  const layout = resolveIslandLayout({ display, displays: [display] })
+  const compactPoint = {
+    x: layout.compact.x + layout.compact.width / 2,
+    y: layout.compact.y + layout.compact.height / 2
+  }
+  const expandedResizePoint = {
+    x: layout.expanded.x + layout.expanded.width / 2,
+    y: layout.expanded.y + (ISLAND_SINGLE_TASK_HEIGHT + layout.expanded.height) / 2
+  }
   const effect = (name, callback, deps) => {
     const previous = effects.get(name)
     if (previous && deps.every((value, i) => value === previous.deps[i])) return
@@ -249,12 +296,19 @@ function pointerHarness(source = islandSource) {
   }
   const context = vm.createContext({
     mode: 'compact',
+    PRIMARY_BUTTON_MASK,
     expandedHeight: 200,
     satelliteStatus: undefined,
+    hasSatellite: false,
+    viewport: { rebasingRef: ref(false) },
+    layout,
     presentation: { visible: true },
+    viewportPresentationRef: ref({ revision: 1, visible: true }),
     modeRef: ref('compact'),
+    layoutRef: ref(layout),
     expandedHeightRef: ref(200),
     satelliteRef: ref(false),
+    drag: { dragging: false, pointerActive: ref(false), suppressClick: ref(false) },
     interactiveRef: ref(false),
     presentationRef: ref(true),
     pendingHitTestRef: ref(false),
@@ -266,7 +320,17 @@ function pointerHarness(source = islandSource) {
       samplePoint: () => undefined
     },
     tracePointerLeave: () => undefined,
+    islandHitRects,
+    setTaskbarPointer: (next) => {
+      taskbarPointer.current = typeof next === 'function' ? next(taskbarPointer.current) : next
+    },
     window: {
+      addEventListener: (name, callback) => {
+        windowEvents[name] = callback
+      },
+      removeEventListener: (name, callback) => {
+        if (windowEvents[name] === callback) delete windowEvents[name]
+      },
       codexStatus: {
         setIslandInteractive: (value) => {
           calls.push(value)
@@ -291,34 +355,50 @@ function pointerHarness(source = islandSource) {
   })
   const render = (values = {}) => {
     Object.assign(context, values)
+    if (values.layout) context.layoutRef.current = values.layout
     vm.runInContext(code, context)
   }
   const move = (x, y) => events.pointermove({ clientX: x, clientY: y, timeStamp: 1 })
+  const moveCompact = () => move(compactPoint.x, compactPoint.y)
+  const moveExpandedResizePoint = () => move(expandedResizePoint.x, expandedResizePoint.y)
   const flush = () => {
     const pending = [...frames.values()]
     frames.clear()
     pending.forEach((fn) => fn())
   }
   render()
-  return { context, events, calls, frames, render, move, flush }
+  return {
+    context,
+    events,
+    windowEvents,
+    calls,
+    frames,
+    taskbarPointer,
+    render,
+    move,
+    moveCompact,
+    moveExpandedResizePoint,
+    compactPoint,
+    flush
+  }
 }
 
 test('生产交互在静止指针展开和尺寸变化期间不关闭穿透命中', () => {
   const h = pointerHarness()
-  h.move(222, 15)
+  h.moveCompact()
   h.flush()
   assert.deepEqual(h.calls, [true])
   h.render({ mode: 'expanded' })
-  h.render({ expandedHeight: 362, satelliteStatus: 'waiting-input' })
+  h.render({ expandedHeight: 362, hasSatellite: true })
   assert.deepEqual(h.calls, [true])
   assert.equal(h.context.diagnostic.counters.current.effect, 1)
 })
 
 test('几何提交取消待执行命中并使用最新参数，旧回调不会覆盖结果', () => {
   const h = pointerHarness()
-  h.move(222, 15)
+  h.moveCompact()
   h.flush()
-  h.move(232, 250)
+  h.moveExpandedResizePoint()
   const stale = [...h.frames.values()][0]
   h.render({ mode: 'expanded', expandedHeight: 362 })
   assert.equal(h.frames.size, 0)
@@ -331,11 +411,11 @@ test('几何提交取消待执行命中并使用最新参数，旧回调不会�
 test('生产命中重复状态不发IPC，document leave后尺寸变化不复活旧坐标', () => {
   const h = pointerHarness()
   for (let i = 0; i < 500; i++) {
-    h.move(222, 15)
+    h.moveCompact()
     h.flush()
   }
   assert.deepEqual(h.calls, [true])
-  h.events.mouseleave({ clientX: 222, clientY: 15 })
+  h.events.mouseleave({ clientX: h.compactPoint.x, clientY: h.compactPoint.y })
   h.render({ mode: 'expanded' })
   assert.deepEqual(h.calls, [true, false])
   assert.equal(h.context.latestPointer.current.valid, false)
@@ -343,23 +423,39 @@ test('生产命中重复状态不发IPC，document leave后尺寸变化不复活
 
 test('隐藏清理和重显不沿用旧坐标，隐藏时迟到移动不排队', () => {
   const h = pointerHarness()
-  h.move(222, 15)
+  assert.equal(typeof h.windowEvents.blur, 'function')
+  h.moveCompact()
   h.flush()
   const lateMove = h.events.pointermove
-  h.move(222, 16)
+  h.moveCompact()
   const stale = [...h.frames.values()][0]
   h.context.presentationRef.current = false
   h.render({ presentation: { visible: false } })
-  lateMove({ clientX: 222, clientY: 17, timeStamp: 2 })
+  assert.equal(h.windowEvents.blur, undefined)
+  lateMove({ ...h.compactPoint, timeStamp: 2 })
   stale()
   assert.equal(h.frames.size, 0)
   assert.deepEqual(h.calls, [true, false])
   h.context.presentationRef.current = true
   h.render({ presentation: { visible: true } })
+  assert.equal(typeof h.windowEvents.blur, 'function')
   assert.deepEqual(h.calls, [true, false])
-  h.move(222, 15)
+  h.moveCompact()
   h.flush()
   assert.deepEqual(h.calls, [true, false, true])
+})
+
+test('实际布局命中区域维持拖动指针交互，拖动结束后恢复区域命中', () => {
+  const h = pointerHarness()
+  h.context.drag.pointerActive.current = true
+  h.move(0, 300)
+  h.flush()
+  assert.deepEqual(h.calls, [true])
+
+  h.context.drag.pointerActive.current = false
+  h.move(0, 300)
+  h.flush()
+  assert.deepEqual(h.calls, [true, false])
 })
 
 test('关闭诊断时离开记录不读取事件字段或DOM', () => {

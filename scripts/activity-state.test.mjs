@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createRequire } from 'node:module'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -90,4 +90,32 @@ test('设备peerId稳定，旧活动关闭值重载后保持开启，坏值不�
     assert.equal(loaded.settings.activityEnabled, true)
     assert.equal(loaded.settings.activityIdleThresholdMinutes, 5)
   }
+})
+
+test('任务栏横向偏移只保留有限数值并忽略旧灵动岛位置', async (t) => {
+  const stateDirectory = await mkdtemp(
+    join(process.env.PI_SCRATCH_DIR || tmpdir(), 'taskbar-offset-')
+  )
+  globalThis.__activityStateDirectory = stateDirectory
+  t.after(async () => {
+    delete globalThis.__activityStateDirectory
+    await rm(stateDirectory, { recursive: true, force: true })
+  })
+
+  const stateFile = join(stateDirectory, 'codex-status-state.json')
+  const defaults = await state.loadPersistedState()
+  await state.savePersistedState({ ...defaults, taskbarOffsetX: -128.5 })
+  assert.equal((await state.loadPersistedState()).taskbarOffsetX, -128.5)
+
+  await state.savePersistedState({ ...defaults, taskbarOffsetX: Infinity })
+  assert.equal((await state.loadPersistedState()).taskbarOffsetX, undefined)
+
+  await writeFile(stateFile, '{"taskbarOffsetX":1e400,"islandPosition":{"x":640,"y":30}}')
+  const legacy = await state.loadPersistedState()
+  assert.equal(legacy.taskbarOffsetX, undefined)
+  assert.equal('islandPosition' in legacy, false)
+  await state.savePersistedState(legacy)
+  const saved = JSON.parse(await readFile(stateFile, 'utf8'))
+  assert.equal('taskbarOffsetX' in saved, false)
+  assert.equal('islandPosition' in saved, false)
 })

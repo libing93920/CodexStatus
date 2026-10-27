@@ -10,10 +10,23 @@ import {
   type IslandTask
 } from '../../../shared/island'
 import './island.css'
+import './taskbar.css'
 import { useIslandDiagnostics } from './use-island-diagnostics'
 import type { IslandDiagFields } from '../../../shared/island-diagnostics'
-
-type IslandMode = 'hidden' | 'compact' | 'alert' | 'expanded'
+import {
+  islandHitRects,
+  resolveIslandModeRect,
+  ISLAND_SINGLE_TASK_HEIGHT,
+  ISLAND_TWO_TASK_HEIGHT,
+  ISLAND_EXPANDED_HEIGHT,
+  type IslandLayout,
+  type IslandPointerUpdate,
+  type IslandMode,
+  type IslandRect
+} from '../../../shared/island-layout'
+import { useIslandDrag } from './use-island-drag'
+import { useIslandViewport } from './use-island-viewport'
+import { formatTaskbarCount, formatTaskbarDuration } from './taskbar-formatters'
 
 const STATUS_COPY: Record<IslandDisplayStatus, string> = {
   'waiting-approval': '需要审批',
@@ -31,12 +44,16 @@ const ALERT_STATUSES: readonly IslandDisplayStatus[] = [
 ]
 const HOLD_DURATION_MS = 450
 const EXIT_DURATION_MS = 340
-const SINGLE_TASK_HEIGHT = 200
+const PRIMARY_BUTTON_MASK = 1
+type TaskbarPointerState = 'idle' | 'hovered' | 'pressed'
 
 export default function Island(): React.JSX.Element {
   const [snapshot, setSnapshot] = useState<IslandSnapshot>(createEmptyIslandSnapshot)
-  const [mode, setModeState] = useState<IslandMode>('hidden')
+  const [layout, setLayout] = useState<IslandLayout>()
+  const [taskbarPointer, setTaskbarPointer] = useState<TaskbarPointerState>('idle')
+  const layoutRef = useRef<IslandLayout | undefined>(undefined)
   const [alertTarget, setAlertTarget] = useState<IslandTask>()
+  const [alertDrawing, setAlertDrawing] = useState<IslandTask>()
   const [presentation, setPresentation] = useState<IslandPresentation>({
     revision: 0,
     visible: false
@@ -46,12 +63,13 @@ export default function Island(): React.JSX.Element {
   const [now, setNow] = useState(Date.now())
   const latestSnapshot = useRef<IslandSnapshot>(createEmptyIslandSnapshot())
   const presentationRef = useRef(false)
+  const viewportPresentationRef = useRef<IslandPresentation>({ revision: 0, visible: false })
   const seenEvents = useRef(new Set<string>())
   const reminder = useRef<PausableReminder | undefined>(undefined)
   const exitTimer = useRef<number | undefined>(undefined)
   const hovering = useRef(false)
   const focused = useRef(false)
-  const expandedHeightRef = useRef(SINGLE_TASK_HEIGHT)
+  const expandedHeightRef = useRef(ISLAND_SINGLE_TASK_HEIGHT)
   const satelliteRef = useRef(false)
   const interactiveRef = useRef(false)
   const pendingHitTestRef = useRef(false)
@@ -89,8 +107,43 @@ export default function Island(): React.JSX.Element {
   const compactTask = leadingTask ?? alertTask
   const compactStatus = compactTask ? getDisplayStatus(compactTask) : undefined
   const satelliteStatus = getSatelliteStatus(pendingTasks)
-  const expandedHeight =
-    activeTasks.length <= 1 ? SINGLE_TASK_HEIGHT : activeTasks.length === 2 ? 281 : 362
+  const requestedExpandedHeight =
+    activeTasks.length <= 1
+      ? ISLAND_SINGLE_TASK_HEIGHT
+      : activeTasks.length === 2
+        ? ISLAND_TWO_TASK_HEIGHT
+        : ISLAND_EXPANDED_HEIGHT
+  const taskbarMode = layout?.displayMode === 'taskbar'
+  const compactCounts = {
+    pending: pendingTasks.length,
+    running: runningCount,
+    completed: completedCount,
+    failed: failedCount,
+    total: activeTasks.length
+  }
+  const fullCompactLabel = compactLabel(compactCounts)
+  const fullCompactDuration = compactTask ? formatTaskDuration(compactTask, now) : '--:--'
+  const compactDuration = taskbarMode
+    ? formatTaskbarDuration(compactTask ? taskDurationSeconds(compactTask, now) : undefined)
+    : fullCompactDuration
+  // 只保留退出绘制帧；旧任务控件会立即 inert，不再承担业务状态。
+  if (taskbarMode && alertTask && alertTask !== alertDrawing) setAlertDrawing(alertTask)
+  const alertContent = taskbarMode ? (alertTask ?? alertDrawing) : alertTask
+  const staleAlertContent = taskbarMode && !alertTask && alertContent !== undefined
+  const viewport = useIslandViewport({
+    visible: presentation.visible,
+    presentationRef: viewportPresentationRef,
+    expandedHeight: requestedExpandedHeight,
+    hasSatellite: !taskbarMode && satelliteStatus !== undefined,
+    layoutRef,
+    elementRef: islandRef,
+    applyLayout: applyLayoutUpdate,
+    onError: (error) => {
+      console.error(error)
+      setNavigationError('窗口布局更新失败，请重新开启任务状态展示')
+    }
+  })
+  const { mode, cardMode, expandedHeight, hasSatellite, setMode: setModeState } = viewport
   const diagnostic = useIslandDiagnostics({
     mode,
     modeRef,
@@ -101,12 +154,65 @@ export default function Island(): React.JSX.Element {
     pendingHitTest: pendingHitTestRef,
     point: latestPointer,
     expandedHeight,
-    satellite: satelliteStatus !== undefined
+    satellite: hasSatellite
   })
 
   function setMode(next: IslandMode, reason: string): void {
     diagnostic.request(next, reason)
     setModeState(next)
+  }
+
+  const drag = useIslandDrag({
+    enabled: taskbarMode,
+    visible: presentation.visible,
+    compact: mode === 'compact',
+    onStart: () => {
+      window.clearTimeout(holdTimer.current)
+      pauseReminder()
+      setIslandInteractive(true, 'drag-start')
+    }
+  })
+
+  function isPointInIsland(x: number, y: number): boolean {
+    if (!layoutRef.current) return false
+    return islandHitRects({
+      layout: layoutRef.current,
+      mode: modeRef.current,
+      expandedHeight: expandedHeightRef.current,
+      hasSatellite: satelliteRef.current
+    }).some(
+      (rect) => x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height
+    )
+  }
+
+  function syncTaskbarPointer(point?: {
+    clientX: number
+    clientY: number
+    buttons?: number
+  }): void {
+    const currentLayout = layoutRef.current
+    if (currentLayout?.displayMode !== 'taskbar') return
+    // 即时输入或布局更新优先，不能再由上一帧的 buttons 覆盖反馈。
+    cancelInteractiveFrameRef.current()
+    const rect = currentLayout.compact
+    const inside =
+      presentationRef.current &&
+      point !== undefined &&
+      point.clientX >= rect.x &&
+      point.clientX < rect.x + rect.width &&
+      point.clientY >= rect.y &&
+      point.clientY < rect.y + rect.height
+    const buttons = point?.buttons
+    setTaskbarPointer((previous) => {
+      if (!inside) return 'idle'
+      if (buttons === undefined) return previous === 'pressed' ? previous : 'hovered'
+      return (buttons & PRIMARY_BUTTON_MASK) !== 0 ? 'pressed' : 'hovered'
+    })
+  }
+
+  function resetTaskbarPointer(): void {
+    if (layoutRef.current?.displayMode === 'taskbar') cancelInteractiveFrameRef.current()
+    setTaskbarPointer('idle')
   }
 
   useEffect(() => {
@@ -118,6 +224,8 @@ export default function Island(): React.JSX.Element {
         reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches
       })
       latestSnapshot.current = payload.island
+      layoutRef.current = payload.islandLayout
+      setLayout(payload.islandLayout)
       setSnapshot(payload.island)
       setMode('hidden', 'bootstrap')
       setRendererReady(true)
@@ -129,10 +237,25 @@ export default function Island(): React.JSX.Element {
     const disposePresentation = window.codexStatus.onIslandPresentation((next) =>
       presentationHandlerRef.current(next)
     )
+    const disposeLayout = window.codexStatus.onIslandLayout((next) => {
+      viewport.receiveLayout(next)
+    })
+    const disposePointer = window.codexStatus.onIslandPointer(handleNativePointer)
+    const disposePreferences = window.codexStatus.onPreferencesUpdated((next) => {
+      if (next.settings.island.displayMode === layoutRef.current?.displayMode) return
+      resetTaskbarPointer()
+      viewport.cancel()
+      drag.onPointerCancel()
+      window.clearTimeout(holdTimer.current)
+      setMode('compact', 'display-mode-changed')
+    })
     return () => {
       active = false
       disposeIsland()
       disposePresentation()
+      disposeLayout()
+      disposePointer()
+      disposePreferences()
       stopReminder('unmount')
       cancelInteractiveFrameRef.current()
       if (presentationFrame.current !== undefined) cancelAnimationFrame(presentationFrame.current)
@@ -158,6 +281,7 @@ export default function Island(): React.JSX.Element {
   }, [mode])
 
   useEffect(() => {
+    if (drag.dragging) return
     const candidate = findAlertCandidate(snapshot, seenEvents.current)
     if (!candidate) {
       if (alertTarget && !alertTask) {
@@ -171,7 +295,7 @@ export default function Island(): React.JSX.Element {
     diagnostic.request('alert', 'candidate-unless-expanded')
     setModeState((current) => (current === 'expanded' ? current : 'alert'))
     startReminderRef.current()
-  }, [snapshot, diagnostic, alertTask, alertTarget])
+  }, [snapshot, diagnostic, alertTask, alertTarget, drag.dragging, setModeState])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -208,7 +332,14 @@ export default function Island(): React.JSX.Element {
 
   useEffect(() => {
     const element = alertRef.current
-    if (!element || mode !== 'alert' || !presentation.visible) return
+    if (
+      taskbarMode ||
+      !element ||
+      alertEvent === undefined ||
+      mode !== 'alert' ||
+      !presentation.visible
+    )
+      return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const glyph = element.querySelector('.status-glyph')
     element.animate(
@@ -226,28 +357,34 @@ export default function Island(): React.JSX.Element {
       ],
       { duration: 500, delay: 140, fill: 'backwards', easing: 'cubic-bezier(.2,.8,.2,1)' }
     )
-  }, [alertEvent, mode, presentation.visible])
+  }, [alertEvent, mode, presentation.visible, taskbarMode])
 
   useLayoutEffect(() => {
     const from = modeRef.current
     modeRef.current = mode
     expandedHeightRef.current = expandedHeight
-    satelliteRef.current = satelliteStatus !== undefined
+    satelliteRef.current = hasSatellite
     diagnostic.trace('effect', { reason: 'geometry-change', from, to: mode })
     cancelInteractiveFrameRef.current()
     if (!presentation.visible || !latestPointer.current.valid) return
     const point = latestPointer.current
-    const inside = isPointInIsland(
-      point.x,
-      point.y,
-      mode,
-      expandedHeight,
-      satelliteStatus !== undefined
-    )
+    const inside = isPointInIsland(point.x, point.y)
     setIslandInteractive(inside, 'geometry-change')
     // 只在提交后重算一次当前指针，避免模式切换清理交互状态。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expandedHeight, mode, presentation.visible, satelliteStatus])
+  }, [expandedHeight, mode, presentation.visible, hasSatellite, layout])
+
+  useLayoutEffect(() => {
+    if (viewport.rebasing || !presentation.visible || !hovering.current) return
+    const point = latestPointer.current
+    if (!point.valid || isPointInIsland(point.x, point.y)) return
+    hovering.current = false
+    setIslandInteractive(false, 'viewport-rebased-outside')
+    if (mode === 'expanded' && !focused.current) setMode('compact', 'viewport-rebased-outside')
+    if (mode === 'alert') resumeReminder()
+    // 只复核原生缩放抑制的 leave；普通 pointer 事件仍走原交互路径。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewport.rebasing])
 
   useEffect(() => {
     if (!presentation.visible) return
@@ -274,17 +411,8 @@ export default function Island(): React.JSX.Element {
       pendingEvent = undefined
       pendingHitTestRef.current = false
       if (!event || !presentationRef.current) return
-      setIslandInteractive(
-        isPointInIsland(
-          event.clientX,
-          event.clientY,
-          modeRef.current,
-          expandedHeightRef.current,
-          satelliteRef.current
-        ),
-        'hit-test',
-        effect
-      )
+      syncTaskbarPointer(event)
+      setIslandInteractive(isPointInIsland(event.clientX, event.clientY), 'hit-test', effect)
     }
     const handlePointerMove = (event: MouseEvent): void => {
       if (!presentationRef.current) return
@@ -296,6 +424,11 @@ export default function Island(): React.JSX.Element {
       }
     }
     const handleMouseLeave = (event: MouseEvent): void => {
+      if (layoutRef.current?.displayMode === 'taskbar') {
+        syncTaskbarPointer(event)
+      }
+      if (viewport.rebasingRef.current) return
+      resetTaskbarPointer()
       tracePointerLeave('document-leave', event)
       cancelPendingHitTest()
       latestPointer.current.valid = false
@@ -305,6 +438,7 @@ export default function Island(): React.JSX.Element {
     // pointermove/mousemove 在 Chromium 同源派发,双注册只会双倍命中检测,留 pointermove
     document.addEventListener('pointermove', handlePointerMove)
     document.addEventListener('mouseleave', handleMouseLeave)
+    window.addEventListener('blur', resetTaskbarPointer)
     return () => {
       diagnostic.trace('effect', {
         reason: 'cleanup',
@@ -316,6 +450,7 @@ export default function Island(): React.JSX.Element {
       })
       document.removeEventListener('pointermove', handlePointerMove)
       document.removeEventListener('mouseleave', handleMouseLeave)
+      window.removeEventListener('blur', resetTaskbarPointer)
       cancelPendingHitTest()
       if (cancelInteractiveFrameRef.current === cancelPendingHitTest) {
         cancelInteractiveFrameRef.current = () => undefined
@@ -328,6 +463,7 @@ export default function Island(): React.JSX.Element {
   }, [presentation.visible])
 
   function handlePresentation(next: IslandPresentation): void {
+    viewportPresentationRef.current = next
     diagnostic.trace('presentation', {
       reason: 'received',
       revision: next.revision,
@@ -342,6 +478,7 @@ export default function Island(): React.JSX.Element {
     cancelInteractiveFrameRef.current()
     latestPointer.current.valid = false
     hovering.current = false
+    resetTaskbarPointer()
     presentationRef.current = next.visible
     setIslandInteractive(false, next.visible ? 'presentation-reset' : 'presentation-hide')
     setPresentation(next)
@@ -360,6 +497,7 @@ export default function Island(): React.JSX.Element {
       })
       return
     }
+    viewport.cancel()
     stopReminder('presentation-hide')
     const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       ? 0
@@ -424,6 +562,7 @@ export default function Island(): React.JSX.Element {
 
   function handlePointerEnter(event: React.PointerEvent): void {
     rememberPointer(event)
+    syncTaskbarPointer(event)
     hovering.current = true
     diagnostic.pointer('pointer-enter', event)
     setIslandInteractive(true, 'pointer-enter')
@@ -431,6 +570,11 @@ export default function Island(): React.JSX.Element {
   }
 
   function handlePointerLeave(event: React.PointerEvent): void {
+    if (layoutRef.current?.displayMode === 'taskbar') {
+      syncTaskbarPointer(event)
+    }
+    if (drag.pointerActive.current || viewport.rebasingRef.current) return
+    resetTaskbarPointer()
     hovering.current = false
     tracePointerLeave('pointer-leave', event)
     cancelInteractiveFrameRef.current()
@@ -438,6 +582,28 @@ export default function Island(): React.JSX.Element {
     setIslandInteractive(false, 'pointer-leave')
     if (modeRef.current === 'alert') resumeReminder()
     if (modeRef.current === 'expanded' && !focused.current) setMode('compact', 'pointer-leave')
+  }
+
+  function handleNativePointer(update: IslandPointerUpdate): void {
+    if (
+      !presentationRef.current ||
+      !interactiveRef.current ||
+      layoutRef.current?.displayMode !== 'taskbar' ||
+      update.presentationRevision !== viewportPresentationRef.current.revision
+    )
+      return
+    const point = { clientX: update.x, clientY: update.y, timeStamp: performance.now() }
+    rememberPointer(point)
+    syncTaskbarPointer(point)
+    if (drag.pointerActive.current || viewport.rebasingRef.current) return
+    if (isPointInIsland(update.x, update.y)) return
+    hovering.current = false
+    diagnostic.trace('pointer', { reason: 'native-pointer-leave', x: update.x, y: update.y })
+    latestPointer.current.valid = false
+    setIslandInteractive(false, 'native-pointer-leave')
+    if (modeRef.current === 'alert') resumeReminder()
+    if (modeRef.current === 'expanded' && !focused.current)
+      setMode('compact', 'native-pointer-leave')
   }
 
   function rememberPointer(event: { clientX: number; clientY: number; timeStamp: number }): void {
@@ -448,6 +614,20 @@ export default function Island(): React.JSX.Element {
     latestPointer.current.valid = true
   }
 
+  function applyLayoutUpdate(
+    update: import('../../../shared/island-layout').IslandLayoutUpdate
+  ): void {
+    layoutRef.current = update.layout
+    // HWND 原点与页面局部坐标同批更新，不能继续使用旧 client 坐标。
+    latestPointer.current = {
+      ...update.pointer,
+      timeStamp: performance.now(),
+      valid: presentationRef.current
+    }
+    syncTaskbarPointer({ clientX: update.pointer.x, clientY: update.pointer.y })
+    setLayout(update.layout)
+  }
+
   function tracePointerLeave(reason: string, event: React.PointerEvent | MouseEvent): void {
     if (!diagnostic.buffer.enabled) return
     const relatedInside =
@@ -456,13 +636,7 @@ export default function Island(): React.JSX.Element {
     const rect = islandRef.current?.getBoundingClientRect()
     const fields: IslandDiagFields = {
       relatedInside,
-      hitInside: isPointInIsland(
-        event.clientX,
-        event.clientY,
-        modeRef.current,
-        expandedHeightRef.current,
-        satelliteRef.current
-      )
+      hitInside: isPointInIsland(event.clientX, event.clientY)
     }
     if (rect)
       fields.domInside =
@@ -474,7 +648,7 @@ export default function Island(): React.JSX.Element {
   }
 
   function setIslandInteractive(interactive: boolean, reason: string, effect?: number): void {
-    interactive = interactive && presentationRef.current
+    interactive = (interactive || drag.pointerActive.current) && presentationRef.current
     const previousInteractive = interactiveRef.current
     if (interactive === previousInteractive) return
     interactiveRef.current = interactive
@@ -486,7 +660,11 @@ export default function Island(): React.JSX.Element {
     })
     const correlation =
       request === undefined ? undefined : { instance: diagnostic.buffer.instance!, request }
-    void window.codexStatus.setIslandInteractive(interactive, correlation)
+    void window.codexStatus.setIslandInteractive(
+      interactive,
+      viewportPresentationRef.current.revision,
+      correlation
+    )
   }
 
   function openTask(task: IslandTask): void {
@@ -522,12 +700,54 @@ export default function Island(): React.JSX.Element {
     rememberPointer(event)
     diagnostic.pointer('compact-down', event)
     if (event.button !== 0) return
-    holdTimer.current = window.setTimeout(() => setMode('expanded', 'hold-fired'), HOLD_DURATION_MS)
+    syncTaskbarPointer(event)
+    drag.onPointerDown(event)
+    if (modeRef.current === 'compact') {
+      holdTimer.current = window.setTimeout(
+        () => setMode('expanded', 'hold-fired'),
+        HOLD_DURATION_MS
+      )
+    }
   }
 
   function clearHold(event: React.PointerEvent<HTMLButtonElement>): void {
     diagnostic.pointer(`compact-${event.type}`, event)
     window.clearTimeout(holdTimer.current)
+  }
+
+  function handleCompactClick(event: React.MouseEvent<HTMLButtonElement>): void {
+    if (event.detail > 0 && drag.suppressClick.current) return
+    if (event.detail > 0) rememberPointer(event)
+    diagnostic.pointer('compact-click', event)
+    if (!taskbarMode) return setMode('expanded', 'compact-click')
+    // 连点按最新意图反向，即使上一次扩容还没提交到页面也能打断。
+    setModeState((current) => {
+      const next = current === 'expanded' || current === 'alert' ? 'compact' : 'expanded'
+      diagnostic.request(next, 'taskbar-anchor-click')
+      return next
+    })
+  }
+
+  function handleCompactKeyDown(event: React.KeyboardEvent<HTMLButtonElement>): void {
+    if (
+      !taskbarMode ||
+      drag.pointerActive.current ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey
+    )
+      return
+    const directions: Record<string, { x: number; y: number } | undefined> = {
+      ArrowLeft: { x: -1, y: 0 },
+      ArrowRight: { x: 1, y: 0 }
+    }
+    const direction = directions[event.key]
+    if (!direction) return
+    event.preventDefault()
+    void window.codexStatus
+      .nudgeIslandWindow(direction)
+      .then(() => window.codexStatus.finishIslandWindowDrag())
+      .catch(console.error)
   }
 
   startReminderRef.current = startReminder
@@ -538,95 +758,169 @@ export default function Island(): React.JSX.Element {
 
   const displayMode = presentation.visible ? mode : 'hidden'
   const signalStatus = compactStatus ?? (alertTask ? getDisplayStatus(alertTask) : 'running')
+  if (!layout) return <main className="island-window" />
+  const sectionMode = taskbarMode ? cardMode : displayMode
+  const stageOrigin = { x: layout.compact.x + layout.compact.width / 2, y: layout.compact.y }
+  const rect = relativeIslandRect(
+    resolveIslandModeRect({ layout, mode: sectionMode, expandedHeight, hasSatellite }),
+    stageOrigin
+  )
+  const hitRects = islandHitRects({
+    layout,
+    mode: displayMode,
+    expandedHeight,
+    hasSatellite
+  }).map((hit) => relativeIslandRect(hit, stageOrigin))
+  const anchorRect = relativeIslandRect(layout.compact, stageOrigin)
+  const satelliteRect = relativeIslandRect(layout.satellite, stageOrigin)
+  const compactVisible = presentation.visible && mode !== 'hidden'
+  const popupVisible =
+    taskbarMode && presentation.visible && (mode === 'expanded' || mode === 'alert')
+  const compactButton = (
+    <button
+      aria-expanded={mode === 'expanded' || mode === 'alert'}
+      aria-label={
+        taskbarMode ? `${fullCompactLabel}，耗时 ${fullCompactDuration}，查看任务详情` : undefined
+      }
+      aria-hidden={taskbarMode ? !compactVisible : mode !== 'compact'}
+      className={taskbarMode ? 'taskbar-anchor compact' : 'compact layer'}
+      data-status={compactStatus}
+      data-visible={compactVisible}
+      data-hovered={taskbarMode ? taskbarPointer !== 'idle' : undefined}
+      data-pressed={taskbarMode ? taskbarPointer === 'pressed' : undefined}
+      inert={taskbarMode ? !compactVisible : mode !== 'compact'}
+      onClick={handleCompactClick}
+      onPointerCancel={(event) => {
+        clearHold(event)
+        resetTaskbarPointer()
+        drag.onPointerCancel()
+      }}
+      onPointerDown={handleCompactPointerDown}
+      onKeyDown={handleCompactKeyDown}
+      onPointerLeave={(event) => {
+        clearHold(event)
+        syncTaskbarPointer(event)
+      }}
+      onPointerMove={drag.onPointerMove}
+      onPointerUp={(event) => {
+        clearHold(event)
+        syncTaskbarPointer(event)
+        drag.onPointerUp()
+      }}
+      onLostPointerCapture={() => {
+        drag.onPointerCancel()
+        if (taskbarMode) cancelInteractiveFrameRef.current()
+        setTaskbarPointer((current) => (current === 'pressed' ? 'hovered' : current))
+      }}
+      style={
+        taskbarMode
+          ? {
+              left: anchorRect.x,
+              top: anchorRect.y,
+              width: anchorRect.width,
+              height: anchorRect.height
+            }
+          : undefined
+      }
+      type="button"
+    >
+      <span className="compact-leading">
+        <ChatGptIcon />
+        <span className="compact-label">{compactLabel(compactCounts, taskbarMode)}</span>
+      </span>
+      <span className="compact-trailing">
+        {compactStatus ? <StatusIcon status={compactStatus} /> : null}
+        <span className="compact-time">{compactDuration}</span>
+      </span>
+    </button>
+  )
 
   return (
-    <main className="island-window">
+    <main
+      className="island-window"
+      data-display-mode={layout.displayMode}
+      data-taskbar-theme={layout.taskbarTheme}
+      data-viewport-rebasing={viewport.rebasing}
+      data-mode={displayMode}
+    >
       <div
         className="island-stage"
-        data-multiple={satelliteStatus ? 'true' : 'false'}
+        data-multiple={hasSatellite ? 'true' : 'false'}
+        data-direction={layout.direction}
+        data-free-move={taskbarMode}
+        data-dragging={drag.dragging}
         onPointerEnter={handlePointerEnter}
         onPointerLeave={handlePointerLeave}
         ref={stageRef}
+        style={{ left: stageOrigin.x, top: stageOrigin.y }}
       >
+        {hitRects.slice(1).map((hit, index) => (
+          <span
+            aria-hidden="true"
+            className="island-hit-bridge"
+            key={index}
+            style={{ left: hit.x, top: hit.y, width: hit.width, height: hit.height }}
+          />
+        ))}
+        {taskbarMode ? compactButton : null}
         <section
+          key={layout.displayMode}
           aria-label="Codex 任务活动"
+          aria-hidden={taskbarMode ? !popupVisible : undefined}
           className="island"
-          data-mode={displayMode}
+          data-mode={sectionMode}
+          data-popup-visible={popupVisible}
+          inert={taskbarMode && !popupVisible}
           ref={islandRef}
           data-status={compactStatus}
           style={
             {
-              '--expanded-height': `${expandedHeight}px`,
+              '--expanded-height': `${Math.min(expandedHeight, layout.expanded.height)}px`,
+              '--width': `${rect.width}px`,
+              '--height': `${rect.height}px`,
+              '--origin-x': `${-rect.x}px`,
+              left: taskbarMode ? rect.x : rect.x + rect.width / 2,
+              top: rect.y,
               '--signal': statusColor(signalStatus),
               '--exit': `${EXIT_DURATION_MS}ms`
             } as CSSProperties
           }
         >
-          <button
-            aria-expanded={mode === 'expanded'}
-            aria-hidden={mode !== 'compact'}
-            className="compact layer"
-            inert={mode !== 'compact'}
-            onClick={(event) => {
-              if (event.detail > 0) rememberPointer(event)
-              diagnostic.pointer('compact-click', event)
-              setMode('expanded', 'compact-click')
-            }}
-            onPointerCancel={clearHold}
-            onPointerDown={handleCompactPointerDown}
-            onPointerLeave={clearHold}
-            onPointerUp={clearHold}
-            type="button"
-          >
-            <span className="compact-leading">
-              <ChatGptIcon />
-              {compactLabel(
-                pendingTasks.length,
-                runningCount,
-                completedCount,
-                failedCount,
-                activeTasks.length
-              )}
-            </span>
-            <span className="compact-trailing">
-              {compactStatus ? <StatusIcon status={compactStatus} /> : null}
-              {compactTask ? formatTaskDuration(compactTask, now) : '--:--'}
-            </span>
-          </button>
+          {!taskbarMode ? compactButton : null}
 
           <div
-            aria-hidden={mode !== 'alert'}
+            aria-hidden={mode !== 'alert' || staleAlertContent}
             className="alert layer"
-            inert={mode !== 'alert'}
+            inert={mode !== 'alert' || staleAlertContent}
             ref={alertRef}
           >
-            {alertTask ? (
+            {alertContent ? (
               <>
                 <div className="activity-header">
                   <span className="app-label">
                     <ChatGptIcon />
                     Codex
                   </span>
-                  <span>{STATUS_COPY[getDisplayStatus(alertTask)]}</span>
+                  <span>{STATUS_COPY[getDisplayStatus(alertContent)]}</span>
                 </div>
                 <div className="alert-main">
                   <span className="status-glyph">
-                    <StatusIcon status={getDisplayStatus(alertTask)} />
+                    <StatusIcon status={getDisplayStatus(alertContent)} />
                   </span>
                   <div className="alert-copy">
-                    <h2>{alertTask.title}</h2>
-                    <p>{alertTask.requests[0]?.summary ?? alertTask.project}</p>
+                    <h2>{alertContent.title}</h2>
+                    <p>{alertContent.requests[0]?.summary ?? alertContent.project}</p>
                   </div>
                 </div>
                 <div className="alert-footer">
-                  <span>{alertTask.project}</span>
+                  <span>{alertContent.project}</span>
                   <div>
-                    {['failed', 'completed'].includes(alertTask.phase) ? (
-                      <button onClick={() => dismissTask(alertTask)} type="button">
+                    {['failed', 'completed'].includes(alertContent.phase) ? (
+                      <button onClick={() => dismissTask(alertContent)} type="button">
                         关闭
                       </button>
                     ) : null}
-                    <button onClick={() => openTask(alertTask)} type="button">
+                    <button onClick={() => openTask(alertContent)} type="button">
                       查看任务 <ArrowIcon />
                     </button>
                   </div>
@@ -660,7 +954,10 @@ export default function Island(): React.JSX.Element {
                 {pendingTasks.length} 待处理 · {runningCount} 执行中
               </span>
             </div>
-            <div className="task-list" data-scrollable={activeTasks.length > 3}>
+            <div
+              className="task-list"
+              data-scrollable={activeTasks.length > 3 || layout.expanded.height < expandedHeight}
+            >
               {activeTasks.map((task) => {
                 const status = getDisplayStatus(task)
                 return (
@@ -690,11 +987,17 @@ export default function Island(): React.JSX.Element {
             </div>
           </div>
         </section>
-        {satelliteStatus ? (
+        {hasSatellite && satelliteStatus ? (
           <button
             aria-label={`${satelliteStatus === 'waiting-approval' ? '审批' : '回复'}任务，展开查看`}
             aria-hidden={mode !== 'compact'}
             className="satellite"
+            style={{
+              left: satelliteRect.x,
+              top: satelliteRect.y,
+              width: satelliteRect.width,
+              height: satelliteRect.height
+            }}
             data-status={satelliteStatus}
             inert={mode !== 'compact'}
             onClick={(event) => {
@@ -716,6 +1019,10 @@ export default function Island(): React.JSX.Element {
   )
 }
 
+function relativeIslandRect(rect: IslandRect, origin: { x: number; y: number }): IslandRect {
+  return { ...rect, x: rect.x - origin.x, y: rect.y - origin.y }
+}
+
 function findAlertCandidate(
   snapshot: IslandSnapshot,
   seenEvents: Set<string>
@@ -732,34 +1039,6 @@ function findAlertCandidate(
   })
 }
 
-function isPointInIsland(
-  x: number,
-  y: number,
-  mode: IslandMode,
-  expandedHeight: number,
-  hasSatellite: boolean
-): boolean {
-  return islandHitRects(mode, expandedHeight, hasSatellite).some(
-    (rect) => x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height
-  )
-}
-
-function islandHitRects(
-  mode: IslandMode,
-  expandedHeight: number,
-  hasSatellite: boolean
-): { x: number; y: number; width: number; height: number }[] {
-  if (mode === 'hidden') return []
-  if (mode === 'alert') return [{ x: 34, y: 0, width: 396, height: 198 }]
-  if (mode === 'expanded') return [{ x: 26, y: 0, width: 412, height: expandedHeight }]
-  if (!hasSatellite) return [{ x: 108, y: 0, width: 248, height: 48 }]
-  return [
-    { x: 93, y: 0, width: 220, height: 48 },
-    { x: 313, y: 0, width: 10, height: 48 },
-    { x: 323, y: 0, width: 48, height: 48 }
-  ]
-}
-
 function alertEventId(task: IslandTask): string {
   return task.requests[0]?.id ?? task.latestEventId
 }
@@ -773,17 +1052,16 @@ function getSatelliteStatus(
 }
 
 function compactLabel(
-  pendingCount: number,
-  runningCount: number,
-  completedCount: number,
-  failedCount: number,
-  total: number
+  counts: { pending: number; running: number; completed: number; failed: number; total: number },
+  taskbarMode = false
 ): string {
-  if (pendingCount > 0) return `${pendingCount} 待处理`
-  if (failedCount > 0) return `${failedCount} 失败`
-  if (runningCount > 0) return `${runningCount} 执行中`
-  if (completedCount > 0) return `${completedCount} 已完成`
-  return total > 0 ? `${total} 任务` : ''
+  const countText = (count: number): string =>
+    taskbarMode ? formatTaskbarCount(count) : String(count)
+  if (counts.pending > 0) return `${countText(counts.pending)} 待处理`
+  if (counts.failed > 0) return `${countText(counts.failed)} 失败`
+  if (counts.running > 0) return `${countText(counts.running)} 执行中`
+  if (counts.completed > 0) return `${countText(counts.completed)} 已完成`
+  return counts.total > 0 ? `${countText(counts.total)} 任务` : ''
 }
 
 function statusColor(status: IslandDisplayStatus): string {
@@ -794,10 +1072,15 @@ function statusColor(status: IslandDisplayStatus): string {
   return 'var(--running)'
 }
 
-function formatTaskDuration(task: IslandTask, now: number): string {
-  if (task.startedAt === undefined) return '--:--'
+function taskDurationSeconds(task: IslandTask, now: number): number | undefined {
+  if (task.startedAt === undefined) return undefined
   const endAt = task.phase === 'running' ? now : task.updatedAt
-  const seconds = Math.max(0, Math.floor((endAt - task.startedAt) / 1_000))
+  return Math.max(0, Math.floor((endAt - task.startedAt) / 1_000))
+}
+
+function formatTaskDuration(task: IslandTask, now: number): string {
+  const seconds = taskDurationSeconds(task, now)
+  if (seconds === undefined) return '--:--'
   const minutes = Math.floor(seconds / 60)
   return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 }

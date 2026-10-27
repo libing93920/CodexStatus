@@ -67,15 +67,23 @@ p {
 .island-stage {
   position: absolute;
   z-index: 2;
-  top: 0;
-  left: 50%;
-  width: 248px;
-  height: 48px;
-  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.island-hit-bridge {
+  position: absolute;
   pointer-events: auto;
 }
-.island-stage[data-multiple='true'] {
-  width: 348px;
+.island-stage[data-free-move='true'] .compact {
+  cursor: grab;
+  touch-action: none;
+}
+.island-stage[data-dragging='true'] .compact {
+  cursor: grabbing;
+}
+.island-stage[data-dragging='true'] .island {
+  transition: none;
 }
 .island {
   --expanded-height: 362px;
@@ -83,9 +91,7 @@ p {
   --height: 48px;
   --signal: var(--running);
   position: absolute;
-  top: 0;
-  left: 50%;
-  width: min(var(--width), calc(100vw - 32px));
+  width: var(--width);
   height: var(--height);
   transform: translateX(-50%);
   transform-origin: center 24px;
@@ -98,7 +104,10 @@ p {
   box-shadow:
     0 8px 24px #00000024,
     0 2px 4px #00000014;
+  /* 原生窗口原点由 stage 补偿，内容过渡只在稳定的锚点坐标内进行。 */
   transition:
+    left var(--enter) var(--spring),
+    top var(--enter) var(--spring),
     width var(--enter) var(--spring),
     height var(--enter) var(--spring),
     border-radius var(--enter) var(--settle),
@@ -116,8 +125,6 @@ p {
   border-radius: 42px;
 }
 .island[data-mode='hidden'] {
-  --width: 104px;
-  --height: 28px;
   transform: translate(-50%, -8px) scale(0.88);
   opacity: 0;
   pointer-events: none;
@@ -264,10 +271,6 @@ p {
   width: 25px;
   height: 25px;
 }
-.island-stage[data-multiple='true'] .island[data-mode='compact'] {
-  --width: 220px;
-  transform: translateX(calc(-50% - 29px));
-}
 .island-stage[data-multiple='true'] .island[data-mode='compact'] ~ .satellite {
   transform: none;
   opacity: 1;
@@ -297,10 +300,14 @@ p {
   height: 23px;
 }
 .alert {
+  display: flex;
+  flex-direction: column;
   padding: 20px 24px 18px;
   text-align: left;
 }
 .alert-main {
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   gap: 13px;
   align-items: center;
@@ -342,6 +349,7 @@ p {
   overflow: hidden;
 }
 .alert-footer {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -419,7 +427,7 @@ p {
   white-space: nowrap;
 }
 .task-list {
-  height: calc(var(--expanded-height) - 119px);
+  height: max(0px, calc(var(--expanded-height) - 119px));
   overflow-y: hidden;
   overscroll-behavior: contain;
   scrollbar-width: thin;

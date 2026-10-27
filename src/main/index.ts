@@ -114,7 +114,22 @@ import {
   uninstallCodexHooks
 } from './services/codex-hook-installer'
 import { resolveCodexExecutable } from './services/window-keeper-runner'
-import { createIslandWindow, positionIslandWindow } from './windows/island-window'
+import {
+  createIslandWindow,
+  getIslandDisplay,
+  positionIslandWindow,
+  showIslandWindow,
+  startIslandPointerTracking,
+  stopIslandPointerTracking,
+  type IslandWindowPlacement
+} from './windows/island-window'
+import { type IslandLayout, type IslandTaskbarPlacement } from '../shared/island-layout'
+import type { WindowsTaskbarGeometry } from '../shared/island-taskbar'
+import {
+  DEFAULT_ISLAND_VIEWPORT,
+  normalizeIslandViewportRequest,
+  type IslandViewport
+} from '../shared/island-viewport'
 import { WindowsFullscreenMonitor, type FullscreenState } from './services/windows-fullscreen'
 import { TeamActivityService } from './services/team-activity.ts'
 import { getPanelVisibility, subscribePanelVisibility } from './services/panel-visibility.ts'
@@ -127,6 +142,7 @@ import {
 } from '../shared/activity.ts'
 
 const TEAM_ADMIN_DEVICE_CHECK_MS = 10_000
+const ISLAND_NUDGE_STEP = 5
 
 const CHANNELS = {
   bootstrap: 'codex-status:bootstrap',
@@ -164,6 +180,10 @@ const CHANNELS = {
   islandReady: 'codex-status:island-ready',
   islandPresentation: 'codex-status:island-presentation',
   islandHidden: 'codex-status:island-hidden',
+  islandMove: 'codex-status:island-move',
+  islandNudge: 'codex-status:island-nudge',
+  islandDragFinished: 'codex-status:island-drag-finished',
+  islandViewport: 'codex-status:island-viewport',
   islandInteractive: 'codex-status:island-interactive',
   islandDiagnostic: 'codex-status:island-diagnostic',
   islandOpenTask: 'codex-status:island-open-task',
@@ -184,6 +204,11 @@ let capsuleDiagnostics: CapsuleWindowDiagnostics | undefined
 let islandWindowDiagnostics: CapsuleWindowDiagnostics | undefined
 let panelWindow: BrowserWindow | null = null
 let islandWindow: BrowserWindow | null = null
+let islandLayout: IslandLayout | undefined
+let islandTaskbarPlacement: IslandTaskbarPlacement | undefined
+let islandViewport: IslandViewport = { ...DEFAULT_ISLAND_VIEWPORT }
+let islandPreviousViewports: IslandViewport[] = []
+let islandViewportRevision = 0
 let panelRevealPending = false
 let tray: Tray | null = null
 let refreshTimer: NodeJS.Timeout | undefined
@@ -481,23 +506,27 @@ function ensureIslandWindow(): BrowserWindow {
   if (islandWindow && !islandWindow.isDestroyed()) return islandWindow
   islandRendererReady = false
   islandPresentationVisible = false
+  islandViewport = { ...DEFAULT_ISLAND_VIEWPORT }
+  islandPreviousViewports = []
+  islandViewportRevision = 0
   const window = createIslandWindow({
     preloadPath: join(__dirname, '../preload/index.js'),
+    placement: getIslandPlacement(),
     loadRenderer: (target) => loadRenderer(target, 'island')
   })
   islandWindowDiagnostics?.stop()
   islandWindowDiagnostics = new CapsuleWindowDiagnostics(window, {
     role: 'island',
+    getTaskbarAnchor: () =>
+      persistedState.settings.island.displayMode === 'taskbar' && islandTaskbarPlacement
+        ? islandLayout?.compact
+        : undefined,
+    shouldObserveTaskbar: () => persistedState.settings.island.displayMode === 'taskbar',
+    onTaskbarGeometry: handleIslandTaskbarGeometry,
     canRecover: () =>
       !isQuitting && islandRendererReady && islandPresentationVisible && shouldShowIsland()
   })
-  window.on('closed', () => {
-    if (islandWindow !== window) return
-    islandWindow = null
-    islandRendererReady = false
-    islandPresentationVisible = false
-    islandDiagnostics.record('window', { reason: 'closed' })
-  })
+  window.on('closed', () => handleIslandWindowClosed(window))
   window.webContents.on('render-process-gone', () => {
     islandRendererReady = false
     islandPresentationVisible = false
@@ -507,7 +536,74 @@ function ensureIslandWindow(): BrowserWindow {
     logDiag('island renderer gone: forward released and hidden')
   })
   islandWindow = window
+  refreshIslandPosition()
   return window
+}
+
+function handleIslandWindowClosed(window: BrowserWindow): void {
+  if (islandWindow !== window) return
+  islandWindow = null
+  islandRendererReady = false
+  islandPresentationVisible = false
+  islandDiagnostics.record('window', { reason: 'closed' })
+  if (!isQuitting && persistedState.settings.island.enabled)
+    queueMicrotask(() => syncIslandWindowVisibility('native-window-closed'))
+}
+
+function refreshIslandPosition(persistCorrection = true): void {
+  if (!islandWindow || islandWindow.isDestroyed()) return
+  const placement = getIslandPlacement()
+  if (placement.displayMode === 'taskbar' && !placement.taskbar) return
+  islandLayout = positionIslandWindow(islandWindow, placement)
+  if (placement.displayMode !== 'taskbar' || !placement.taskbar) return
+  const next = islandLayout.bounds.x + islandLayout.compact.x - placement.taskbar.bounds.x
+  if (next === persistedState.taskbarOffsetX) return
+  persistedState = { ...persistedState, taskbarOffsetX: next }
+  if (persistCorrection) queuePersistState()
+}
+
+function getIslandPlacement(): IslandWindowPlacement {
+  return {
+    displayMode: persistedState.settings.island.displayMode,
+    taskbar: islandTaskbarPlacement,
+    taskbarOffsetX: persistedState.taskbarOffsetX,
+    viewport: islandViewport,
+    previousViewports: islandPreviousViewports
+  }
+}
+
+function canMoveTaskbarIsland(): boolean {
+  return (
+    persistedState.settings.island.enabled &&
+    persistedState.settings.island.displayMode === 'taskbar' &&
+    islandPresentationVisible &&
+    islandLayout?.displayMode === 'taskbar' &&
+    islandViewport.mode === 'compact' &&
+    islandTaskbarPlacement !== undefined
+  )
+}
+
+function handleIslandTaskbarGeometry(geometry: WindowsTaskbarGeometry | undefined): void {
+  const ready =
+    geometry?.visible &&
+    (geometry.notificationArea !== undefined || persistedState.taskbarOffsetX !== undefined)
+  const next =
+    ready && geometry
+      ? {
+          bounds: screen.screenToDipRect(null, geometry.bounds),
+          notificationArea: geometry.notificationArea
+            ? screen.screenToDipRect(null, geometry.notificationArea)
+            : undefined,
+          dark: geometry.dark
+        }
+      : undefined
+  if (JSON.stringify(next) === JSON.stringify(islandTaskbarPlacement)) return
+  islandTaskbarPlacement = next
+  if (persistedState.settings.island.displayMode !== 'taskbar' || isQuitting) return
+  refreshIslandPosition()
+  islandWindowDiagnostics?.refresh()
+  syncIslandWindowVisibility('taskbar-geometry')
+  broadcastIslandSnapshot()
 }
 
 function loadRenderer(window: BrowserWindow, role: RendererWindowRole): void {
@@ -645,12 +741,14 @@ if (hasSingleInstanceLock) {
         showWindow()
       }
       if (islandWindow && !islandWindow.isDestroyed()) {
-        positionIslandWindow(islandWindow)
+        refreshIslandPosition()
+        syncIslandWindowVisibility('display-metrics')
       }
     })
     screen.on('display-added', () => {
       if (islandWindow && !islandWindow.isDestroyed()) {
-        positionIslandWindow(islandWindow)
+        refreshIslandPosition()
+        syncIslandWindowVisibility('display-added')
       }
     })
     screen.on('display-removed', () => {
@@ -658,7 +756,8 @@ if (hasSingleInstanceLock) {
         showWindow()
       }
       if (islandWindow && !islandWindow.isDestroyed()) {
-        positionIslandWindow(islandWindow)
+        refreshIslandPosition()
+        syncIslandWindowVisibility('display-removed')
       }
     })
   })
@@ -670,6 +769,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', (event) => {
   isQuitting = true
+  if (islandWindow) stopIslandPointerTracking(islandWindow)
   if (teamAdminAccessTimer) clearInterval(teamAdminAccessTimer)
   teamAdminAccessTimer = undefined
   if (teamActivity && !activityQuitReady) {
@@ -727,6 +827,7 @@ function registerIpcHandlers(): void {
       announcement: currentAnnouncement,
       island: createIslandRendererSnapshot(),
       islandDiagnostics: role === 'island' && resolveDiagEnabled(),
+      islandLayout: role === 'island' ? islandLayout : undefined,
       version: app.getVersion()
     }
   })
@@ -798,7 +899,16 @@ function registerIpcHandlers(): void {
       syncRefreshTimer()
       refreshTrayMenu()
       broadcastPreferences()
-      if (patch.island !== undefined) queueSyncIslandService()
+      if (nextSettings.island.enabled !== previousSettings.island.enabled) {
+        queueSyncIslandService()
+      } else if (patch.island !== undefined) {
+        islandViewport = { ...DEFAULT_ISLAND_VIEWPORT }
+        islandPreviousViewports = []
+        refreshIslandPosition()
+        islandWindowDiagnostics?.refresh()
+        setIslandPresentation(shouldShowIsland(), true, 'display-mode-setting')
+        broadcastIslandSnapshot()
+      }
 
       // 仅实际团队身份/采集能力变化重启连接，主题和阈值变化不重启LAN。
       if (
@@ -1048,6 +1158,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(CHANNELS.islandReady, async (event) => {
     if (event.sender.id !== islandWindow?.webContents.id) return
     islandRendererReady = true
+    islandViewport = { ...DEFAULT_ISLAND_VIEWPORT }
+    islandPreviousViewports = []
+    islandViewportRevision = 0
+    refreshIslandPosition()
     if (resolveDiagEnabled()) {
       logDiag(
         `island environment ${JSON.stringify({
@@ -1057,7 +1171,7 @@ function registerIpcHandlers(): void {
           electron: process.versions.electron,
           webContents: event.sender.id,
           bounds: islandWindow.getBounds(),
-          scaleFactor: screen.getPrimaryDisplay().scaleFactor
+          scaleFactor: getIslandDisplay().scaleFactor
         })}`
       )
     }
@@ -1066,6 +1180,96 @@ function registerIpcHandlers(): void {
 
   ipcMain.on(CHANNELS.islandDiagnostic, (event, payload: unknown) => {
     receiveIslandDiagnostics(event.sender.id, islandWindow?.webContents.id, payload)
+  })
+
+  ipcMain.handle(CHANNELS.islandMove, (event, offset: unknown) => {
+    if (event.sender.id !== islandWindow?.webContents.id || !islandPresentationVisible) return
+    if (!canMoveTaskbarIsland()) return
+    if (!offset || typeof offset !== 'object') return
+    const point = offset as { x: number; y: number }
+    if (![point.x, point.y].every(Number.isFinite)) return
+    if (
+      !islandLayout ||
+      point.x < 0 ||
+      point.y < 0 ||
+      point.x > islandLayout.compact.width ||
+      point.y > islandLayout.compact.height
+    )
+      return
+    const cursor = screen.getCursorScreenPoint()
+    persistedState = {
+      ...persistedState,
+      taskbarOffsetX: cursor.x - point.x - islandTaskbarPlacement!.bounds.x
+    }
+    refreshIslandPosition(false)
+  })
+
+  ipcMain.handle(CHANNELS.islandDragFinished, (event) => {
+    if (event.sender.id !== islandWindow?.webContents.id || !canMoveTaskbarIsland()) return
+    queuePersistState()
+    syncIslandWindowVisibility('drag-finished')
+    broadcastIslandSnapshot()
+  })
+
+  ipcMain.handle(CHANNELS.islandViewport, (event, value: unknown) => {
+    if (event.sender.id !== islandWindow?.webContents.id || !islandPresentationVisible) return
+    const request = normalizeIslandViewportRequest(value)
+    if (!request || request.displayMode !== persistedState.settings.island.displayMode) return
+    if (
+      !persistedState.settings.island.enabled ||
+      request.presentationRevision !== islandPresentationRevision
+    )
+      return
+    if (request.revision < islandViewportRevision) return
+    if (request.phase === 'settle' && request.revision !== islandViewportRevision) return
+    if (
+      request.phase === 'settle' &&
+      (request.mode !== islandViewport.mode ||
+        request.expandedHeight !== islandViewport.expandedHeight ||
+        request.hasSatellite !== islandViewport.hasSatellite)
+    )
+      return
+    // settle 前 DOM 可能仍在任一旧状态，连续 prepare 不能提前裁掉旧内容。
+    if (request.phase === 'settle') islandPreviousViewports = []
+    else if (
+      !islandPreviousViewports.some(
+        (state) =>
+          state.mode === islandViewport.mode &&
+          state.expandedHeight === islandViewport.expandedHeight &&
+          state.hasSatellite === islandViewport.hasSatellite
+      )
+    ) {
+      islandPreviousViewports.push(islandViewport)
+    }
+    islandViewportRevision = request.revision
+    islandViewport = {
+      mode: request.mode,
+      expandedHeight: request.expandedHeight,
+      hasSatellite: request.hasSatellite
+    }
+    refreshIslandPosition(false)
+    islandWindowDiagnostics?.refresh()
+    if (!islandLayout || !islandWindow || islandWindow.isDestroyed()) return
+    const origin = islandWindow.getContentBounds()
+    const cursor = screen.getCursorScreenPoint()
+    return { layout: islandLayout, pointer: { x: cursor.x - origin.x, y: cursor.y - origin.y } }
+  })
+
+  ipcMain.handle(CHANNELS.islandNudge, (event, direction: unknown) => {
+    if (event.sender.id !== islandWindow?.webContents.id || !islandPresentationVisible) return
+    if (!canMoveTaskbarIsland()) return
+    if (!islandLayout || !direction || typeof direction !== 'object') return
+    const step = direction as { x: number; y: number }
+    if (!Number.isInteger(step.x) || Math.abs(step.x) !== 1 || step.y !== 0) return
+    persistedState = {
+      ...persistedState,
+      taskbarOffsetX:
+        islandLayout.bounds.x +
+        islandLayout.compact.x -
+        islandTaskbarPlacement!.bounds.x +
+        step.x * ISLAND_NUDGE_STEP
+    }
+    refreshIslandPosition(false)
   })
 
   ipcMain.handle(CHANNELS.islandHidden, async (event, revision: unknown) => {
@@ -1089,13 +1293,21 @@ function registerIpcHandlers(): void {
       forward: false
     })
     islandWindow.hide()
+    islandViewport = { ...DEFAULT_ISLAND_VIEWPORT }
+    islandPreviousViewports = []
+    refreshIslandPosition(false)
     logDiag(`island hidden revision=${revision} forward released`)
   })
 
   ipcMain.handle(
     CHANNELS.islandInteractive,
-    async (event, interactive: unknown, diagnostic: unknown) => {
-      if (event.sender.id !== islandWindow?.webContents.id || typeof interactive !== 'boolean')
+    async (event, interactive: unknown, presentationRevision: unknown, diagnostic: unknown) => {
+      if (
+        event.sender.id !== islandWindow?.webContents.id ||
+        typeof interactive !== 'boolean' ||
+        presentationRevision !== islandPresentationRevision ||
+        isQuitting
+      )
         return
       const fields = islandInteractiveDiagnostic(diagnostic)
       islandDiagnostics.record('interactive', {
@@ -1107,6 +1319,11 @@ function registerIpcHandlers(): void {
       })
       if (!islandPresentationVisible) return
       islandWindow.setIgnoreMouseEvents(!interactive, { forward: true })
+      if (interactive && persistedState.settings.island.displayMode === 'taskbar') {
+        startIslandPointerTracking(islandWindow, islandPresentationRevision)
+      } else {
+        stopIslandPointerTracking(islandWindow)
+      }
       islandDiagnostics.record('native', {
         ...fields,
         reason: 'interactive-applied',
@@ -1726,9 +1943,9 @@ async function syncIslandService(): Promise<void> {
     await uninstallCodexHooks(getDefaultCodexHooksPath(), join(app.getPath('userData'), 'hooks'))
     return
   }
-  const window = ensureIslandWindow()
+  ensureIslandWindow()
   ensureFullscreenMonitor()
-  positionIslandWindow(window)
+  refreshIslandPosition()
   await installIslandHooks()
   await codexActivity?.stop()
   codexActivity = undefined
@@ -1791,24 +2008,36 @@ function broadcastIslandSnapshot(): void {
   if (payload === lastIslandBroadcastPayload) return
   lastIslandBroadcastPayload = payload
   recordPerf('island:broadcastSent')
-  islandWindow?.webContents.send(CHANNELS.islandUpdated, snapshot)
+  if (islandWindow && !islandWindow.isDestroyed())
+    islandWindow.webContents.send(CHANNELS.islandUpdated, snapshot)
   panelWindow?.webContents.send(CHANNELS.islandUpdated, snapshot)
 }
 
 function createIslandRendererSnapshot(): IslandSnapshot {
   const visibility = !persistedState.settings.island.enabled
     ? 'disabled'
-    : currentIslandSnapshot.tasks.length === 0
-      ? 'waiting'
-      : isSelectedDisplayFullscreen() && Date.now() >= fullscreenAlertUntil
-        ? 'fullscreen'
-        : 'visible'
+    : persistedState.settings.island.displayMode === 'taskbar' && !islandTaskbarPlacement
+      ? 'taskbar-unavailable'
+      : currentIslandSnapshot.tasks.length === 0
+        ? 'waiting'
+        : isSelectedDisplayFullscreen() && Date.now() >= fullscreenAlertUntil
+          ? 'fullscreen'
+          : 'visible'
   return { ...currentIslandSnapshot, visibility }
 }
 
 function syncIslandWindowVisibility(reason: string): void {
-  if (!islandWindow || islandWindow.isDestroyed()) return
-  setIslandPresentation(shouldShowIsland(), false, reason)
+  if (isQuitting || islandWindow?.isDestroyed()) return
+  const visible = shouldShowIsland()
+  // 栏内定位依赖 HWND 上的原生探针；几何未就绪时也要保留隐藏窗口采样。
+  if (
+    visible ||
+    (persistedState.settings.island.enabled &&
+      persistedState.settings.island.displayMode === 'taskbar')
+  ) {
+    ensureIslandWindow()
+  }
+  setIslandPresentation(visible, false, reason)
 }
 
 function shouldShowIsland(): boolean {
@@ -1817,6 +2046,8 @@ function shouldShowIsland(): boolean {
   return (
     persistedState.settings.island.enabled &&
     currentIslandSnapshot.tasks.length > 0 &&
+    (persistedState.settings.island.displayMode !== 'taskbar' ||
+      islandTaskbarPlacement !== undefined) &&
     !fullscreenSuppressed
   )
 }
@@ -1840,6 +2071,7 @@ function setIslandPresentation(visible: boolean, force: boolean, reason: string)
     alertUntil: fullscreenAlertUntil
   })
   if (!visible) {
+    stopIslandPointerTracking(window)
     // 隐藏即释放全局鼠标钩子(不带 forward),不再保留到窗口销毁
     window.setIgnoreMouseEvents(true)
     islandDiagnostics.record('native', {
@@ -1853,8 +2085,8 @@ function setIslandPresentation(visible: boolean, force: boolean, reason: string)
     return
   }
 
-  positionIslandWindow(window)
-  if (!window.isVisible()) window.showInactive()
+  refreshIslandPosition()
+  showIslandWindow(window)
   window.setIgnoreMouseEvents(true, { forward: true })
   islandDiagnostics.record('native', { reason: 'show', revision, ignore: true, forward: true })
   window.webContents.setBackgroundThrottling(false)
@@ -1864,6 +2096,7 @@ function setIslandPresentation(visible: boolean, force: boolean, reason: string)
 }
 
 function hideIslandImmediately(reason: string): void {
+  if (islandWindow) stopIslandPointerTracking(islandWindow)
   const revision = ++islandPresentationRevision
   islandPresentationVisible = false
   islandDiagnostics.record('presentation', { reason, revision, visible: false })
@@ -1934,7 +2167,7 @@ function updateFullscreenAlertWindow(snapshot: IslandSnapshot): void {
 
 function isSelectedDisplayFullscreen(): boolean {
   if (!fullscreenState?.fullscreen) return false
-  const selected = screen.getPrimaryDisplay()
+  const selected = getIslandDisplay()
   const bounds = fullscreenState.monitor
   return (
     selected.bounds.x === bounds.x &&

@@ -9,6 +9,7 @@ import ts from 'typescript'
 import { parseTeamIdentity } from '../src/shared/team-role.ts'
 import { isTeamAdmin } from '../src/main/services/admin-device.ts'
 import { getPanelVisibility } from '../src/main/services/panel-visibility.ts'
+import { DEFAULT_ISLAND_VIEWPORT } from '../src/shared/island-viewport.ts'
 import {
   ACTIVITY_CHANNELS,
   DEFAULT_IDLE_THRESHOLD_MINUTES,
@@ -78,6 +79,7 @@ function fixture(group = '9527GM', initiallyAllowed = true) {
         teamGroup: group,
         refreshMode: 'manual',
         agentId: 'codex',
+        island: { enabled: false, displayMode: 'island' },
         activityEnabled: false,
         activityIdleThresholdMinutes: 5
       },
@@ -108,6 +110,15 @@ function fixture(group = '9527GM', initiallyAllowed = true) {
     broadcastPreferences: () => {},
     syncLanService: () => {},
     syncTeamActivity: () => {},
+    queueSyncIslandService: () => {},
+    DEFAULT_ISLAND_VIEWPORT,
+    islandViewport: { ...DEFAULT_ISLAND_VIEWPORT },
+    islandPreviousViewports: [],
+    refreshIslandPosition: () => {},
+    islandWindowDiagnostics: undefined,
+    shouldShowIsland: () => true,
+    setIslandPresentation: () => {},
+    broadcastIslandSnapshot: () => {},
     createPreferencesPayload: () => ({ settings: context.persistedState.settings })
   }
   vm.runInNewContext(code, context)
@@ -241,6 +252,49 @@ test('旧阈值设置归一化为5分钟，活动开启须来自面板且已入�
   await assert.rejects(save(event, { activityEnabled: 'true' }), /采集开关/)
   await assert.rejects(save(event, { teamGroup: 'GM' }), /团队口令/)
   for (const patch of [null, [], 'bad']) await assert.rejects(save(event, patch), /设置格式/)
+})
+
+test('灵动岛模式偏好更新不重启任务服务，只有启停变化才同步', async () => {
+  const { callbacks, event, context } = fixture()
+  const syncs = []
+  const placements = []
+  const presentations = []
+  let snapshotBroadcasts = 0
+  context.persistedState.settings.island = { enabled: true, displayMode: 'island' }
+  context.queueSyncIslandService = () => syncs.push('service')
+  context.refreshIslandPosition = () => placements.push('position')
+  context.islandWindowDiagnostics = { refresh: () => placements.push('diagnostics') }
+  context.setIslandPresentation = (visible, immediate, reason) =>
+    presentations.push({ visible, immediate, reason })
+  context.islandViewport = { mode: 'expanded', expandedHeight: 362, hasSatellite: true }
+  context.islandPreviousViewports = [{ ...context.islandViewport }]
+  context.broadcastIslandSnapshot = () => snapshotBroadcasts++
+  const save = callbacks.get('update-settings')
+
+  await save(event, { island: { enabled: true, displayMode: 'taskbar' } })
+  assert.deepEqual(context.persistedState.settings.island, {
+    enabled: true,
+    displayMode: 'taskbar'
+  })
+  assert.deepEqual(syncs, [])
+  assert.deepEqual(placements, ['position', 'diagnostics'])
+  assert.deepEqual(presentations, [
+    { visible: true, immediate: true, reason: 'display-mode-setting' }
+  ])
+  assert.deepEqual({ ...context.islandViewport }, DEFAULT_ISLAND_VIEWPORT)
+  assert.deepEqual(Array.from(context.islandPreviousViewports), [])
+  assert.equal(snapshotBroadcasts, 1)
+
+  await save(event, { island: { enabled: true, displayMode: 'island' } })
+  assert.deepEqual(syncs, [])
+  assert.deepEqual(placements, ['position', 'diagnostics', 'position', 'diagnostics'])
+  assert.deepEqual(presentations, [
+    { visible: true, immediate: true, reason: 'display-mode-setting' },
+    { visible: true, immediate: true, reason: 'display-mode-setting' }
+  ])
+
+  await save(event, { island: { enabled: false, displayMode: 'island' } })
+  assert.deepEqual(syncs, ['service'])
 })
 
 test('活动设置落盘失败撤回开关，并允许后续保存和并发设置按序完成', async () => {

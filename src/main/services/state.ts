@@ -14,6 +14,7 @@ import {
   type WindowPreferences
 } from '../../shared/capsule'
 import { isPeerId } from '../../shared/team-role.ts'
+import { normalizeTaskbarOffsetX } from '../../shared/island.ts'
 import { writeAtomicJson } from './activity-store.ts'
 
 const STATE_FILE_NAME = 'codex-status-state.json'
@@ -38,7 +39,8 @@ export async function loadPersistedState(): Promise<PersistedState> {
       ),
       windowKeeper: normalizeWindowKeeperState(getRecord(parsed?.windowKeeper)),
       peerId: isPeerId(parsed?.peerId) ? parsed.peerId : undefined,
-      islandViewedEventIds: normalizeEventIds(parsed?.islandViewedEventIds)
+      islandViewedEventIds: normalizeEventIds(parsed?.islandViewedEventIds),
+      taskbarOffsetX: normalizeTaskbarOffsetX(parsed?.taskbarOffsetX)
     }
   } catch {
     return createDefaultState()
@@ -48,6 +50,7 @@ export async function loadPersistedState(): Promise<PersistedState> {
 export async function savePersistedState(state: PersistedState): Promise<void> {
   const filePath = getStateFilePath()
   const value = structuredClone(state)
+  value.taskbarOffsetX = normalizeTaskbarOffsetX(value.taskbarOffsetX)
   const write = pendingStateWrite.then(() => writeAtomicJson(filePath, value))
   pendingStateWrite = write.catch(() => undefined)
   await write

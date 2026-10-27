@@ -1,8 +1,12 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { createInterface, type Interface } from 'node:readline'
-import type { BrowserWindow } from 'electron'
-import { CAPSULE_NATIVE_PROBE } from './capsule-native-probe.ts'
+import type { BrowserWindow, Rectangle } from 'electron'
+import { CAPSULE_NATIVE_PROBE, encodeNativeProbe } from './capsule-native-probe.ts'
 import { formatDiagError, resolveDiagEnabled, writeDiagBatch } from './diag-log.ts'
+import {
+  isWindowsTaskbarGeometry,
+  type WindowsTaskbarGeometry
+} from '../../shared/island-taskbar.ts'
 
 const SAMPLE_INTERVAL_MS = 2_000
 const STARTUP_TIMEOUT_MS = 30_000
@@ -14,6 +18,7 @@ const MAX_PENDING_WRITES = 2
 const MAX_NATIVE_LINE_LENGTH = 16_384
 const MAX_ERROR_LENGTH = 500
 const RECOVERY_COOLDOWN_MS = 30_000
+const TASKBAR_EVENT_LINE = '{"event":"taskbar-zorder"}'
 const WINDOW_EVENTS = [
   'show',
   'hide',
@@ -34,6 +39,9 @@ interface EventSummary {
 interface Dependencies {
   role: 'capsule' | 'island'
   canRecover: () => boolean
+  getTaskbarAnchor?: () => Rectangle | undefined
+  onTaskbarGeometry?: (geometry: WindowsTaskbarGeometry | undefined) => void
+  shouldObserveTaskbar?: () => boolean
   write?: typeof writeDiagBatch
   launch?: () => ChildProcessWithoutNullStreams
 }
@@ -43,8 +51,14 @@ interface NativeSnapshot extends Record<string, unknown> {
   reachedCapsule?: boolean
   normalOccluder?: { hwnd: string; topmost: boolean } | null
   topmostOccluder?: unknown
+  taskbarOccluder?: { hwnd: string; topmost: boolean; windowClass: string } | null
+  nonTaskbarTopmostOccluder?: unknown
   recovery?: { status: string } | null
+  ownerBinding?: { originalOwner?: string } | null
+  taskbarGeometry?: unknown
 }
+
+type NativeAction = 'sample' | 'recover' | 'recover-taskbar'
 
 /** 胶囊与灵动岛共用低频采样和有条件恢复；日志开关不影响防御功能。 */
 export class CapsuleWindowDiagnostics {
@@ -71,7 +85,10 @@ export class CapsuleWindowDiagnostics {
   private readonly hwnd: string
   private readonly options: Dependencies
   private lastSampleAt = 0
-  private requestAction: 'sample' | 'recover' = 'sample'
+  private requestAction: NativeAction = 'sample'
+  private taskbarCheckPending = false
+  private refreshPending = false
+  private originalOwner?: string
   private previousOccluder?: string
   private lastRecoveryAt = -Infinity
 
@@ -82,6 +99,7 @@ export class CapsuleWindowDiagnostics {
     this.hwnd = ''
     if (process.platform !== 'win32') {
       this.stopped = true
+      this.notifyTaskbarGeometry(undefined)
       return
     }
     const handle = window.getNativeWindowHandle()
@@ -103,6 +121,7 @@ export class CapsuleWindowDiagnostics {
     this.stopped = true
     this.status = 'stopped'
     this.record('stopped')
+    this.notifyTaskbarGeometry(undefined)
     this.emit(undefined, true)
     if (this.timer) clearInterval(this.timer)
     for (const [event, listener] of this.listeners)
@@ -132,7 +151,9 @@ export class CapsuleWindowDiagnostics {
       const child = launch()
       this.child = child
       this.lines = createInterface({ input: child.stdout })
-      this.lines.on('line', (line) => this.receive(line))
+      this.lines.on('line', (line) => {
+        if (this.child === child) this.receive(line)
+      })
       let stderr = ''
       child.stderr.on('data', (chunk) => {
         stderr = `${stderr}${String(chunk)}`.slice(-MAX_ERROR_LENGTH)
@@ -157,29 +178,56 @@ export class CapsuleWindowDiagnostics {
     if (
       !this.window.isVisible() &&
       !Object.keys(this.events).length &&
+      !this.shouldObserveTaskbar() &&
       Date.now() - this.lastSampleAt < HEARTBEAT_INTERVAL_MS
     )
       return
     this.request('sample')
   }
 
-  private request(action: 'sample' | 'recover'): void {
+  refresh(): void {
+    if (this.stopped || this.status === 'unavailable' || this.window.isDestroyed()) return
+    if (this.status !== 'ready' || this.requestedAt !== undefined) {
+      this.refreshPending = true
+      return
+    }
+    this.request('sample')
+  }
+
+  private request(action: NativeAction): void {
     this.requestedAt = Date.now()
     this.lastSampleAt = this.requestedAt
     this.requestAction = action
     this.armTimeout(REQUEST_TIMEOUT_MS)
     // 一次只保留一个在途请求，子进程或管道变慢时不堆积采样任务。
-    this.child?.stdin.write(`${JSON.stringify({ action, hwnd: this.hwnd, pid: process.pid })}\n`)
+    this.child?.stdin.write(
+      `${JSON.stringify({
+        action,
+        hwnd: this.hwnd,
+        pid: process.pid,
+        watchTaskbar: this.options.role === 'island',
+        taskbarAnchor:
+          this.options.role === 'island' ? (this.options.getTaskbarAnchor?.() ?? null) : undefined,
+        originalOwner: this.originalOwner
+      })}\n`
+    )
   }
 
   private receive(line: string): void {
     if (this.stopped || this.status === 'unavailable') return
+    if (line === TASKBAR_EVENT_LINE) {
+      if (this.options.role !== 'island' || this.status !== 'ready') return
+      this.taskbarCheckPending = true
+      this.checkTaskbar()
+      return
+    }
     if (line === 'ready' && this.status === 'starting') {
       this.clearTimeout()
       this.status = 'ready'
       this.startupRetries = 0
       this.record('probe-ready')
-      this.sample()
+      if (this.refreshPending) this.checkRefresh()
+      else this.sample()
       return
     }
     if (this.requestedAt === undefined) return this.failProbe('unexpected-output')
@@ -191,13 +239,47 @@ export class CapsuleWindowDiagnostics {
       }
       this.clearTimeout()
       this.runtimeFailures = 0
-      const wasRecovery = this.requestAction === 'recover'
+      if (
+        this.originalOwner === undefined &&
+        typeof native.ownerBinding?.originalOwner === 'string'
+      )
+        this.originalOwner = native.ownerBinding.originalOwner
+      const wasRecovery = this.requestAction !== 'sample'
       if (wasRecovery) this.record('recovery-result')
+      this.notifyTaskbarGeometry(native.taskbarGeometry)
       this.emit(native)
       this.requestedAt = undefined
-      if (!wasRecovery) this.considerRecovery(native)
+      if (this.refreshPending) this.checkRefresh()
+      else if (this.taskbarCheckPending) this.checkTaskbar()
+      else if (!wasRecovery) this.considerRecovery(native)
     } catch {
       this.failProbe('invalid-json')
+    }
+  }
+
+  private checkTaskbar(): void {
+    if (!this.taskbarCheckPending || this.requestedAt !== undefined) return
+    this.taskbarCheckPending = false
+    if (this.recoveryAllowed()) this.request('sample')
+  }
+
+  private checkRefresh(): void {
+    if (!this.refreshPending || this.requestedAt !== undefined || this.status !== 'ready') return
+    this.refreshPending = false
+    this.taskbarCheckPending = false
+    this.request('sample')
+  }
+
+  private shouldObserveTaskbar(): boolean {
+    return this.options.role === 'island' && this.options.shouldObserveTaskbar?.() === true
+  }
+
+  private notifyTaskbarGeometry(value: unknown): void {
+    if (this.options.role !== 'island') return
+    try {
+      this.options.onTaskbarGeometry?.(isWindowsTaskbarGeometry(value) ? value : undefined)
+    } catch {
+      // UI callback failures must not turn a valid native snapshot into a probe failure.
     }
   }
 
@@ -211,6 +293,11 @@ export class CapsuleWindowDiagnostics {
   }
 
   private considerRecovery(native: NativeSnapshot): void {
+    if (this.shouldRecoverTaskbar(native)) {
+      this.record('taskbar-recovery-request')
+      this.request('recover-taskbar')
+      return
+    }
     const occluder = native.normalOccluder
     if (
       !this.recoveryAllowed() ||
@@ -232,6 +319,19 @@ export class CapsuleWindowDiagnostics {
     this.request('recover')
   }
 
+  private shouldRecoverTaskbar(native: NativeSnapshot): boolean {
+    const taskbar = native.taskbarOccluder
+    return (
+      this.options.role === 'island' &&
+      this.recoveryAllowed() &&
+      native.reachedCapsule === true &&
+      taskbar?.topmost === true &&
+      (taskbar.windowClass === 'Shell_TrayWnd' ||
+        taskbar.windowClass === 'Shell_SecondaryTrayWnd') &&
+      native.nonTaskbarTopmostOccluder === null
+    )
+  }
+
   private failProbe(message: string): void {
     if (this.stopped || this.status === 'unavailable') return
     const retryStartup = this.status === 'starting' && this.startupRetries < MAX_STARTUP_RETRIES
@@ -239,6 +339,7 @@ export class CapsuleWindowDiagnostics {
     if (retryStartup || retryRuntime) {
       if (retryStartup) this.startupRetries++
       else this.runtimeFailures++
+      this.notifyTaskbarGeometry(undefined)
       this.probeError = message.replace(/[\r\n]+/g, ' ').slice(0, MAX_ERROR_LENGTH)
       this.record('probe-retry')
       this.stopProbe()
@@ -248,6 +349,8 @@ export class CapsuleWindowDiagnostics {
       return
     }
     this.status = 'unavailable'
+    this.refreshPending = false
+    this.notifyTaskbarGeometry(undefined)
     this.probeError = message.replace(/[\r\n]+/g, ' ').slice(0, MAX_ERROR_LENGTH)
     this.record('probe-failed')
     this.stopProbe()
@@ -262,6 +365,7 @@ export class CapsuleWindowDiagnostics {
   private stopProbe(): void {
     this.clearTimeout()
     this.requestedAt = undefined
+    this.taskbarCheckPending = false
     this.lines?.close()
     this.lines = undefined
     const child = this.child
@@ -339,12 +443,7 @@ export class CapsuleWindowDiagnostics {
 function launchProbe(): ChildProcessWithoutNullStreams {
   return spawn(
     'powershell.exe',
-    [
-      '-NoProfile',
-      '-NonInteractive',
-      '-EncodedCommand',
-      Buffer.from(CAPSULE_NATIVE_PROBE, 'utf16le').toString('base64')
-    ],
+    ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodeNativeProbe(CAPSULE_NATIVE_PROBE)],
     { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }
   )
 }

@@ -2,6 +2,7 @@ export type IslandTaskPhase = 'running' | 'completed' | 'failed' | 'stopped'
 export type IslandRequestKind = 'approval' | 'input'
 export type IslandDisplayStatus = 'waiting-approval' | 'waiting-input' | IslandTaskPhase
 export type IslandTaskSource = 'cli' | 'vscode' | 'subagent' | 'internal' | 'unknown'
+export type IslandDisplayMode = 'island' | 'taskbar'
 
 export function shouldNavigateIslandTask(source: IslandTaskSource | undefined): boolean {
   return source === 'vscode'
@@ -9,6 +10,7 @@ export function shouldNavigateIslandTask(source: IslandTaskSource | undefined): 
 
 export interface IslandPreferences {
   enabled: boolean
+  displayMode: IslandDisplayMode
 }
 
 export interface IslandRequest {
@@ -39,7 +41,12 @@ export interface IslandConnectionState {
   lastHookEventAt?: number
 }
 
-export type IslandVisibility = 'disabled' | 'waiting' | 'fullscreen' | 'visible'
+export type IslandVisibility =
+  | 'disabled'
+  | 'waiting'
+  | 'fullscreen'
+  | 'taskbar-unavailable'
+  | 'visible'
 
 export interface IslandSnapshot {
   tasks: IslandTask[]
@@ -55,30 +62,12 @@ export interface IslandPresentation {
   visible: boolean
 }
 
-export interface IslandWindowBounds {
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
 export const DEFAULT_ISLAND_PREFERENCES: IslandPreferences = {
-  enabled: false
+  enabled: false,
+  displayMode: 'island'
 }
 
 export const ISLAND_ALERT_DURATION_MS = 5_000
-
-export function resolveIslandWindowBounds(
-  display: IslandWindowBounds,
-  size: Pick<IslandWindowBounds, 'width' | 'height'>
-): IslandWindowBounds {
-  return {
-    x: display.x + Math.round((display.width - size.width) / 2),
-    y: display.y,
-    width: size.width,
-    height: size.height
-  }
-}
 
 export function createEmptyIslandSnapshot(): IslandSnapshot {
   return {
@@ -93,7 +82,14 @@ export function createEmptyIslandSnapshot(): IslandSnapshot {
 export function normalizeIslandPreferences(
   value: Partial<IslandPreferences> | undefined
 ): IslandPreferences {
-  return { enabled: value?.enabled === true }
+  return {
+    enabled: value?.enabled === true,
+    displayMode: value?.displayMode === 'taskbar' ? 'taskbar' : 'island'
+  }
+}
+
+export function normalizeTaskbarOffsetX(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
 interface IslandEventBase {

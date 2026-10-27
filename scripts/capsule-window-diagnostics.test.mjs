@@ -18,6 +18,7 @@ const WINDOW_EVENTS = [
   'always-on-top-changed',
   'closed'
 ]
+const NATIVE_REQUEST_TIMEOUT_MS = 15_000
 const testWindows = (name, fn) => test(name, { skip: process.platform !== 'win32' }, fn)
 
 testWindows('诊断关闭时保留防御采样，但不写日志', async (context) => {
@@ -45,6 +46,8 @@ testWindows('诊断关闭时保留防御采样，但不写日志', async (contex
   assert.equal(launchCount, 1)
   assert.equal(writeCount, 0)
   assert.equal(child.requests.length, 1)
+  assert.equal(lastRequest(child).watchTaskbar, false)
+  assert.equal(Object.hasOwn(lastRequest(child), 'taskbarAnchor'), false)
   assert.ok(window.eventNames().length > 0)
 
   diagnostics.stop()
@@ -88,6 +91,53 @@ testWindows('隐藏窗口 ready 后首采样，60 秒前不重复采样且 nativ
   await flushPromises()
   assert.equal(messages.length, 3)
   assert.equal(lastPayload(messages).reason, 'heartbeat')
+})
+
+testWindows('任务栏几何回调不受日志开关影响，隐藏任务栏模式仍每两秒采样', async (context) => {
+  context.mock.timers.enable({ apis: ['setInterval', 'setTimeout', 'Date'], now: 0 })
+  const restoreDiagnostics = setDiagnosticsEnabled('0')
+  context.after(restoreDiagnostics)
+
+  const child = new FakeChild()
+  const window = new FakeWindow()
+  window.visible = false
+  const geometries = []
+  const diagnostics = new CapsuleWindowDiagnostics(window, {
+    role: 'island',
+    canRecover: () => true,
+    shouldObserveTaskbar: () => true,
+    onTaskbarGeometry: (geometry) => geometries.push(geometry),
+    launch: () => child,
+    write: async () => assert.fail('diagnostic logging is disabled')
+  })
+  context.after(() => diagnostics.stop())
+
+  await sendReady(child)
+  diagnostics.refresh()
+  const geometry = {
+    bounds: { x: -100, y: 900, width: 2020, height: 80 },
+    notificationArea: { x: 1660, y: 900, width: 260, height: 80 },
+    visible: false,
+    autoHide: true,
+    dark: true
+  }
+  await sendNative(child, { ...nativeSnapshot(), taskbarGeometry: geometry })
+  assert.deepEqual(geometries, [geometry])
+  assert.equal(lastRequest(child).action, 'sample')
+  assert.deepEqual(lastRequest(child).taskbarAnchor, null)
+
+  await sendNative(child, { ...nativeSnapshot(), taskbarGeometry: geometry })
+  assert.deepEqual(geometries, [geometry, geometry])
+  context.mock.timers.tick(2_000)
+  assert.equal(child.requests.length, 3)
+
+  await sendNative(child, { ...nativeSnapshot(), taskbarGeometry: { bounds: {} } })
+  assert.equal(geometries.at(-1), undefined)
+  diagnostics.refresh()
+  await sendNative(child, { ...nativeSnapshot(), taskbarGeometry: geometry })
+  assert.deepEqual(geometries.at(-1), geometry)
+  diagnostics.stop()
+  assert.equal(geometries.at(-1), undefined)
 })
 
 testWindows('topmost 丢失和恢复会在采样中落盘，重复窗口事件只保留聚合计数', async (context) => {
@@ -415,29 +465,39 @@ testWindows('探测就绪后运行期错误有限重启，有效采样后重置�
   context.after(restoreDiagnostics)
 
   const messages = []
+  const geometries = []
   const children = [new FakeChild(), new FakeChild(), new FakeChild()]
   let launchCount = 0
   const diagnostics = new CapsuleWindowDiagnostics(new FakeWindow(), {
-    role: 'capsule',
+    role: 'island',
     canRecover: () => true,
+    onTaskbarGeometry: (geometry) => geometries.push(geometry),
     launch: () => children[launchCount++],
     write: async (message) => messages.push(message)
   })
   context.after(() => diagnostics.stop())
 
   await sendReady(children[0])
-  await sendNative(children[0])
+  const geometry = {
+    bounds: { x: 0, y: 900, width: 1920, height: 80 },
+    visible: true,
+    autoHide: false
+  }
+  await sendNative(children[0], { ...nativeSnapshot(), taskbarGeometry: geometry })
+  assert.deepEqual(geometries.at(-1), geometry)
   children[0].emit('close', 1, 'SIGTERM')
+  assert.equal(geometries.at(-1), undefined)
   assert.equal(launchCount, 2)
 
   await sendReady(children[1])
-  await sendNative(children[1])
+  await sendNative(children[1], { ...nativeSnapshot(), taskbarGeometry: geometry })
   children[1].emit('close', 1, 'SIGTERM')
   assert.equal(launchCount, 3)
 
   await sendReady(children[2])
   children[2].emit('close', 1, 'SIGTERM')
   assert.equal(lastPayload(messages).nativeStatus, 'unavailable')
+  assert.equal(geometries.at(-1), undefined)
   context.mock.timers.tick(60_000)
   assert.equal(launchCount, 3)
 })
@@ -447,9 +507,11 @@ testWindows('置顶标志仍为 true 时，两次异常才恢复，失败后也�
   await sendReady(child)
   await sendNative(child, occludedSnapshot())
   assert.equal(child.requests.length, 1)
+  assert.equal(lastRequest(child).watchTaskbar, true)
   context.mock.timers.tick(2_000)
   await sendNative(child, occludedSnapshot())
   assert.equal(JSON.parse(child.requests.at(-1)).action, 'recover')
+  assert.equal(lastRequest(child).watchTaskbar, true)
   assert.equal(JSON.parse(child.requests.at(-1)).pid, process.pid)
   await sendNative(child, { ...occludedSnapshot(), recovery: { status: 'failed', error: 5 } })
   assert.equal(lastPayload(messages).native.recovery.error, 5)
@@ -464,6 +526,263 @@ testWindows('置顶标志仍为 true 时，两次异常才恢复，失败后也�
   context.mock.timers.tick(2_000)
   await sendNative(child, occludedSnapshot())
   assert.equal(JSON.parse(child.requests.at(-1)).action, 'recover')
+})
+
+testWindows(
+  '任务栏事件合并为新采样，恢复在途事件等待响应且不受普通恢复冷却影响',
+  async (context) => {
+    context.mock.timers.enable({ apis: ['setInterval', 'setTimeout', 'Date'], now: 0 })
+    const restoreDiagnostics = setDiagnosticsEnabled('0')
+    context.after(restoreDiagnostics)
+
+    const messages = []
+    const child = new FakeChild()
+    const window = new FakeWindow()
+    const diagnostics = new CapsuleWindowDiagnostics(window, {
+      role: 'island',
+      canRecover: () => true,
+      launch: () => child,
+      write: async (message) => messages.push(message)
+    })
+    context.after(() => diagnostics.stop())
+
+    await sendReady(child)
+    assert.deepEqual(lastRequest(child), {
+      action: 'sample',
+      hwnd: '4660',
+      pid: process.pid,
+      watchTaskbar: true,
+      taskbarAnchor: null
+    })
+
+    await sendTaskbarEvent(child)
+    await sendTaskbarEvent(child)
+    assert.equal(child.requests.length, 1)
+    await sendNative(child, taskbarOccludedSnapshot())
+    assert.equal(lastRequest(child).action, 'sample')
+    assert.equal(child.requests.length, 2)
+
+    await sendNative(child, taskbarOccludedSnapshot())
+    assert.equal(lastRequest(child).action, 'recover-taskbar')
+    await sendTaskbarEvent(child)
+    await sendTaskbarEvent(child)
+    await sendNative(child, {
+      ...taskbarOccludedSnapshot(),
+      recovery: { status: 'restored' }
+    })
+    assert.equal(lastRequest(child).action, 'sample')
+    assert.equal(child.requests.length, 4)
+
+    await sendNative(child, taskbarOccludedSnapshot())
+    assert.equal(lastRequest(child).action, 'recover-taskbar')
+    assert.deepEqual(
+      child.requests.map((line) => JSON.parse(line).action),
+      ['sample', 'sample', 'recover-taskbar', 'sample', 'recover-taskbar']
+    )
+    assert.ok(child.requests.every((line) => JSON.parse(line).watchTaskbar === true))
+    assert.equal(messages.length, 0)
+    assert.deepEqual(window.mutationCalls, [])
+  }
+)
+
+testWindows('任务栏事件受角色、就绪、可见、最小化和业务抑制门控', async (context) => {
+  context.mock.timers.enable({ apis: ['setInterval', 'setTimeout', 'Date'], now: 0 })
+  const restoreDiagnostics = setDiagnosticsEnabled('1')
+  context.after(restoreDiagnostics)
+
+  const capsule = createProbe(context, 'capsule')
+  await sendTaskbarEvent(capsule.child)
+  await sendReady(capsule.child)
+  await sendNative(capsule.child)
+  assert.equal(capsule.child.requests.length, 1)
+  capsule.diagnostics.stop()
+
+  const notReady = createProbe(context, 'island')
+  await sendTaskbarEvent(notReady.child)
+  assert.equal(notReady.child.requests.length, 0)
+  await sendReady(notReady.child)
+  await sendNative(notReady.child)
+  assert.equal(notReady.child.requests.length, 1)
+  notReady.diagnostics.stop()
+
+  for (const blocked of ['hidden', 'minimized', 'suppressed']) {
+    const probe = createProbe(context, 'island')
+    await sendReady(probe.child)
+    await sendNative(probe.child)
+    if (blocked === 'hidden') probe.window.visible = false
+    if (blocked === 'minimized') probe.window.minimized = true
+    if (blocked === 'suppressed') probe.state.allowed = false
+    await sendTaskbarEvent(probe.child)
+    assert.equal(probe.child.requests.length, 1, blocked)
+    probe.diagnostics.stop()
+  }
+})
+
+testWindows('任务栏恢复要求新采样仍允许且没有其他 topmost 遮挡', async (context) => {
+  context.mock.timers.enable({ apis: ['setInterval', 'setTimeout', 'Date'], now: 0 })
+  const restoreDiagnostics = setDiagnosticsEnabled('1')
+  context.after(restoreDiagnostics)
+
+  for (const blocked of ['hidden', 'suppressed', 'other-topmost']) {
+    const probe = createProbe(context, 'island')
+    await sendReady(probe.child)
+    await sendNative(probe.child)
+    await sendTaskbarEvent(probe.child)
+    assert.equal(lastRequest(probe.child).action, 'sample', blocked)
+
+    if (blocked === 'hidden') probe.window.visible = false
+    if (blocked === 'suppressed') probe.state.allowed = false
+    const native = taskbarOccludedSnapshot()
+    if (blocked === 'other-topmost') {
+      native.nonTaskbarTopmostOccluder = { hwnd: '6789', topmost: true }
+    }
+    await sendNative(probe.child, native)
+    assert.equal(probe.child.requests.length, 2, blocked)
+    assert.equal(lastRequest(probe.child).action, 'sample', blocked)
+    probe.diagnostics.stop()
+  }
+})
+
+testWindows('任务栏事件不清除在途请求超时', async (context) => {
+  context.mock.timers.enable({ apis: ['setInterval', 'setTimeout', 'Date'], now: 0 })
+  const restoreDiagnostics = setDiagnosticsEnabled('1')
+  context.after(restoreDiagnostics)
+
+  const children = [new FakeChild(), new FakeChild()]
+  let launchCount = 0
+  const diagnostics = new CapsuleWindowDiagnostics(new FakeWindow(), {
+    role: 'island',
+    canRecover: () => true,
+    launch: () => children[launchCount++],
+    write: async () => {}
+  })
+  context.after(() => diagnostics.stop())
+
+  await sendReady(children[0])
+  await sendTaskbarEvent(children[0])
+  assert.equal(children[0].requests.length, 1)
+  context.mock.timers.tick(NATIVE_REQUEST_TIMEOUT_MS)
+  assert.equal(children[0].killCount, 1)
+  assert.equal(launchCount, 2)
+})
+
+testWindows('重启后旧 probe 的迟到任务栏事件不会触发新请求', async (context) => {
+  context.mock.timers.enable({ apis: ['setInterval', 'setTimeout', 'Date'], now: 0 })
+  const restoreDiagnostics = setDiagnosticsEnabled('1')
+  context.after(restoreDiagnostics)
+
+  const children = [new FakeChild(), new FakeChild()]
+  let launchCount = 0
+  const diagnostics = new CapsuleWindowDiagnostics(new FakeWindow(), {
+    role: 'island',
+    canRecover: () => true,
+    launch: () => children[launchCount++],
+    write: async () => {}
+  })
+  context.after(() => diagnostics.stop())
+
+  await sendReady(children[0])
+  children[0].emit('error', new Error('probe failed'))
+  assert.equal(launchCount, 2)
+  await sendTaskbarEvent(children[0])
+  await sendReady(children[1])
+  await sendNative(children[1])
+  assert.equal(children[1].requests.length, 1)
+  assert.equal(lastRequest(children[1]).action, 'sample')
+})
+
+testWindows('taskbar anchor 每次请求动态读取，original owner 在探测重启后保留', async (context) => {
+  context.mock.timers.enable({ apis: ['setInterval', 'setTimeout', 'Date'], now: 0 })
+  const restoreDiagnostics = setDiagnosticsEnabled('1')
+  context.after(restoreDiagnostics)
+
+  const children = [new FakeChild(), new FakeChild()]
+  const window = new FakeWindow()
+  const state = {
+    allowed: true,
+    anchor: { x: 198, y: 388, width: 248, height: 48 },
+    anchorReads: 0
+  }
+  let launchCount = 0
+  const diagnostics = new CapsuleWindowDiagnostics(window, {
+    role: 'island',
+    canRecover: () => state.allowed,
+    getTaskbarAnchor: () => {
+      state.anchorReads++
+      return state.anchor
+    },
+    launch: () => children[launchCount++],
+    write: async () => {}
+  })
+  context.after(() => diagnostics.stop())
+
+  await sendReady(children[0])
+  assert.deepEqual(lastRequest(children[0]).taskbarAnchor, state.anchor)
+  assert.equal(Object.hasOwn(lastRequest(children[0]), 'originalOwner'), false)
+  assert.equal(state.anchorReads, 1)
+
+  await sendNative(children[0], {
+    ...nativeSnapshot(),
+    ownerBinding: { originalOwner: 'owner-hwnd-42' }
+  })
+  state.anchor = { ...state.anchor, y: state.anchor.y + 1 }
+  await sendTaskbarEvent(children[0])
+  assert.deepEqual(lastRequest(children[0]).taskbarAnchor, state.anchor)
+  assert.equal(lastRequest(children[0]).originalOwner, 'owner-hwnd-42')
+  assert.equal(state.anchorReads, 2)
+
+  children[0].emit('error', new Error('probe failed'))
+  assert.equal(launchCount, 2)
+  state.anchor = { ...state.anchor, x: state.anchor.x + 1 }
+  await sendReady(children[1])
+  assert.deepEqual(lastRequest(children[1]).taskbarAnchor, state.anchor)
+  assert.equal(lastRequest(children[1]).originalOwner, 'owner-hwnd-42')
+  assert.equal(state.anchorReads, 3)
+
+  await sendNative(children[1], {
+    ...nativeSnapshot(),
+    ownerBinding: { originalOwner: 'replacement-owner-hwnd' }
+  })
+  await sendTaskbarEvent(children[1])
+  assert.equal(lastRequest(children[1]).originalOwner, 'owner-hwnd-42')
+  assert.deepEqual(lastRequest(children[1]).taskbarAnchor, state.anchor)
+  assert.equal(state.anchorReads, 4)
+  assert.deepEqual(window.mutationCalls, [])
+})
+
+testWindows('窗口隐藏或恢复受抑制时 owner 探针不触发 taskbar recover 或 show', async (context) => {
+  context.mock.timers.enable({ apis: ['setInterval', 'setTimeout', 'Date'], now: 0 })
+  const restoreDiagnostics = setDiagnosticsEnabled('1')
+  context.after(restoreDiagnostics)
+
+  const child = new FakeChild()
+  const window = new FakeWindow()
+  const state = { allowed: true }
+  const diagnostics = new CapsuleWindowDiagnostics(window, {
+    role: 'island',
+    canRecover: () => state.allowed,
+    getTaskbarAnchor: () => ({ x: 198, y: 388, width: 248, height: 48 }),
+    launch: () => child,
+    write: async () => {}
+  })
+  context.after(() => diagnostics.stop())
+
+  await sendReady(child)
+  await sendNative(child, {
+    ...nativeSnapshot(),
+    ownerBinding: { originalOwner: 'owner-hwnd-42' }
+  })
+  await sendTaskbarEvent(child)
+  window.visible = false
+  state.allowed = false
+  await sendNative(child, taskbarOccludedSnapshot())
+
+  assert.equal(
+    child.requests.filter((line) => JSON.parse(line).action === 'recover-taskbar').length,
+    0
+  )
+  assert.equal(child.requests.length, 2)
+  assert.deepEqual(window.mutationCalls, [])
 })
 
 testWindows('隐藏、最小化、业务抑制、截断 Z 序和正常置顶窗口均不触发恢复', async (context) => {
@@ -537,11 +856,39 @@ function setupRecovery(context, state = { allowed: true }) {
   return { child, window, messages, diagnostics }
 }
 
+function createProbe(context, role, state = { allowed: true }) {
+  const child = new FakeChild()
+  const window = new FakeWindow()
+  const diagnostics = new CapsuleWindowDiagnostics(window, {
+    role,
+    canRecover: () => state.allowed,
+    launch: () => child,
+    write: async () => {}
+  })
+  context.after(() => diagnostics.stop())
+  return { child, diagnostics, state, window }
+}
+
 function occludedSnapshot() {
   return {
     ...nativeSnapshot(),
     reachedCapsule: true,
     normalOccluder: { hwnd: '9876', topmost: false }
+  }
+}
+
+function taskbarOccludedSnapshot() {
+  return {
+    ...nativeSnapshot(),
+    reachedCapsule: true,
+    normalOccluder: null,
+    topmostOccluder: null,
+    taskbarOccluder: {
+      hwnd: '1111',
+      topmost: true,
+      windowClass: 'Shell_TrayWnd'
+    },
+    nonTaskbarTopmostOccluder: null
   }
 }
 
@@ -648,6 +995,11 @@ async function sendNative(child, native = nativeSnapshot()) {
   await flushIo()
 }
 
+async function sendTaskbarEvent(child) {
+  child.stdout.write('{"event":"taskbar-zorder"}\n')
+  await flushIo()
+}
+
 async function flushIo() {
   await new Promise((resolve) => setImmediate(resolve))
 }
@@ -663,4 +1015,9 @@ function lastPayload(messages) {
   const start = messages.at(-1).indexOf('{')
   assert.notEqual(start, -1)
   return JSON.parse(messages.at(-1).slice(start))
+}
+
+function lastRequest(child) {
+  assert.ok(child.requests.length > 0)
+  return JSON.parse(child.requests.at(-1))
 }

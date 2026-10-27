@@ -9,7 +9,6 @@ import {
   PausableReminder,
   normalizeIslandPreferences,
   getDisplayStatus,
-  resolveIslandWindowBounds,
   shouldPresentAlert,
   shouldNavigateIslandTask
 } from '../src/shared/island.ts'
@@ -232,23 +231,6 @@ test('历史桌面缺用途的transcript只有目录证实后才可上岛', asyn
   assert.equal(service.getSnapshot().tasks[0].source, 'vscode')
   service.handleHookPayload({ ...payload, hook_event_name: 'Stop' }, NOW + 2)
   assert.equal(service.getSnapshot().tasks[0].phase, 'completed')
-})
-
-test('灵动岛在主屏顶部中央且支持负坐标显示器', () => {
-  assert.deepEqual(
-    resolveIslandWindowBounds(
-      { x: 0, y: 0, width: 1920, height: 1080 },
-      { width: 464, height: 416 }
-    ),
-    { x: 728, y: 0, width: 464, height: 416 }
-  )
-  assert.deepEqual(
-    resolveIslandWindowBounds(
-      { x: -1920, y: -120, width: 1920, height: 1080 },
-      { width: 464, height: 416 }
-    ),
-    { x: -1192, y: -120, width: 464, height: 416 }
-  )
 })
 
 test('待审批覆盖执行中，查看不等于处理', () => {
@@ -1366,10 +1348,19 @@ test('PreToolUse 解决同一工具的 Hook 审批请求', () => {
   assert.equal(mapped?.requestId, 'tool-1')
 })
 
-test('旧配置默认关闭灵动岛并规范化独立设置', () => {
-  assert.deepEqual(normalizeIslandPreferences(undefined), { enabled: false })
+test('旧配置默认使用灵动岛模式并规范化独立设置', () => {
+  assert.deepEqual(normalizeIslandPreferences(undefined), { enabled: false, displayMode: 'island' })
   assert.deepEqual(normalizeIslandPreferences({ enabled: true, alertDurationSeconds: 99 }), {
-    enabled: true
+    enabled: true,
+    displayMode: 'island'
+  })
+  assert.deepEqual(normalizeIslandPreferences({ enabled: true, displayMode: 'taskbar' }), {
+    enabled: true,
+    displayMode: 'taskbar'
+  })
+  assert.deepEqual(normalizeIslandPreferences({ enabled: true, displayMode: 'other' }), {
+    enabled: true,
+    displayMode: 'island'
   })
 })
 
