@@ -35,3 +35,8 @@ docs/superpowers/
 
 # TypeScript 增量编译缓存
 *.tsbuildinfo
+
+# 会话核心本地编译产物；源码和 Cargo.lock 纳入版本控制
+/native/target/
+/native/.cargo-cache/
+/resources/session-core/

@@ -258,6 +258,50 @@
   margin-top: 5px;
 }
 
+.session-cleaner-setting {
+  width: 100%;
+  min-height: 58px;
+  padding: 9px 12px 9px 16px;
+}
+
+.session-cleaner-setting__copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 4px;
+}
+
+.session-cleaner-setting__title {
+  color: var(--panel-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.session-cleaner-setting__description {
+  overflow: hidden;
+  color: var(--panel-text-2);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-row .session-cleaner-setting__action.ghost-button {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  padding: 0;
+  place-items: center;
+}
+
+.setting-row .session-cleaner-setting__action.ghost-button svg {
+  width: 16px;
+  height: 16px;
+}
+
 .island-setting {
   flex-direction: column;
   align-items: stretch;
@@ -607,8 +651,14 @@
   .usage-card,
   .detail-row,
   .team-row,
-  .quota-card__progress span {
+  .quota-card__progress span,
+  .session-cleaner-setting__action {
     transition: none;
+  }
+
+  .session-cleaner-setting__action:hover,
+  .session-cleaner-setting__action:active {
+    transform: none;
   }
 
   .capsule.is-manual-refreshing,

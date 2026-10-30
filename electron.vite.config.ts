@@ -7,6 +7,10 @@ export default defineConfig({
     build: {
       minify: 'esbuild',
       rollupOptions: {
+        input: {
+          index: resolve('src/main/index.ts'),
+          'session-cleaner-worker': resolve('src/main/tools/session-cleaner/worker.ts')
+        },
         output: {
           format: 'cjs'
         }
@@ -15,7 +19,13 @@ export default defineConfig({
   },
   preload: {
     build: {
-      minify: 'esbuild'
+      minify: 'esbuild',
+      rollupOptions: {
+        input: {
+          index: resolve('src/preload/index.ts'),
+          'session-cleaner': resolve('src/preload/session-cleaner.ts')
+        }
+      }
     }
   },
   renderer: {
@@ -24,6 +34,12 @@ export default defineConfig({
       host: '127.0.0.1'
     },
     build: {
+      rollupOptions: {
+        input: {
+          index: resolve('src/renderer/index.html'),
+          'session-cleaner': resolve('src/renderer/session-cleaner.html')
+        }
+      },
       minify: 'esbuild',
       cssMinify: true,
       target: 'es2022'

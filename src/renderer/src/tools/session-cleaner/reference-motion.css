@@ -1,0 +1,56 @@
+@keyframes cleaner-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes cleaner-bar-enter {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes cleaner-scan {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.page {
+  animation: cleaner-page-enter 230ms ease-out both;
+}
+.agent-bar-fill {
+  transform-origin: left;
+  animation: cleaner-bar-enter 230ms ease-out both;
+}
+.scan-active {
+  animation: cleaner-scan 1.2s linear infinite;
+}
+.priority-row {
+  transition:
+    background-color 160ms,
+    transform 160ms;
+}
+.priority-row:hover {
+  transform: translateY(-1px);
+}
+dialog[open],
+.feedback-stack > * {
+  animation: cleaner-page-enter 160ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .priority-row:hover {
+    transform: none;
+  }
+}

@@ -1,0 +1,269 @@
+/* 仅补充真实筛选、详情和审核操作需要的布局，其余沿用原型。 */
+.filters > .search-field {
+  flex: 1 1 160px;
+}
+.filters > .filter-field {
+  flex: 0 0 auto;
+}
+.filters > .filter-field:nth-of-type(2) select {
+  width: 112px;
+}
+.filters > .filter-field:nth-of-type(3) select {
+  width: 88px;
+}
+.filters > .filter-field:nth-of-type(4) select {
+  width: 100px;
+}
+.filter-results {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.extra-filters {
+  position: relative;
+}
+.extra-filters > summary {
+  cursor: pointer;
+  color: var(--green);
+}
+.extra-filter-panel {
+  position: absolute;
+  z-index: 5;
+  top: 25px;
+  left: 0;
+  display: grid;
+  gap: 8px;
+  width: 180px;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+.extra-filter-panel select {
+  width: 100%;
+}
+.item-title-cell {
+  min-width: 0;
+}
+.item-subtitle {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: flex;
+}
+.item-status {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.item-status .help-button {
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+}
+.row-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.row-actions .text-button {
+  padding: 0;
+  font-size: 10px;
+}
+.library-detail {
+  min-width: 0;
+}
+.detail-panel {
+  min-height: 328px;
+}
+.detail-label {
+  gap: 5px;
+}
+.detail-label .icon-button {
+  width: 22px;
+  height: 22px;
+}
+.detail-title {
+  margin: 10px 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.detail-size {
+  margin: 12px 0;
+}
+.detail-size > span {
+  display: none;
+}
+.detail-size strong {
+  font-weight: 500;
+}
+.detail-grid {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0;
+  font-size: 10px;
+}
+.detail-grid dt {
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+.detail-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.detail-grid code,
+.file-list code {
+  font: inherit;
+}
+.detail-status {
+  color: var(--muted);
+}
+.detail-reveal {
+  width: 100%;
+  padding-inline: 7px;
+  font-size: 10px;
+}
+.detail-columns h3 {
+  font-size: 11px;
+}
+.detail-columns p {
+  color: var(--muted);
+  font-size: 10px;
+}
+.file-list {
+  display: grid;
+  gap: 6px;
+  padding-left: 14px;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.session-excerpt {
+  max-height: 180px;
+  overflow: auto;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--canvas);
+  color: var(--muted);
+  font: 10px/1.7 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.detail-empty {
+  min-height: 328px;
+  padding: 16px;
+  border-left: 1px solid var(--line);
+  background: #172131;
+  color: var(--muted);
+  font-size: 11px;
+}
+.detail-empty h2 {
+  font-size: 14px;
+  margin-top: 10px;
+  color: var(--ink);
+}
+.items-empty {
+  padding: 16px;
+  min-height: 250px;
+}
+.selection-caption {
+  color: var(--muted);
+  font-size: 10px;
+}
+.selection-actions {
+  justify-content: flex-end;
+}
+.selection-bar .selection-actions {
+  gap: 7px;
+}
+.selection-bar .button {
+  padding-inline: 8px;
+}
+.review-list {
+  padding: 0;
+  list-style: none;
+}
+.review-item-copy p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.category-size strong {
+  font-weight: 500;
+}
+.audit-excluded {
+  margin-top: 15px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.audit-excluded ul {
+  padding-left: 15px;
+  font-size: 11px;
+}
+.audit-excluded li {
+  margin-top: 9px;
+}
+.audit-excluded li span {
+  display: block;
+  color: var(--amber);
+}
+.muted-copy {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+.regenerate-preview {
+  display: block;
+  margin: 10px auto 0;
+  font-size: 11px;
+}
+.dialog-note {
+  color: var(--muted);
+  font-size: 11px;
+}
+@media (max-width: 800px) {
+  .filter-foot,
+  .filter-results,
+  .selection-bar {
+    flex-wrap: wrap;
+  }
+  .filter-results {
+    gap: 8px;
+  }
+  .detail-empty {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    min-height: 150px;
+  }
+}
+
+.setting-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.number-input {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+.number-input .form-input {
+  padding-right: 38px;
+}
+.number-input > span {
+  position: absolute;
+  right: 11px;
+  font-size: 11px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.source-size {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.large-size small {
+  margin-left: 5px;
+}

@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const BUILD = __dirname
 const svg = await fs.readFile(join(BUILD, 'icon.svg'))
+const cleanerSvg = await fs.readFile(join(BUILD, 'session-cleaner-icon.svg'))
 
 // app 窗口/linux 用:icon-1.png(256)
 await sharp(svg, { density: 512 }).resize(256, 256).png().toFile(join(BUILD, 'icon-1.png'))
@@ -15,6 +16,13 @@ console.log('icon-1.png 256')
 // 托盘小图:icon-2.png(32,托盘会用 resize(16))
 await sharp(svg, { density: 512 }).resize(32, 32).png().toFile(join(BUILD, 'icon-2.png'))
 console.log('icon-2.png 32')
+
+// 会话清理窗口图标复用 AgentSpace 左上角品牌符号。
+await sharp(cleanerSvg, { density: 512 })
+  .resize(256, 256)
+  .png()
+  .toFile(join(BUILD, 'icon-session-cleaner.png'))
+console.log('icon-session-cleaner.png 256')
 
 // ico:多尺寸(16/32/48/64/128/256),Windows 各处自动选
 const sizes = [16, 32, 48, 64, 128, 256]

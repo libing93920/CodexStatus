@@ -142,3 +142,17 @@ export function SparkleIcon(): React.JSX.Element {
     </svg>
   )
 }
+
+export function SessionCleanerIcon(): React.JSX.Element {
+  return (
+    <svg fill="none" viewBox="0 0 24 24">
+      <path
+        d="M4 7.5h16M9 4.5h6M6.5 7.5l.8 12h9.4l.8-12M10 11v5M14 11v5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+    </svg>
+  )
+}

@@ -1,0 +1,403 @@
+.manager-library-heading {
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.manager-category-tabs,
+.manager-selection-controls,
+.manager-pagination,
+.manager-detail-actions,
+.manager-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.manager-category-tabs {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.manager-filter-shell {
+  padding: 0 18px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.manager-quick-filters {
+  display: grid;
+  grid-template-columns: minmax(210px, 1.7fr) repeat(3, minmax(125px, 0.7fr));
+  gap: 8px;
+  padding: 0 0 10px;
+}
+
+.manager-filter-field {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.manager-filter-field input,
+.manager-filter-field select,
+.manager-number-control input {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface-soft);
+  color: var(--text);
+}
+
+.manager-filter-field select[multiple] {
+  min-height: 92px;
+  padding: 4px;
+}
+
+.manager-filter-field option {
+  padding: 4px 6px;
+}
+
+.manager-advanced-filters > summary {
+  width: fit-content;
+  padding: 5px 0;
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.manager-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(135px, 1fr));
+  align-items: start;
+  gap: 10px;
+  padding: 10px 0 4px;
+}
+
+.manager-date-range > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.manager-date-range input {
+  padding-inline: 5px;
+}
+
+.manager-number-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.manager-number-control small {
+  color: var(--dim);
+}
+
+.manager-preset-box {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(150px, 1fr) auto minmax(150px, 1fr) auto auto;
+  align-items: end;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.manager-preset-box legend {
+  padding-inline: 5px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.manager-preset-box .text-button {
+  min-height: 34px;
+  padding-inline: 5px;
+  white-space: nowrap;
+}
+
+.manager-filter-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--red);
+}
+
+.manager-filter-note {
+  margin: 7px 0 0;
+  color: var(--dim);
+  font-size: 10px;
+}
+
+.manager-selection-controls {
+  flex-wrap: wrap;
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+}
+
+.manager-selection-controls label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+}
+
+.manager-selection-controls .muted {
+  margin-left: auto;
+}
+
+.manager-pagination {
+  justify-content: flex-end;
+  min-height: 39px;
+  padding: 4px 18px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.manager-pagination .text-button {
+  padding: 4px 7px;
+}
+
+.manager-table-body {
+  min-width: 0;
+}
+
+.manager-table-body.manager-list-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.manager-table-body .table-area {
+  min-width: 0;
+  overflow: auto;
+}
+
+.manager-table {
+  min-width: 1060px;
+}
+
+.manager-table th,
+.manager-table td {
+  vertical-align: top;
+}
+
+.manager-title-cell {
+  min-width: 195px;
+}
+
+.manager-title-cell .row-title {
+  max-width: 260px;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.manager-row-summary {
+  display: block;
+  max-width: 240px;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--dim);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manager-model-cell {
+  min-width: 115px;
+  max-width: 160px;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.manager-count-cell,
+.manager-size-cell,
+.manager-status-cell,
+.manager-actions-cell {
+  min-width: 116px;
+}
+
+.manager-count-cell strong,
+.manager-count-cell small,
+.manager-size-cell strong,
+.manager-size-cell small,
+.manager-table .date-cell small {
+  display: block;
+}
+
+.manager-count-cell small,
+.manager-size-cell small,
+.manager-table .date-cell small {
+  margin-top: 3px;
+  color: var(--dim);
+  font-size: 10px;
+}
+
+.manager-size-cell strong {
+  color: var(--text);
+}
+
+.manager-status-cell .item-status {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.manager-capability {
+  color: var(--green-bright);
+  font-size: 10px;
+}
+
+.manager-row-actions {
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.manager-row-actions .text-button {
+  min-height: 28px;
+  padding: 3px 2px;
+  font-size: 10px;
+}
+
+.manager-selection-bar {
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.manager-selection-bar .selection-summary {
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.manager-selection-note {
+  color: var(--dim);
+  font-size: 10px;
+}
+
+.manager-detail-panel {
+  overflow: auto;
+}
+
+.manager-detail-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.manager-size-breakdown {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin: 12px 0;
+}
+
+.manager-size-breakdown > div {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-soft);
+}
+
+.manager-size-breakdown span,
+.manager-section-heading > span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.manager-size-breakdown strong {
+  font-size: 11px;
+}
+
+.manager-detail-actions {
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+.manager-transcript,
+.manager-resources,
+.manager-files,
+.manager-message-extra {
+  margin-top: 12px;
+}
+
+.manager-section-heading,
+.manager-message > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.manager-section-heading h2,
+.manager-section-heading h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.manager-message {
+  margin-top: 8px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-soft);
+}
+
+.manager-message > header {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.manager-message .session-excerpt,
+.manager-message-extra pre {
+  max-height: 240px;
+  margin: 7px 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.manager-session-block,
+.manager-content-reference {
+  margin-top: 7px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
+.manager-session-block > summary {
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.manager-content-reference pre {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.manager-content-reference small,
+.manager-content-error {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.manager-message-extra > summary,
+.manager-resources > summary,
+.manager-files > summary,
+.manager-excluded-items > summary {
+  padding: 7px 0;
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.manager-resources .file-list li {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
+  gap: 6px;
+}

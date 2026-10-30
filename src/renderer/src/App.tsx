@@ -36,6 +36,7 @@ import {
   HourglassIcon,
   RefreshIcon,
   ResetIcon,
+  SessionCleanerIcon,
   SparkleIcon,
   TicketIcon
 } from './components/icons'
@@ -2070,6 +2071,36 @@ function App(): React.JSX.Element {
                       preferences={settings.island}
                       snapshot={islandSnapshot}
                     />
+                    <div className="setting-row session-cleaner-setting">
+                      <span className="session-cleaner-setting__copy">
+                        <span className="session-cleaner-setting__title">
+                          {settings.locale === 'en-US' ? 'Session cleanup' : '会话清理'}
+                        </span>
+                        <small className="session-cleaner-setting__description">
+                          {settings.locale === 'en-US'
+                            ? 'Review local Agent sessions and storage'
+                            : '管理本地 Agent 会话与存储占用'}
+                        </small>
+                      </span>
+                      <button
+                        aria-label={
+                          settings.locale === 'en-US' ? 'Open session cleanup' : '打开会话清理'
+                        }
+                        className="ghost-button session-cleaner-setting__action"
+                        onClick={() => {
+                          void window.codexStatus
+                            .openSessionCleaner()
+                            .then(closePanel)
+                            .catch(recordSnapshotIssue)
+                        }}
+                        title={
+                          settings.locale === 'en-US' ? 'Open session cleanup' : '打开会话清理'
+                        }
+                        type="button"
+                      >
+                        <SessionCleanerIcon />
+                      </button>
+                    </div>
                   </div>
                 </div>
 

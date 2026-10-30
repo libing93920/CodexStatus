@@ -8,8 +8,15 @@ import type {
   TokenUsageOverview,
   UsageWindow
 } from '../../shared/capsule'
-import { AGENT_PROVIDERS, listClaudeFiles, parseClaudeFile, type UsageEvent } from './agents.ts'
+import {
+  listClaudeFiles,
+  parseClaudeFile,
+  scanOpenCodeEvents,
+  OPENCODE_SCAN_WINDOW_MS,
+  type UsageEvent
+} from './agents.ts'
 import { computeCost, normalizeModel } from './rate.ts'
+import { mergeRetainedCodex, mergeRetainedOpenCode, readRetainedUsage } from './usage-retention.ts'
 import {
   dedupParsedFiles,
   parseSessionFileIncremental,
@@ -249,9 +256,12 @@ async function scanIncrementally(
   if (agentId === 'claude') {
     return incrementalScanClaude(prevFiles)
   }
-  // opencode:SQLite 无文件粒度增量,每次全量查询
-  const provider = AGENT_PROVIDERS[agentId]
-  const events = provider ? await provider.scanRecentEvents() : []
+  if (agentId !== 'opencode') throw new Error(`不支持的用量来源：${agentId}`)
+  const cutoffMs = Date.now() - OPENCODE_SCAN_WINDOW_MS
+  const live = await scanOpenCodeEvents(cutoffMs)
+  const retained = await readRetainedUsage('opencode')
+  const retainedEvents = retained.flatMap((source) => source.events ?? [])
+  const events = mergeRetainedOpenCode(live, retainedEvents, cutoffMs)
   return { days: aggregateDays(events), events, files: new Map() }
 }
 
@@ -274,6 +284,8 @@ async function incrementalScanClaude(
     events.push(...fileEvents)
   }
   // Claude 会跨文件重复同一 message.id(续会话/会话副本),按 id 全局只留 usage 更大的代表
+  const retained = await readRetainedUsage('claude')
+  events.push(...retained.flatMap((source) => source.events ?? []))
   const deduped = dedupClaudeEvents(events)
   return { days: aggregateDays(deduped), events: deduped, files }
 }
@@ -336,7 +348,8 @@ async function incrementalScanCodex(
     })
     parsed.push({ threadId, file: result.state.parsed })
   }
-  const events = dedupParsedFiles(parsed)
+  const retained = await readRetainedUsage('codex')
+  const events = dedupParsedFiles(mergeRetainedCodex(parsed, retained))
   return { days: aggregateDays(events), events, files }
 }
 

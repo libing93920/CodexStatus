@@ -132,6 +132,8 @@ import {
 } from '../shared/island-viewport'
 import { WindowsFullscreenMonitor, type FullscreenState } from './services/windows-fullscreen'
 import { TeamActivityService } from './services/team-activity.ts'
+import { configureUsageRetention } from './services/usage-retention.ts'
+import { registerSessionCleaner } from './tools/session-cleaner/index.ts'
 import { getPanelVisibility, subscribePanelVisibility } from './services/panel-visibility.ts'
 import { parseTeamIdentity } from '../shared/team-role.ts'
 import { isTeamAdmin } from './services/admin-device.ts'
@@ -798,6 +800,13 @@ app.on('before-quit', (event) => {
 })
 
 function registerIpcHandlers(): void {
+  const retentionDirectory = join(app.getPath('userData'), 'usage-history')
+  configureUsageRetention(retentionDirectory)
+  registerSessionCleaner({
+    canOpen: (senderId) => senderId === panelWindow?.webContents.id,
+    activeThreadIds: () => codexActivity?.getSnapshot().tasks.map((task) => task.threadId) ?? [],
+    retentionDirectory
+  })
   ipcMain.handle(ACTIVITY_CHANNELS.panelVisibility, (event) =>
     getPanelVisibility(panelWindow, event.sender.id)
   )

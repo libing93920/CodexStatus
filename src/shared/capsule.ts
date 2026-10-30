@@ -368,6 +368,7 @@ export interface ShowPanelOptions {
 }
 
 export interface CodexStatusApi {
+  openSessionCleaner: () => Promise<void>
   bootstrap: () => Promise<BootstrapPayload>
   refreshStatus: () => Promise<UsageSnapshot>
   updateSettings: (patch: Partial<AppSettings>) => Promise<PreferencesPayload>

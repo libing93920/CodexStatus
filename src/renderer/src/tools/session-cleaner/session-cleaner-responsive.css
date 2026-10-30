@@ -1,0 +1,86 @@
+@media (max-width: 560px) {
+  .main-content {
+    padding: 12px 10px 14px;
+  }
+  .topbar {
+    padding-inline: 10px;
+  }
+  .topbar-title > span {
+    display: none;
+  }
+  .topbar-progress {
+    display: none;
+  }
+  .feedback {
+    margin-inline: 10px;
+  }
+  .workspace-footer {
+    padding-inline: 10px;
+    font-size: 8px;
+  }
+  .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .heading-actions {
+    width: 100%;
+  }
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .metric-card {
+    min-height: 78px;
+    padding: 8px;
+  }
+  .metric-card strong {
+    font-size: 19px;
+  }
+  .compact-item-list li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .compact-item-list .status-badge,
+  .compact-item-reason {
+    display: none;
+  }
+  .filter-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .search-field {
+    grid-column: 1 / -1;
+  }
+  .selection-toolbar {
+    align-items: flex-start;
+  }
+  .selection-copy {
+    flex-basis: 100%;
+  }
+  .detail-columns,
+  .policy-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .policy-field {
+    grid-template-columns: minmax(0, 1fr) 115px;
+  }
+  .record-row {
+    grid-template-columns: minmax(0, 1fr) 60px;
+  }
+  .record-result {
+    grid-column: 1 / -1;
+  }
+  .issue-list li {
+    display: grid;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

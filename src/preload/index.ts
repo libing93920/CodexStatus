@@ -77,6 +77,7 @@ const CHANNELS = {
 } as const
 
 const api: CodexStatusApi = {
+  openSessionCleaner: () => ipcRenderer.invoke('session-cleaner:open') as Promise<void>,
   bootstrap: () => ipcRenderer.invoke(CHANNELS.bootstrap) as Promise<BootstrapPayload>,
   refreshStatus: () => ipcRenderer.invoke(CHANNELS.refresh) as Promise<UsageSnapshot>,
   updateSettings: (patch: Partial<AppSettings>) =>

@@ -16,12 +16,12 @@
 
 ### 效果预览
 
-| 详情面板 | 水平胶囊 | 迷你球 |
-|---|---|---|
+| 详情面板                 | 水平胶囊                     | 迷你球               |
+| ------------------------ | ---------------------------- | -------------------- |
 | ![panel](docs/panel.png) | ![capsule](docs/capsule.png) | ![orb](docs/orb.png) |
 
-| API Key 竖版胶囊 | API Key 横板胶囊 | 用量统计卡片 |
-|---|---|---|
+| API Key 竖版胶囊       | API Key 横板胶囊           | 用量统计卡片              |
+| ---------------------- | -------------------------- | ------------------------- |
 | ![api-orb](docs/3.png) | ![api-capsule](docs/4.png) | ![usage-card](docs/5.png) |
 
 ## 为什么需要这个工具？
@@ -57,8 +57,8 @@ CodexStatus 可以帮你：
 
 前往 [Releases](https://github.com/libing93920/CodexStatus/releases) 下载最新版本。
 
-| 平台 | 文件 |
-| --- | --- |
+| 平台    | 文件                              |
+| ------- | --------------------------------- |
 | Windows | `CodexStatus-{version}-setup.exe` |
 
 > macOS / Linux 暂未提供预编译包，可从源码构建。
@@ -97,15 +97,36 @@ CodexStatus 可以帮你：
 
 > 注意：全局代理 / TUN 模式会劫持内网多播，导致互不可见。
 
+### 会话清理（Windows）
+
+设置 → 工具 → **会话清理**，打开独立的 AgentSpace 窗口。自动发现或手动登记 Agent 数据目录，扫描后可组合筛选、查看正文、导出、续聊或批量删除。
+
+- 独立扫描进程按需启动，关闭工具后停止；来源不受当前监控 Agent 选择限制。
+- 会话检索按 cc-switch v4.0.21 的 12 类来源规则接入：Codex、Claude Code、OpenCode、OpenClaw、Gemini CLI、Hermes、Grok Build、Pi、Oh My Pi、MCode、Kimi Code、Antigravity。Cline、Aider 保留为扩展来源；未知目录只读展示文件占用。
+- 会话与资源分别计数。Codex 读取索引和状态数据库标题并识别压缩会话；OpenCode 合并旧 JSON、V1/V2 数据库，不再因数据库超过 256 MB 而漏掉会话。
+- 独立窗口使用 AgentSpace 图标、一体化标题栏和主题滚动条；容量统一显示 T、G、MB、B，按 1024 换算。
+- 扫描、正文和来源删除能力复用固定版本的 cc-switch Rust 核心。支持删除 Codex、Claude、OpenCode、OpenClaw、Gemini、Hermes、Grok Build、Pi、Oh My Pi；Kimi、MCode、Antigravity 按上游能力保持只读并显示原因。
+- 筛选可组合 Agent、来源目录、项目、模型、日期、闲置天数、消息数、父子会话、存储方式、能力、保护与状态，并支持排序和跨页选择。90 天只是清理建议，近期会话也可明确选择删除。
+- 删除先生成固定清单和资源预览，再明确确认，确认后**永久删除，不进入系统回收站**。可先导出 Markdown 供阅读；导出文件不能恢复原工具的数据库与索引。
+- 大小区分会话独占文件、SQLite 逻辑载荷、共享资源、数据库/WAL 与库内空闲页。Agent 汇总按唯一物理资源去重；数据库删除记录后通常不会立即缩小文件，可单独确认整理 OpenCode 数据库。
+- 删除前持久化宿主已统计的结构化用量摘要，保留 Token/费用历史；不保存聊天正文。保护标记、策略和操作记录与主设置分别保存。
+- 执行前重新核验来源、内容版本、保护和宿主活跃状态。取消批次会停止后续条目，已经完成的永久删除无法撤销。
+
+开发验证：`npm run test:session-manager`；Electron/utilityProcess/原生数据库联动：`npm run test:session-manager-integration`。测试只操作临时样本。开发和构建需要 Rust/Cargo；`npm run build` 会编译并打包本地会话核心。
+
+设计、大小口径、能力边界和验证命令见 [会话管理说明](docs/session-manager.md)。
+
+界面沿用 AgentSpace 原型的三组样式，CSS 只作用于独立清理窗口。视觉对照：`npm run test:session-cleaner-visual`，需要本机 `http://127.0.0.1:4173/AgentSpace-prototype.html` 可访问；测试使用只读样本，在 `.planning/session-cleaner/visual-comparison` 输出两种尺寸、六个页面的对照截图与测量结果。
+
 ## 数据来源
 
-| 数据 | 来源 | 备注 |
-| --- | --- | --- |
-| 官方额度 | `chatgpt.com` API | 需要有效 OAuth 凭据 |
-| 重置卡 | `chatgpt.com` API | |
-| 用量统计 | 本地 sessions JSONL | 估算 token 与花费 |
-| AI 雷达 | `codex-reset-radar.pages.dev` | 公开数据,详情面板外链入口 |
-| 团队数据 | 局域网 mDNS + WebSocket | 内网直连 |
+| 数据     | 来源                          | 备注                      |
+| -------- | ----------------------------- | ------------------------- |
+| 官方额度 | `chatgpt.com` API             | 需要有效 OAuth 凭据       |
+| 重置卡   | `chatgpt.com` API             |                           |
+| 用量统计 | 本地 sessions JSONL           | 估算 token 与花费         |
+| AI 雷达  | `codex-reset-radar.pages.dev` | 公开数据,详情面板外链入口 |
+| 团队数据 | 局域网 mDNS + WebSocket       | 内网直连                  |
 
 官方接口不可用时自动回退到本地 sessions JSONL 文件。
 
@@ -162,12 +183,12 @@ python scripts/publish.py --notes "说明"  # 自定义 Release 备注
 
 ### Preview
 
-| Panel | Horizontal Capsule | Orb |
-|---|---|---|
+| Panel                    | Horizontal Capsule           | Orb                  |
+| ------------------------ | ---------------------------- | -------------------- |
 | ![panel](docs/panel.png) | ![capsule](docs/capsule.png) | ![orb](docs/orb.png) |
 
-| API Key Orb | API Key Capsule | Usage Stats Card |
-|---|---|---|
+| API Key Orb            | API Key Capsule            | Usage Stats Card          |
+| ---------------------- | -------------------------- | ------------------------- |
 | ![api-orb](docs/3.png) | ![api-capsule](docs/4.png) | ![usage-card](docs/5.png) |
 
 ## Why CodexStatus?
@@ -203,9 +224,9 @@ CodexStatus helps you:
 
 Go to [Releases](https://github.com/libing93920/CodexStatus/releases) for the latest version.
 
-| Platform | File |
-| --- | --- |
-| Windows | `CodexStatus-{version}-setup.exe` |
+| Platform | File                              |
+| -------- | --------------------------------- |
+| Windows  | `CodexStatus-{version}-setup.exe` |
 
 > macOS / Linux builds not yet provided. Build from source.
 
@@ -219,13 +240,13 @@ Go to [Releases](https://github.com/libing93920/CodexStatus/releases) for the la
 
 ## Data Sources
 
-| Data | Source | Notes |
-| --- | --- | --- |
-| Official quota | `chatgpt.com` API | Requires valid OAuth credentials |
-| Reset credits | `chatgpt.com` API | |
-| Usage stats | Local sessions JSONL | Estimated tokens & cost |
-| AI Radar | `codex-reset-radar.pages.dev` | Public data, external link entry |
-| Team data | LAN mDNS + WebSocket | Local network only |
+| Data           | Source                        | Notes                            |
+| -------------- | ----------------------------- | -------------------------------- |
+| Official quota | `chatgpt.com` API             | Requires valid OAuth credentials |
+| Reset credits  | `chatgpt.com` API             |                                  |
+| Usage stats    | Local sessions JSONL          | Estimated tokens & cost          |
+| AI Radar       | `codex-reset-radar.pages.dev` | Public data, external link entry |
+| Team data      | LAN mDNS + WebSocket          | Local network only               |
 
 ## Tech Stack
 

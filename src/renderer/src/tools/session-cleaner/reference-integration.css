@@ -1,0 +1,217 @@
+/* 桌面容器与真实操作反馈；视觉参数沿用原型的三层样式。 */
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  overflow: hidden;
+}
+.app-shell {
+  height: 100dvh;
+  min-height: 0;
+}
+.main-shell {
+  display: grid;
+  grid-template-rows: 44px minmax(0, 1fr);
+  min-height: 0;
+}
+main {
+  width: 100%;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 auto;
+}
+.page-heading h1:focus {
+  outline: none;
+}
+.skip-link {
+  position: fixed;
+  top: -60px;
+  left: 190px;
+  z-index: 200;
+  padding: 8px 12px;
+  border-radius: 7px;
+  color: white;
+  background: var(--primary);
+}
+.skip-link:focus {
+  top: 8px;
+}
+.feedback-stack {
+  position: fixed;
+  right: 20px;
+  bottom: 18px;
+  z-index: 80;
+  display: grid;
+  gap: 8px;
+  max-width: min(440px, calc(100vw - 40px));
+  pointer-events: none;
+}
+.feedback-stack > * {
+  position: static;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+  margin: 0;
+  padding: 10px 12px;
+  transform: none;
+}
+.feedback-stack .icon-button {
+  flex: 0 0 auto;
+  color: inherit;
+}
+.feedback-error {
+  background: #441b2b;
+  color: #fecdd3;
+  border: 1px solid #be3457;
+  border-radius: 10px;
+  font-size: 12px;
+}
+.feedback-error > span,
+.feedback-stack .toast > span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.status-pill.danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.review-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+}
+.review-empty > .icon {
+  color: #93c5fd;
+}
+.review-empty h2 {
+  font-size: 14px;
+}
+.review-empty p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.empty-actions {
+  margin-left: auto;
+}
+.scan-issues {
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  margin-top: 14px;
+  padding: 12px 16px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.scan-issues summary {
+  cursor: pointer;
+  color: var(--ink);
+}
+.scan-issues ul {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding-left: 15px;
+}
+.scan-issues code {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+.topbar {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.topbar-right,
+.topbar button {
+  -webkit-app-region: no-drag;
+}
+.window-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+}
+.window-control {
+  display: grid;
+  width: 32px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+}
+.window-control .icon {
+  width: 14px;
+  height: 14px;
+}
+.window-control:hover {
+  color: var(--ink);
+  background: var(--surface);
+}
+.window-control-close:hover {
+  color: white;
+  background: #dc2626;
+}
+.window-control:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.42) transparent;
+}
+.library-heading > .library-category-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+.library-category-tabs .agent-tab {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.category-count {
+  font-family: Consolas, 'Cascadia Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.82;
+}
+
+*::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.42);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.72);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-button {
+  display: none;
+}

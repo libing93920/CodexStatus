@@ -18,10 +18,18 @@ files:
 asarUnpack:
   - build/icon-*.png
 extraResources:
+  - from: resources/session-core
+    to: session-core
   - from: resources/hooks
     to: hooks
   - from: resources/holidays/LICENSE
     to: holidays/LICENSE
+  - from: resources/licenses/cc-switch-LICENSE
+    to: licenses/cc-switch-LICENSE
+  - from: resources/licenses/agent-icons-NOTICES.txt
+    to: licenses/agent-icons-NOTICES.txt
+  - from: resources/licenses/session-core-THIRD-PARTY-NOTICES.txt
+    to: licenses/session-core-THIRD-PARTY-NOTICES.txt
 win:
   executableName: CodexStatus
   icon: build/icon.ico
